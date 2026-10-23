@@ -3,7 +3,7 @@
 # Each pass is a fresh, short OpenCode session (`/autopilot` = one pass of AGENTS.md → Autopilot), then
 # the shell sleeps. Workers run detached (scripts/spawn.sh) and outlive the pass.
 #
-#   scripts/autopilot.sh                 # pass every 10 min until stopped
+#   scripts/autopilot.sh                 # pass every 10 min, or within 30 s after a worker ends
 #   INTERVAL=300 scripts/autopilot.sh    # every 5 min
 #   touch .agent-runs/STOP               # stop after the current pass
 #
@@ -13,9 +13,31 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 interval=${INTERVAL:-600}
+poll=${POLL:-30}
 dir=.agent-runs/coordinator
 mkdir -p "$dir"
 rm -f .agent-runs/STOP
+
+# Local-only checks (no network, no tokens): running worker pids and the final-message files
+# (.agent-runs/<wave>.md) that run-worker*.sh writes when a worker ends.
+worker_pids() { pgrep -f 'scripts/run-worker' | sort | tr '\n' ' '; }
+results_stamp() { stat -f '%N %m' .agent-runs/*.md 2>/dev/null | shasum; }
+
+# Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
+wait_for_event() {
+  local pids stamp waited=0 now
+  pids=$(worker_pids)
+  stamp=$(results_stamp)
+  while [ "$waited" -lt "$interval" ]; do
+    sleep "$poll"
+    waited=$((waited + poll))
+    [ -e .agent-runs/STOP ] && return
+    if [ "$(results_stamp)" != "$stamp" ]; then echo "  worker result written, next pass now"; return; fi
+    for pid in $pids; do
+      kill -0 "$pid" 2>/dev/null || { echo "  worker $pid ended, next pass now"; return; }
+    done
+  done
+}
 
 while true; do
   ts=$(date +%Y%m%d-%H%M%S)
@@ -40,5 +62,5 @@ while true; do
     echo "[$ts] usage limit, waiting 15 min"; sleep 900; continue
   fi
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
-  sleep "$interval"
+  wait_for_event
 done
