@@ -4,17 +4,22 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	githubprovider "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/gin-gonic/gin"
 	postgresDriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -131,6 +136,100 @@ func TestIngestWithRealGitHubProviderAcceptsValidSignature(t *testing.T) {
 	if _, err := provider.ParseEvent(context.Background(), "issues", h, body); err != nil {
 		t.Fatalf("verified provider rejected valid event: %v", err)
 	}
+}
+
+func TestControllerHandleBindsSignedPayloadToConfiguredRepository(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const (
+		repositoryA   = "org/a"
+		repositoryB   = "org/b"
+		secretA       = "secret-a"
+		secretB       = "secret-b"
+		repositoryAID = "11111111-1111-1111-1111-111111111111"
+	)
+	payloadFor := func(repository string) []byte {
+		return []byte(fmt.Sprintf(`{"repository":{"full_name":%q},"issue":{"id":101,"number":1,"title":"signed issue","state":"open","labels":[{"name":"status:review"}]}}`, repository))
+	}
+	sign := func(payload []byte, secret string) string {
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write(payload)
+		return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	}
+	t.Run("matching secret persists raw and normalized identity", func(t *testing.T) {
+		mock, db := newWebhookMockDB(t)
+		payload := payloadFor(repositoryA)
+		mock.ExpectBegin()
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("github", repositoryA, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "created_at", "updated_at"}).AddRow(repositoryAID, "github", repositoryA, "GITHUB_A_SECRET", nil, nil))
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WithArgs(sqlmock.AnyArg(), repositoryAID, "github", "issues", "delivery-a", payloadContains("org/a"), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WithArgs(sqlmock.AnyArg(), repositoryAID, int64(1), "signed issue", "open", "review", sqlmock.AnyArg(), "", sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-a", sign(payload, secretA))
+		if response.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s, want 200", response.Code, response.Body.String())
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("secret for another repository rejects without writes", func(t *testing.T) {
+		mock, db := newWebhookMockDB(t)
+		payload := payloadFor(repositoryA)
+		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-b", sign(payload, secretB))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("unexpected database writes: %v", err)
+		}
+	})
+	t.Run("valid signature for unknown repository rejects without writes", func(t *testing.T) {
+		mock, db := newWebhookMockDB(t)
+		payload := payloadFor("org/unknown")
+		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-unknown", sign(payload, secretA))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("unexpected database writes: %v", err)
+		}
+	})
+}
+
+func newWebhookMockDB(t *testing.T) (sqlmock.Sqlmock, *gorm.DB) {
+	t.Helper()
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mock, db
+}
+
+type payloadContains string
+
+func (expected payloadContains) Match(value driver.Value) bool {
+	payload, ok := value.([]byte)
+	return ok && strings.Contains(string(payload), string(expected))
+}
+
+func postWebhook(t *testing.T, db *gorm.DB, configs map[string][]Config, payload []byte, delivery, signature string) *httptest.ResponseRecorder {
+	t.Helper()
+	t.Setenv("W1CR7_REPO_A_SECRET", "secret-a")
+	t.Setenv("W1CR7_REPO_B_SECRET", "secret-b")
+	service := NewService(db, configuredRegistry{})
+	router := gin.New()
+	NewRoutes(NewController(service, configs)).Register(router.Group("/api/v1"))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/github", strings.NewReader(string(payload)))
+	request.Header.Set("X-GitHub-Delivery", delivery)
+	request.Header.Set("X-GitHub-Event", "issues")
+	request.Header.Set("X-Hub-Signature-256", signature)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
 }
 
 func TestIngestWithRealGitHubProviderRejectsInvalidSignatureWithoutWrites(t *testing.T) {
