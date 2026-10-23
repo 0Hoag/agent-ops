@@ -28,7 +28,7 @@
 Mỗi đợt = một nhóm issue cùng vùng code, một worker, một nhánh, một PR. Đợt cùng số có chữ khác nhau
 (W0a, W0b) đụng file khác nhau, chạy song song được.
 
-### WS: split web repo, conform to company sources, run end to end (priority over W2+)
+### WS: split client repo, conform to company sources, run end to end (priority over W2+)
 
 Run after the in-flight W2b PR merges; pause other client waves until WS-a is done.
 
@@ -139,7 +139,7 @@ depth) · structured request logs with request id · rate limiting on webhooks �
 Postgres · load test (k6): 50 webhooks/s sustained. Done when: E2E in CI, k6 report in the PR.
 
 ### W17: release
-Docker images for API and web (multi-stage, non-root) · `docker compose -f compose.prod.yml up` runs the
+Docker images for API and client (multi-stage, non-root) · `docker compose -f compose.prod.yml up` runs the
 whole stack · semantic versioning + CHANGELOG from commits · docs: install, connect GitHub/GitLab, connect
 each harness, upgrade. Done when: a clean machine goes from clone to working dashboard in under 10 minutes
 following only the docs (a worker does it in a fresh worktree and reports the time).
