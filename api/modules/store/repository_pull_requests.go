@@ -12,7 +12,7 @@ type PullRequestRepository struct{ db *gorm.DB }
 
 func (repository *PullRequestRepository) Upsert(ctx context.Context, item *PullRequest) error {
 	err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "number"}}, DoUpdates: clause.Assignments(map[string]any{
-		"title": gorm.Expr("COALESCE(NULLIF(EXCLUDED.title, ''), pull_requests.title)"), "state": gorm.Expr("COALESCE(NULLIF(EXCLUDED.state, ''), pull_requests.state)"), "head_sha": gorm.Expr("COALESCE(NULLIF(EXCLUDED.head_sha, ''), pull_requests.head_sha)"), "branch": gorm.Expr("COALESCE(NULLIF(EXCLUDED.branch, ''), pull_requests.branch)"), "closes": gorm.Expr("COALESCE(NULLIF(EXCLUDED.closes, '{}'::jsonb), pull_requests.closes)"), "merged_at": gorm.Expr("COALESCE(EXCLUDED.merged_at, pull_requests.merged_at)"), "updated_at": gorm.Expr("NOW()"),
+		"title": gorm.Expr("EXCLUDED.title"), "state": gorm.Expr("EXCLUDED.state"), "head_sha": gorm.Expr("EXCLUDED.head_sha"), "branch": gorm.Expr("EXCLUDED.branch"), "closes": gorm.Expr("EXCLUDED.closes"), "merged_at": gorm.Expr("EXCLUDED.merged_at"), "updated_at": gorm.Expr("NOW()"),
 	})}).Create(item).Error
 	if err != nil {
 		return fmt.Errorf("upsert pull request %d: %w", item.Number, err)

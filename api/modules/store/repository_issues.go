@@ -14,7 +14,7 @@ func (repository *IssueRepository) Upsert(ctx context.Context, item *Issue) erro
 	err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "repository_id"}, {Name: "number"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"title": gorm.Expr("COALESCE(NULLIF(EXCLUDED.title, ''), issues.title)"), "state": gorm.Expr("COALESCE(NULLIF(EXCLUDED.state, ''), issues.state)"), "status": gorm.Expr("COALESCE(NULLIF(EXCLUDED.status, ''), issues.status)"), "labels": gorm.Expr("COALESCE(NULLIF(EXCLUDED.labels, '{}'::jsonb), issues.labels)"), "assignee": gorm.Expr("COALESCE(NULLIF(EXCLUDED.assignee, ''), issues.assignee)"), "updated_at": gorm.Expr("NOW()"),
+			"title": gorm.Expr("EXCLUDED.title"), "state": gorm.Expr("EXCLUDED.state"), "status": gorm.Expr("EXCLUDED.status"), "labels": gorm.Expr("EXCLUDED.labels"), "assignee": gorm.Expr("EXCLUDED.assignee"), "updated_at": gorm.Expr("NOW()"),
 		}),
 	}).Create(item).Error
 	if err != nil {
