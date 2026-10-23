@@ -61,6 +61,75 @@ qua API GitLab · cấu hình nhiều repo, mỗi repo một provider.
 
 Tỉ lệ PR bị gửi lại, CI xanh lần đầu, thời gian mỗi issue, gợi ý mục `FIVE-MINUTES.md` từ lỗi lặp lại.
 
+## Phase 2 (W6-W17): make it a product the company can adopt
+
+Added 24/10/2026 by the owner: the project must be large enough to exercise the loop for days, not hours.
+Same rules: split each wave into many small issues (one deliverable each, "Done when" as a command/number),
+group by area, parallel where directories differ. Order below is the default; dependencies win.
+
+### W6: API contract and generated client
+OpenAPI from swaggo for every endpoint · `make swagger` in CI (fails on drift) · generate a typed TS client
+into `web/src/shared/api` · replace hand-written axios calls · contract test: every route has a schema.
+Done when: CI fails if a handler changes without regenerating; web uses only the generated client.
+
+### W7: auth, organizations, RBAC
+Local accounts (bcrypt) + JWT sessions · organizations, members, roles `owner|admin|member|viewer` ·
+every query scoped by `organization_id` from the token (tenant isolation, like controlplane) · repositories
+belong to an org · invite links · web: login, org switcher, members page, role-based UI.
+Done when: a test proves org A cannot read org B's issues, runs or costs through any endpoint.
+
+### W8: multi-repo, multi-provider settings
+Repository CRUD in the UI (provider, URL, webhook secret encrypted at rest with AES-GCM, token for backfill) ·
+per-repo status-label mapping (GitHub `status:*`, GitLab `Status::*`, custom) · webhook URL + secret shown
+once · GitLab self-hosted base URL. Done when: one org tracks this GitHub repo and a GitLab repo side by side.
+
+### W9: agent run ingestion from every harness
+`agentops` CLI (Go, `api/cmd/agentops`): `agentops push --harness codex|opencode|claude <file>` parses
+Codex `turn.completed`, OpenCode `step_finish`, Claude Code transcripts · idempotent by run/session id ·
+`run-worker*.sh` call it · `agentops watch ~/.claude/projects` tails new transcripts.
+Done when: the same session pushed twice is stored once; fixtures for all three formats in `testdata/`.
+
+### W10: pricing and cost engine
+Model price table (input, cached input, cache write, output, reasoning) editable in UI, versioned by date ·
+cost computed per run at the price valid on that day · subscription harnesses (cost 0) shown as
+"equivalent API cost" · currency USD/VND. Done when: unit tests cover cache-heavy and reasoning-heavy runs.
+
+### W11: run explorer and session timeline
+Runs list (filter by wave, harness, model, issue, PR, date) · run detail: timeline of turns/steps with
+tokens per step, tool calls, cache hit per step, cost curve · link run ↔ issue ↔ PR ↔ CI.
+Done when: a 50-turn run renders in under 1 s with 10k runs in the DB (seed script + measurement).
+
+### W12: analytics dashboards
+Cost per day/week by harness, model, wave, area · cache-hit trend · cost per merged PR / per closed issue ·
+send-back rate, first-pass CI rate, lead time issue→merge · harness comparison normalised by diff size.
+Done when: every number on screen has a test that recomputes it from fixtures.
+
+### W13: budgets and alerts
+Budgets per org/repo/wave (tokens or money) · alerts: budget 80/100 %, cache hit below threshold, worker
+silent > N min, CI red on main, PR open > N h · channels: Telegram bot, Slack webhook, email (SMTP) ·
+alert history page. Done when: each rule has a test that fires it and one that does not.
+
+### W14: coordinator control panel
+Wave board in the UI (Todo → In progress → Review → Done per wave) · start/stop/restart a worker from the UI
+(API runs `run-worker*.sh` through a job queue with logs streamed over websocket) · brief editor with
+templates · audit log of every action. Done when: a wave can be dispatched and watched end-to-end from the UI.
+
+### W15: MCP server for agents
+`agentops mcp` exposes read tools: `list_issues`, `wave_status`, `my_costs`, `similar_failures` (search
+`FIVE-MINUTES.md` and past send-backs) so coordinators and workers can query Agent Ops themselves.
+Done when: an OpenCode session calls the tools and gets real data (recorded in the PR).
+
+### W16: quality and operations
+Playwright E2E for login, board, runs, alerts · Prometheus `/metrics` (request latency, webhook lag, queue
+depth) · structured request logs with request id · rate limiting on webhooks · backup/restore script for
+Postgres · load test (k6): 50 webhooks/s sustained. Done when: E2E in CI, k6 report in the PR.
+
+### W17: release
+Docker images for API and web (multi-stage, non-root) · `docker compose -f compose.prod.yml up` runs the
+whole stack · semantic versioning + CHANGELOG from commits · docs: install, connect GitHub/GitLab, connect
+each harness, upgrade. Done when: a clean machine goes from clone to working dashboard in under 10 minutes
+following only the docs (a worker does it in a fresh worktree and reports the time).
+
 ## Câu hỏi mở (owner)
 
 Không còn (đã trả lời 24/10/2026, xem bảng quyết định).
