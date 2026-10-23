@@ -78,3 +78,13 @@ The worker described it as a fork limitation although the measured head reposito
 
 **Check:** inspect the control's head repository and check runs with `gh pr view`; require a hosted run
 that fails at the intended step with the injected diagnostic before accepting a CI negative control.
+
+## 9. Configuration examples must match a real consumer
+
+Client bootstrap advertised APP_API_URL as runtime configuration while Axios used a fixed same-origin
+base URL and Rspack had only a hardcoded health proxy. Independent review caught the misleading setup.
+
+> Cost: one returned bootstrap PR and focused documentation follow-up #139.
+
+**Check:** trace each documented environment variable to its loader and consumer on the exact PR head;
+describe current behavior when environment-aware configuration belongs to a later wave.
