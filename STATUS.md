@@ -9,8 +9,8 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 | W0a api | merged | [#4](https://github.com/0Hoag/agent-ops/pull/4) | #1 closed; coordinator repeated API gates on exact PR head, all passed |
 | W0b web | merged | [#5](https://github.com/0Hoag/agent-ops/pull/5) | #2 closed; coordinator repeated full web gate on exact PR head, all passed |
 | W0c ci | merged | [#27](https://github.com/0Hoag/agent-ops/pull/27) | #3 closed; OpenCode; independent review and failing control #39 verified |
-| W1a scm | in progress | | #6–#11; Codex CLI / gpt-reserve; `feat/w1a-scm` |
-| W1b store | in progress | | #12–#16; Codex CLI / gpt-reserve; `feat/w1b-store` |
+| W1a scm | returned, second remediation running | [#101](https://github.com/0Hoag/agent-ops/pull/101) | #6–#11, #102–#107; Codex initial/remediation, OpenCode focused closing-reference follow-up |
+| W1b store | merged | [#100](https://github.com/0Hoag/agent-ops/pull/100) | #12–#16 and #108–#111 closed; Codex CLI; one return |
 
 Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers occupy gaps), with scoped labels, measurable acceptance and dependencies. #98 covers the initial Claude Code transcript importer; #99 covers local Docker Compose deployment. Owner updates observed during this run: local Docker Compose deployment and Claude Code transcript ingestion are decided; W3 has no owner-decision blocker. Phase 2 W6–W17 is included in planning.
 
@@ -23,6 +23,8 @@ Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers oc
 - `[M]` Coordinator Playwright Chromium verification: `PLAYWRIGHT_BROWSERS_PATH=/Users/zeross/agent-ops-wt/feat/w0b-web/web/.agent-runs/browsers node .agent-runs/verify-web.cjs`. This PR's local dev server at `http://127.0.0.1:4189/` renders sidebar and `API status: ok`, with no page/console errors in the success case. A delayed HTTP fixture shows loading; a 503 fixture shows the error state. Screenshots: `.agent-runs/w0b-health-ok.png`, `.agent-runs/w0b-health-error.png`. Fixture responses match the shared API contract; this is not a browser-to-real-API integration claim. This closes the browser/control gaps left in the worker's report.
 - `[M]` Coordinator repeated both full gates on the exact W0a/W0b heads during this session; both passed. PRs #4/#5 merged under owner authorization. File-scoped diffs of `origin/main` against their original heads (`api/ docker-compose.yml` and `web/`) were empty after merge.
 - `[M]` W0c head `3ef3e235d9ee152cb26855b9c41e7cee1cb16bfc`: coordinator full API and web gates exit 0; independent read-only review found no blocker. CI run `40015869876` API/Web passed. Control #39 at measured head `39a71927668b2f6bed52dc749e15ec07563b3522`, run `40016097101`, Web fails at `HealthPage.tsx(4,9)` with TS2322 and exit 2; control closed unmerged. Worker mistyped the control SHA in its report; coordinator corrected PR metadata after measuring. PR #27 merged; file-scoped workflow diff against main is empty. Main commit `1994fbb` CI run `40016973013` completed successfully (`gh run watch --exit-status`).
+- `[M]` W1b final head `90e5d231beb40153a06f588b326dc138bcfc9360`: coordinator reran full API gate, all exit 0. Entity-specific SQL tests now inspect conflict/update and lookup clauses; authoritative snapshots clear removed values. CI `40018262684` API/Web green. PR #100 merged, scoped diff of store/migrations/runner tests against main empty. Main CI `40018391525` green on merge `57a7a0b`. End-to-end Postgres ingestion is W1c acceptance, not claimed here.
+- `[M]` W1a initial head `b32a2a3db4087958194f26b87d9e3132f4893ef0`: full API gate green, but coordinator temporary Go regressions failed for encoded repository slash, missing state=all, non-closing refs, merged_at state and actual status:in progress label. Independent review also found registry configuration impossible. Issues #102–#107 created and PR returned. Remediation head `bf5447bbfe363d93995c2b349b0d2207e3d9cbc7` passes coordinator full API gate and CI `40018308933`; read-only re-review resolved five findings but #105 still matches directly negated closing prose. Focused second remediation is running; PR not merged.
 
 ## Usage and cost by wave
 
@@ -33,6 +35,8 @@ Source: totals printed by `scripts/run-worker*.sh` after completion (Codex: `tur
 | W0a | Codex CLI 0.164.0 | worker | gpt-reserve | 3,355,793 | 3,245,184 | 0 | 32,033 | 96.70% | [?] unavailable | #1 | 1 |
 | W0b | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 101,706 | 1,440,128 | 0 | 13,887 | 93.40% | [?] unavailable | #2 | 2 |
 | W0c | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 19,347 | 330,496 | 0 | 3,760 | 94.47% | [?] unavailable | #3 | 0 |
+| W1a, initial + first return only | Codex CLI | worker | gpt-reserve | 3,283,440 | 3,149,184 | 0 | 31,325 | 95.91% | [?] unavailable | #6–#11, #102–#107 | 2 (second in progress) |
+| W1b | Codex CLI | worker | gpt-reserve | 2,241,029 | 2,133,760 | 0 | 24,148 | 95.21% | [?] unavailable | #12–#16, #108–#111 | 1 |
 
 Measured after all five script invocations finished on 2026-10-24. Include every attempt, not only successful runs:
 
@@ -44,6 +48,10 @@ Measured after all five script invocations finished on 2026-10-24. Include every
 | W0b-retry | 37,952 | 742,272 | 0 | 4,356 | 470 |
 | W0b-review-fix | 39,181 | 334,208 | 0 | 4,775 | 408 |
 | W0c | 19,347 | 330,496 | 0 | 3,760 | 497 |
+| W1a | 2,217,847 | 2,121,216 | 0 | 21,894 | 3,792 |
+| W1ar | 1,065,593 | 1,027,968 | 0 | 9,431 | 1,487 |
+| W1b | 1,373,871 | 1,318,400 | 0 | 16,067 | 3,535 |
+| W1br | 867,158 | 815,360 | 0 | 8,081 | 1,150 |
 
 - Reproduce: sum `turn.completed.usage` in `.agent-runs/W0a{,-retry}.jsonl`; sum `step_finish.part.tokens` in `.agent-runs/W0b.jsonl`, `W0b-retry.jsonl`, `W0b-review-fix.jsonl` with `jq -s`. Script summaries are in the matching `.log` files.
 - **Input is the raw harness field, not directly comparable across harnesses.** Codex `input_tokens` includes cached input: cache hit = cached/input. OpenCode input excludes cache reads/writes: cache hit = cache.read/(input + cache.read + cache.write). All 88 OpenCode events satisfy `tokens.total = input + cache.read + cache.write + output + reasoning` (verified with `jq -s`, zero mismatches). Normalized total prompt tokens: Codex **3,355,793**; OpenCode **1,541,834**. Codex input semantics follow [OpenAI usage documentation](https://developers.openai.com/api/docs/guides/prompt-caching#monitor-cache-performance).
@@ -55,3 +63,4 @@ Measured after all five script invocations finished on 2026-10-24. Include every
 
 - W0a: initial worker reported green gates despite startup failures returning exit 0; independent review and coordinator reproduction caught it. One return fixed startup handling, added migration tests/control and dev setup instructions.
 - W0b: first attempt stopped with Rspack CSS parsing failure and no PR. First return fixed CSS/Tailwind and JSX runtime; second return completed module/router/layout composition and endpoint assertion. The coordinator supplied the remaining mutation and browser evidence after worker verification commands failed.
+- W1: green gates missed acceptance behavior; promoted to FIVE-MINUTES.md. Codex could not write shared worktree Git metadata and used isolated temporary clones to commit/push. Original worker worktrees retain stale untracked snapshots; they are being preserved pending comparison rather than removed blindly.
