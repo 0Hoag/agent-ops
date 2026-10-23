@@ -60,39 +60,41 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 
 ## Autopilot (default behaviour of the coordinator)
 
-When started with no specific instruction (or "run", "continue", `/autopilot`), run this loop until
-`ROADMAP.md` is done. The owner should never have to spell these steps out.
+The loop is driven by **`scripts/autopilot.sh`** (the owner starts it once). Each call is a fresh, short
+session that does **one pass** and exits; the shell sleeps between passes (no tokens spent waiting).
+`STATUS.md`, the issues and the PRs are the memory between passes: write there, not in chat.
+Run in a terminal: `scripts/autopilot.sh` (every 10 min) · stop: `touch .agent-runs/STOP`.
 
-1. **Sync.** Read new worker output in `.agent-runs/`, `git pull`, `gh pr list`, `gh issue list --state all`.
+One pass:
+
+1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only
+   `tail -20 .agent-runs/<wave>.log` and `.agent-runs/<wave>.md` if present (never the whole `.jsonl`).
    Commit any pending `STATUS.md` change.
 2. **Plan: many small issues, all up front.** Break the whole ROADMAP into fine-grained issues before
    dispatching: one issue per concrete deliverable (one endpoint, one table + repository, one provider
    event, one page, one component, one script), each with "Done when" as a command or number. Expect
-   dozens, not a handful. Labels `status:*`, `priority:*`, `type:*`, `wave:*`, `area:api|web|ci|docs`.
+   dozens, not a handful. Labels `status:*`, `priority:*`, `type:*`, `wave:*`, `area:api|client|ci|docs`.
    A wave = several issues in the same area, given to one worker; its PR closes all of them.
    Mark dependencies (`status:blocked` + `Status:` comment).
    **Work discovered while running becomes a new issue**, never an inline fix: follow-ups, bugs, missing
-   tests, a worker's "Not covered", a review finding. Label it `found-by:agent`, put it in a later wave,
-   keep going.
-3. **Finish open PRs.** For each worker PR: verify (gates on the PR head, CI green once it exists,
-   `Closes #n`, no out-of-scope files), then merge (squash, pinned SHA), confirm the content is on `main`,
-   remove its worktree. Send back with a comment instead of merging when a check fails.
-4. **Dispatch.** Pick the next unblocked sub-waves. Run in parallel the ones that touch different
-   directories. Write an English brief (`briefs/<wave>.md`), start the worker in the background
-   (`nohup scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md > .agent-runs/<wave>.log 2>&1 &`).
-   Harness: OpenCode for small or UI-only waves, Codex for larger backend waves; record it.
-   **At most 2 workers running at once** (ChatGPT Plus 5-hour limit). Queue the rest.
-   Keep briefs precise (exact paths, line numbers, commands) so workers do not explore the repo.
-5. **Wait without ending the turn.** Loop `sleep 90` + check `.agent-runs/` and `gh pr list`.
-   A worker silent for 20 minutes: read its log, fix the brief, restart it.
-   **Usage limit hit** (error mentions usage/rate limit, quota, 429, "try again at"): this is not an
-   owner question and not a failed wave. Note the reset time from the error (or check every 15 min),
-   `sleep` until then, restart the affected worker on the same branch (its pushed commits are kept),
-   and continue the loop. If the coordinator itself hits the limit, the same applies on the next turn.
-6. **Record.** Per wave in `STATUS.md`: harness, model, token totals printed by the script, PR, send-backs.
-   New agent mistakes go to `FIVE-MINUTES.md`.
-7. Back to 1. **Stop only** when the roadmap is done, or on an item from ROADMAP "Câu hỏi mở" or the
-   "ask the owner" list above. Then report once: what merged, cost per wave, what is waiting on the owner.
+   tests, a worker's "Not covered", a review finding. Label it `found-by:agent`, put it in a later wave.
+3. **Finish open PRs.** For each worker PR whose worker has finished: verify (gates on the PR head, CI green,
+   `Closes #n`, no out-of-scope files, smoke when API/client changed), then merge (squash, pinned SHA),
+   confirm the content is on `main`, remove its worktree. Send back with a comment when a check fails.
+4. **Dispatch.** If fewer than **2 workers** are running (`pgrep -f run-worker`), start the next unblocked
+   sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
+   and commands. Start **detached** so it survives this pass:
+   `scripts/spawn.sh .agent-runs/<wave>.log scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md`
+   (plain `nohup … &` is killed when the pass ends). Harness: OpenCode for small/client waves, Codex for
+   larger backend waves.
+   A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
+   **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
+   restart that worker on the same branch in a later pass after the reset time.
+5. **Record** in `STATUS.md`: per wave harness, model, token totals printed by the script, PR, send-backs;
+   new agent mistakes go to `FIVE-MINUTES.md`. Commit and push `STATUS.md`.
+6. **End the pass** with a report of at most 10 lines. **First line** is one of:
+   `AUTOPILOT: CONTINUE` (normal) · `AUTOPILOT: STOP roadmap done` · `AUTOPILOT: STOP owner decision: <question>`
+   (only for ROADMAP "Câu hỏi mở" or the "ask the owner" list above). Never sleep or wait inside a pass.
 
 ## Language
 
