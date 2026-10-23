@@ -33,11 +33,20 @@ cd web && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm 
 ```
 Chưa có thư mục nào thì gate của nó chưa áp dụng (đợt W0 tạo ra chúng). Không skip test, không tắt lint để cho xanh.
 
-## Model và chi phí
+## Harness, model và chi phí
 
-- Coordinator: model mạnh (config mặc định). Worker: `codex exec --profile worker` (`gpt-reserve`, effort medium).
-- Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Chi phí mỗi worker ghi vào `STATUS.md`
-  từ `.agent-runs/<wave>.jsonl` (sự kiện `turn.completed.usage`).
+Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào cột Harness của `STATUS.md`.
+
+| | Codex CLI | OpenCode |
+| --- | --- | --- |
+| Mở coordinator | `codex` | `scripts/opencode.sh` (model `openai/gpt-6.1-sol`, `opencode.json`) |
+| Chạy worker | `scripts/run-worker.sh <wave> <branch> <brief>` | `scripts/run-worker-opencode.sh <wave> <branch> <brief>` |
+| Model worker | `gpt-reserve` (`~/.codex/worker.config.toml`) | `openai/gpt-6-luna` (`.opencode/agents/worker.md`) |
+| Usage trong `.agent-runs/<wave>.jsonl` | `turn.completed.usage` | `step_finish.part.tokens` |
+
+- Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Script in tổng token khi xong; chép vào `STATUS.md`.
+- OpenCode không có sandbox: agent `worker` được chạy mọi lệnh bash trừ danh sách deny (sudo, `rm -rf`,
+  force-push, `gh pr merge`), chỉ trong `~/agent-ops` và `~/agent-ops-wt`.
 
 ## Quyền đã có
 

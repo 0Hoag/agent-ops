@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-6.1-sol",
+  "skills": {
+    "paths": ["~/.codex/skills/orchestrator-workers"]
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "gh *": "allow",
+      "jq *": "allow",
+      "ls *": "allow",
+      "node scripts/*": "allow",
+      "scripts/*": "allow",
+      "git push --force*": "deny",
+      "git reset --hard*": "deny"
+    }
+  }
+}
