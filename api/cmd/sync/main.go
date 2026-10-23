@@ -28,6 +28,9 @@ func main() {
 		fail(err)
 	}
 	defer database.Close(db)
+	if err = database.RunMigrations(ctx, db); err != nil {
+		fail(err)
+	}
 	st := store.New(db)
 	c := cfg.Repositories[0]
 	token := os.Getenv(c.TokenEnv)
