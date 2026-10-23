@@ -17,7 +17,7 @@ import (
 func TestPersistBackfillTwiceUpsertsStableEntitiesAndNormalizedStates(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	t.Cleanup(func() { _ = db.Close() })
 	orm, err := gorm.Open(postgres.New(postgres.Config{Conn: db}), &gorm.Config{})
 	require.NoError(t, err)
 
