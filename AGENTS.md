@@ -56,6 +56,30 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 - Chạy hết đợt không hỏi giữa chừng. Chỉ hỏi owner: quyết định sản phẩm, thao tác khó đảo ngược / rời máy,
   credentials, secret.
 
+## Autopilot (default behaviour of the coordinator)
+
+When started with no specific instruction (or "run", "continue", `/autopilot`), run this loop until
+`ROADMAP.md` is done. The owner should never have to spell these steps out.
+
+1. **Sync.** Read new worker output in `.agent-runs/`, `git pull`, `gh pr list`, `gh issue list --state all`.
+   Commit any pending `STATUS.md` change.
+2. **Plan.** Every ROADMAP item must have an issue (labels `status:*`, `priority:*`, `type:*`, `wave:*`).
+   Create the missing ones; next wave in detail, later waves one issue per sub-wave. Mark dependencies
+   (`status:blocked` + `Status:` comment).
+3. **Finish open PRs.** For each worker PR: verify (gates on the PR head, CI green once it exists,
+   `Closes #n`, no out-of-scope files), then merge (squash, pinned SHA), confirm the content is on `main`,
+   remove its worktree. Send back with a comment instead of merging when a check fails.
+4. **Dispatch.** Pick the next unblocked sub-waves. Run in parallel the ones that touch different
+   directories. Write an English brief (`briefs/<wave>.md`), start the worker in the background
+   (`nohup scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md > .agent-runs/<wave>.log 2>&1 &`).
+   Harness: OpenCode for small or UI-only waves, Codex for larger backend waves; record it.
+5. **Wait without ending the turn.** Loop `sleep 90` + check `.agent-runs/` and `gh pr list`.
+   A worker silent for 20 minutes: read its log, fix the brief, restart it.
+6. **Record.** Per wave in `STATUS.md`: harness, model, token totals printed by the script, PR, send-backs.
+   New agent mistakes go to `FIVE-MINUTES.md`.
+7. Back to 1. **Stop only** when the roadmap is done, or on an item from ROADMAP "Câu hỏi mở" or the
+   "ask the owner" list above. Then report once: what merged, cost per wave, what is waiting on the owner.
+
 ## Language
 
 **Everything written to the repo or GitHub is in English**: issues (title and body), PRs, commits, briefs,
