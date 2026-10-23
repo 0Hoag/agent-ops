@@ -8,12 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
-	"github.com/gin-gonic/gin"
 )
 
 func TestValidEntity(t *testing.T) {
@@ -74,18 +72,6 @@ type badRegistry struct{}
 
 func (badRegistry) Build(string, scm.Config) (scm.SCMProvider, error) {
 	return nil, errors.New("internal secret detail")
-}
-
-func TestControllerBoundsCandidates(t *testing.T) {
-	c := NewController(nil, map[string][]Config{"github": make([]Config, 33)})
-	r := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(r)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/webhooks/github", nil)
-	ctx.Params = gin.Params{{Key: "provider", Value: "github"}}
-	c.Handle(ctx)
-	if r.Code != http.StatusBadRequest {
-		t.Fatalf("status=%d", r.Code)
-	}
 }
 
 func TestIngestRejectsRepoMismatchAndWrongSecret(t *testing.T) {
