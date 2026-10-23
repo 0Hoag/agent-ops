@@ -13,9 +13,9 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
 
 1. `ROADMAP.md`: mục tiêu, quyết định của owner (có ngày, không hỏi lại), các đợt và issue.
 2. `STATUS.md`: trạng thái đo được + chi phí token mỗi đợt. Không trích số cũ; đo lại.
-3. `docs/architecture.md`, `docs/be-standards.md`, `docs/fe-standards.md`: worker code theo đúng các file này.
+3. `docs/architecture.md`, `docs/be-standards.md`, `docs/client-standards.md`: worker code theo đúng các file này.
    Chuẩn gốc là source công ty: `~/Desktop/controlplane` (API), `~/Desktop/console` (web), chỉ đọc.
-   Web nằm ở repo riêng `0Hoag/agent-ops-web` (sau đợt WS-a), checkout tại `~/agent-ops-web`.
+   Web nằm ở repo riêng `0Hoag/agent-ops-client` (sau đợt WS-a), checkout tại `~/agent-ops-client`.
 4. `ROLES.md`, `FIVE-MINUTES.md`.
 
 ## Git

@@ -1,6 +1,6 @@
-# Web code standards (React)
+# Client code standards (React)
 
-The web app lives in **`0Hoag/agent-ops-web`** (separate repo, ROADMAP 24/10/2026). This page moves there in
+The client app lives in **`0Hoag/agent-ops-client`** (separate repo, ROADMAP 24/10/2026). This page moves there in
 wave WS-a; until then it applies to `web/`.
 
 **Source of truth: `~/Desktop/console`** (company React console). Copy its files and conventions; adapt names

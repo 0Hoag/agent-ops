@@ -17,10 +17,10 @@ Số liệu quá trình xây nằm trong `STATUS.md`.
 | | |
 | --- | --- |
 | API (`api/`) | Go, Gin, GORM + Postgres, migration SQL đánh số, Swagger (swaggo), testify, Air, golangci-lint |
-| Web (`web/`) | React 18 + TypeScript, Rspack, pnpm, TanStack Query/Table, axios, react-router 6, react-hook-form, Tailwind, Vitest |
+| Client (repo `agent-ops-client`, hiện còn ở `web/` tới đợt WS-a) | React 18 + TypeScript, Rspack, pnpm, TanStack Query/Table, axios, react-router 6, react-hook-form, Tailwind, Vitest |
 
 ## Đọc gì trước
 
 - Agent: `AGENTS.md` (bắt buộc), rồi `ROLES.md`, `FIVE-MINUTES.md`.
-- Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/fe-standards.md`.
+- Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/client-standards.md`.
 - Kế hoạch và trạng thái: `ROADMAP.md`, `STATUS.md`.

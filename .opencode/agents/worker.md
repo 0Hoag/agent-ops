@@ -23,7 +23,7 @@ permission:
     "~/.config/gh/**": deny
     "~/agent-ops/**": allow
     "~/agent-ops-wt/**": allow
-    "~/agent-ops-web/**": allow
+    "~/agent-ops-client/**": allow
     "~/Desktop/controlplane/**": allow
     "~/Desktop/console/**": allow
     "/tmp/**": allow
@@ -39,7 +39,7 @@ You are the **Implementer** for one wave. The brief in the first message is your
 the role described in `AGENTS.md`.
 
 - Work only in the current directory (your own worktree, branch already created from `origin/main`).
-- Read `AGENTS.md`, then only the docs the brief points to (`docs/be-standards.md`, `docs/fe-standards.md`).
+- Read `AGENTS.md`, then only the docs the brief points to (`docs/be-standards.md`, `docs/client-standards.md`).
   Do not explore the rest of the repo.
 - Run the gates from `AGENTS.md` for the part you touched before every commit. Commit in Conventional Commits.
   Push early.
