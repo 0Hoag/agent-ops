@@ -15,7 +15,7 @@
 | 24/10/2026 | GitHub làm trước; **GitLab provider là bắt buộc** (để dùng ở công ty). Thiết kế provider interface ngay từ W1. |
 | 24/10/2026 | ~~Coordinator không merge trong W0-W1~~ (thay bằng dòng dưới). |
 | 24/10/2026 | **Coordinator tự merge** sau khi tự kiểm tra (gate xanh trên đúng head, CI xanh khi đã có W0c, `Closes #n`, không file ngoài phạm vi), squash ghim SHA. Chạy liên tục hết ROADMAP, không chờ owner. Worker vẫn không merge. |
-| 24/10/2026 | PM tách **toàn bộ ROADMAP thành issue** ngay: W1 chi tiết; W2-W5 mỗi đợt con một issue (đủ "xong khi"), làm rõ thêm khi tới lượt. |
+| 24/10/2026 | PM tách **toàn bộ ROADMAP thành nhiều issue nhỏ** ngay (mỗi issue một deliverable, xem AGENTS.md → Autopilot bước 2); việc phát sinh thành issue mới `found-by:agent`. |
 | 24/10/2026 | Deploy: **local, docker compose** (API + web + Postgres). VPS / hạ tầng công ty quyết sau demo, không làm trong W0-W5. |
 | 24/10/2026 | Usage Claude Code (W3): **đọc transcript local `~/.claude/projects/**/*.jsonl`** (usage mỗi message), cùng cách với Codex / OpenCode (đọc JSON). OTel và log proxy công ty để đợt sau, tạo issue `found-by:agent` nếu cần. |
 | 24/10/2026 | Không auth người dùng ở bản đầu (chạy local / nội bộ). Webhook phải verify chữ ký. Endpoint ghi agent-run dùng token tĩnh từ env. |
