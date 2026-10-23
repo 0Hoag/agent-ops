@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	"github.com/0Hoag/agent-ops/api/pkg/database"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
-	"os"
 )
 
 func main() {
@@ -46,21 +47,28 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	for _, i := range result.Issues {
-		if err = st.Issues.Upsert(ctx, issue(repo.ID, i)); err != nil {
-			fail(err)
+	if err = persistBackfill(ctx, st, repo.ID, result); err != nil {
+		fail(err)
+	}
+}
+
+func persistBackfill(ctx context.Context, st *store.Store, repositoryID store.UUID, result scm.BackfillResult) error {
+	for _, item := range result.Issues {
+		if err := st.Issues.Upsert(ctx, issue(repositoryID, item)); err != nil {
+			return err
 		}
 	}
-	for _, p := range result.PullRequests {
-		if err = st.PullRequests.Upsert(ctx, pull(repo.ID, p)); err != nil {
-			fail(err)
+	for _, item := range result.PullRequests {
+		if err := st.PullRequests.Upsert(ctx, pull(repositoryID, item)); err != nil {
+			return err
 		}
 	}
-	for _, r := range result.PipelineRuns {
-		if err = st.PipelineRuns.Upsert(ctx, run(repo.ID, r)); err != nil {
-			fail(err)
+	for _, item := range result.PipelineRuns {
+		if err := st.PipelineRuns.Upsert(ctx, run(repositoryID, item)); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 func fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
 func scmConfig(t, s, b string) scm.Config {
