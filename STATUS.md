@@ -11,9 +11,17 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 | W0c ci | merged | [#27](https://github.com/0Hoag/agent-ops/pull/27) | #3 closed; OpenCode; independent review and failing control #39 verified |
 | W1a scm | merged | [#101](https://github.com/0Hoag/agent-ops/pull/101) | #6–#11, #102–#107, #112 closed; Codex initial/remediation, OpenCode two focused follow-ups; 3 returns |
 | W1b store | merged | [#100](https://github.com/0Hoag/agent-ops/pull/100) | #12–#16 and #108–#111 closed; Codex CLI; one return |
-| W1c ingest | returned, remediation running | [#114](https://github.com/0Hoag/agent-ops/pull/114) | #17/#18; initial Codex; OpenCode fixes #116–#118 and completes real DB acceptance |
+| W1c ingest | returned twice, W1cr2 running | [#114](https://github.com/0Hoag/agent-ops/pull/114) | #17/#18/#116–#118/#137; missing rollback/retry and repeat-sync tests; real signature regression required |
 | W1d stale snapshots | queued | | #119; after W1c, before board API acceptance |
-| W2b board UI | returned, verification running | [#115](https://github.com/0Hoag/agent-ops/pull/115) | #20/#21/#120; OpenCode; browser/mutation evidence missing in initial report |
+| W2b board UI | merged | [#115](https://github.com/0Hoag/agent-ops/pull/115) | #20/#21/#120 closed; merge confirmed by gh at 2026-10-23T20:49:54Z; W2br supplied fixture browser/mutation evidence |
+| WS-a1 client bootstrap | incomplete, retry running | | #121–#123; public client repo and subtree main exist; harness/CI PR still missing; OpenCode retry uses authorized existing clone |
+
+## Autopilot single pass — 2026-10-24
+
+- `[M]` Synced clean `main` at `172527c`; `git pull --ff-only` up to date. Latest main CI run `40023481021` completed successfully. Planning includes original W0–W17 issues and WS deliverables #121–#136; no owner decision is pending.
+- `[M]` Only API PR #114 remains open at `e35ab610b5525df8ce07949481295467eb3a634c`, CI `40023149775` API/Web successful. No merge this pass: #118 still lacks required transaction rollback/retry and repeat-sync automated coverage, explicitly admitted in `.agent-runs/W1cr.md`. Coordinator inspected `service_test.go:43,77–91`: the fake verifier always succeeds, so the wrong-secret test exercises repository mismatch, not HMAC. Created #137 (`found-by:agent`) and returned PR with both requirements. Local gates and real-data smoke on this head are not independently repeated this pass; worker results remain worker evidence.
+- `[M]` Client repo `0Hoag/agent-ops-client` is public with main `e506d083ef8c84686f14da1286f4a245ac0f7df3`, ancestry includes prior W0b/W2b subtree commits. Both canonical `~/agent-ops-client` and permitted `~/agent-ops-wt/client-bootstrap` are clean. Client PR list is empty. Initial WS-a1 stopped unnecessarily over the permitted clone path; retry brief removes the ambiguity. Root removal/issue transfer and WS-b remain queued behind their existing prerequisites.
+- `[M]` No worker processes were running at sync. Dispatched two independent OpenCode (`openai/gpt-6-luna`, low) retries detached through `scripts/spawn.sh`: W1cr2 on existing `fix/w1cr-ingestion` worktree, updating #114; WS-a1-retry on `chore/ws-a1-client-bootstrap`, implementing in the separate client clone. `pgrep` confirmed runner PIDs 50518/50521 and OpenCode PIDs 50554/50570. Briefs: `briefs/W1cr2.md`, `briefs/WS-a1-retry.md`. New run usage is pending completion; do not reuse previous totals.
 
 Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers occupy gaps), with scoped labels, measurable acceptance and dependencies. #98 covers the initial Claude Code transcript importer; #99 covers local Docker Compose deployment. Owner updates observed during this run: local Docker Compose deployment and Claude Code transcript ingestion are decided; W3 has no owner-decision blocker. Phase 2 W6–W17 is included in planning.
 
@@ -44,8 +52,13 @@ Source: totals printed by `scripts/run-worker*.sh` after completion (Codex: `tur
 | W1a, initial + first return | Codex CLI | worker | gpt-reserve | 3,283,440 | 3,149,184 | 0 | 31,325 | 95.91% | [?] unavailable | #6–#11, #102–#107 | 3 total across harnesses |
 | W1a, second + third returns | OpenCode | worker | openai/gpt-6-luna | 59,233 | 546,048 | 0 | 5,744 | 90.21% | [?] unavailable | #105/#112 | included above |
 | W1b | Codex CLI | worker | gpt-reserve | 2,241,029 | 2,133,760 | 0 | 24,148 | 95.21% | [?] unavailable | #12–#16, #108–#111 | 1 |
-| W1c, initial only | Codex CLI | worker | gpt-reserve | 1,690,236 | 1,642,112 | 0 | 9,195 | 97.15% | [?] unavailable | #17/#18 | 1, running |
-| W2b, initial only | OpenCode | worker | openai/gpt-6-luna | 36,243 | 168,064 | 0 | 4,969 | 82.26% | [?] unavailable | #20/#21 | 1, running |
+| W1c, initial only | Codex CLI | worker | gpt-reserve | 1,690,236 | 1,642,112 | 0 | 9,195 | 97.15% | [?] unavailable | #17/#18 | 2 total, latest running |
+| W2b, initial only | OpenCode | worker | openai/gpt-6-luna | 36,243 | 168,064 | 0 | 4,969 | 82.26% | [?] unavailable | #20/#21 | 1 total, merged |
+| W1cr, completed return | OpenCode | worker | openai/gpt-6-luna | 191,024 | 24,185,344 | 0 | 56,492 | 99.22% | [?] unavailable | #116–#118 | second return dispatched |
+| W2br, completed verification | OpenCode | worker | openai/gpt-6-luna | 49,255 | 1,015,296 | 0 | 5,955 | 95.37% | [?] unavailable | #120 | 1 total |
+| WS-a1, incomplete bootstrap | OpenCode | worker | openai/gpt-6-luna | 38,071 | 119,936 | 0 | 828 | 75.91% | [?] unavailable | #121–#123 | 1, retry running |
+
+Latest completed-run totals above were read from the script summaries in the last 20 lines of `.agent-runs/{W1cr,W2br,WS-a1}.log` during this pass; reasoning was 0 for each. W1cr2 and WS-a1-retry are separate attempts with totals pending. Initial-only rows retain historical usage rather than including retries.
 
 Measured after all five script invocations finished on 2026-10-24. Include every attempt, not only successful runs:
 

@@ -58,3 +58,13 @@ an unconfigurable registry, incorrect status/reference mapping, and untested rep
 behavior. HTTP fixtures must assert RequestURI and query parameters, not only decoded URL.Path;
 SQL tests must inspect conflict/update behavior, not only an INSERT prefix. Run golangci-lint gates
 sequentially on this machine because concurrent invocations contend for its global lock.
+
+## 7. Resolve permitted working paths from the actual brief
+
+WS-a1 created the public client subtree repository but stopped before a PR because its clone was under
+`agent-ops-wt/client-bootstrap`, even though the brief explicitly permitted that implementation path.
+
+> Cost: one incomplete worker attempt and another dispatch before standalone client CI could be reviewed.
+
+**Check:** distinguish canonical runtime checkout from the authorized implementation clone; verify the
+existing clone's remote, clean status and HEAD, then continue in the permitted path through PR creation.
