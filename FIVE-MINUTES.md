@@ -119,3 +119,14 @@ deliverable-specific acceptance and dependencies; fourteen also lacked wave labe
 **Check:** compare every destination body against its pre-migration `userContentEdits` history,
 preserving measurable acceptance and fully qualified dependency links; audit all label dimensions
 and real newlines before claiming transfer completion.
+
+## 13. Empty SQLmock expectations do not prove zero database access
+
+W1cr7 negative POST tests expected HTTP 400 and checked an empty ExpectationsWereMet list. Unexpected
+Begin returned a database error that the controller also mapped to 400. Removing both repository-binding
+guards still passed every focused test in the coordinator's disposable control.
+
+> Cost: another ingestion acceptance return and #144 after green API gates and CI.
+
+**Check:** independently observe unexpected database access, including Begin, and require guard-removal
+controls to fail an explicit access assertion; returned database errors must not stand in for rejection.
