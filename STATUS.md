@@ -6,9 +6,13 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 
 | Wave | Status | PR | Notes |
 | --- | --- | --- | --- |
-| W0a api | review | [#4](https://github.com/0Hoag/agent-ops/pull/4) | [#1](https://github.com/0Hoag/agent-ops/issues/1), Codex CLI, `feat/w0a-api`; owner merge pending |
-| W0b web | review | [#5](https://github.com/0Hoag/agent-ops/pull/5) | [#2](https://github.com/0Hoag/agent-ops/issues/2), OpenCode, `feat/w0b-web`; owner merge pending |
-| W0c ci | blocked | | [#3](https://github.com/0Hoag/agent-ops/issues/3), waiting for owner to merge W0a/W0b |
+| W0a api | merged | [#4](https://github.com/0Hoag/agent-ops/pull/4) | #1 closed; coordinator repeated API gates on exact PR head, all passed |
+| W0b web | merged | [#5](https://github.com/0Hoag/agent-ops/pull/5) | #2 closed; coordinator repeated full web gate on exact PR head, all passed |
+| W0c ci | merged | [#27](https://github.com/0Hoag/agent-ops/pull/27) | #3 closed; OpenCode; independent review and failing control #39 verified |
+| W1a scm | in progress | | #6–#11; Codex CLI / gpt-reserve; `feat/w1a-scm` |
+| W1b store | in progress | | #12–#16; Codex CLI / gpt-reserve; `feat/w1b-store` |
+
+Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers occupy gaps), with scoped labels, measurable acceptance and dependencies. #98 covers the initial Claude Code transcript importer; #99 covers local Docker Compose deployment. Owner updates observed during this run: local Docker Compose deployment and Claude Code transcript ingestion are decided; W3 has no owner-decision blocker. Phase 2 W6–W17 is included in planning.
 
 ## Verification on PR heads
 
@@ -17,7 +21,8 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 - `[M]` Web head `ccba5da7e0a4c505411094a10e5dc35ba92d3782`: coordinator ran `pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build` in detached `review-w0b/web`, all exit 0; 1 test passes. Build emits 2 bundle-size recommendations.
 - `[M]` Web mutation control: detached `control-w0b` at the same head, change only the requested endpoint to `/wrong-control-endpoint`; `pnpm test` exits 1 and explicitly reports expected `/healthz`, actual `/wrong-control-endpoint`. The unmodified head passed before mutation; PR source was not changed.
 - `[M]` Coordinator Playwright Chromium verification: `PLAYWRIGHT_BROWSERS_PATH=/Users/zeross/agent-ops-wt/feat/w0b-web/web/.agent-runs/browsers node .agent-runs/verify-web.cjs`. This PR's local dev server at `http://127.0.0.1:4189/` renders sidebar and `API status: ok`, with no page/console errors in the success case. A delayed HTTP fixture shows loading; a 503 fixture shows the error state. Screenshots: `.agent-runs/w0b-health-ok.png`, `.agent-runs/w0b-health-error.png`. Fixture responses match the shared API contract; this is not a browser-to-real-API integration claim. This closes the browser/control gaps left in the worker's report.
-- `[M]` `gh pr view 4/5 --json state,headRefOid,closingIssuesReferences,statusCheckRollup`: both PRs OPEN, reference #1/#2 respectively, no CI checks configured yet. W0c remains blocked; no merge was performed.
+- `[M]` Coordinator repeated both full gates on the exact W0a/W0b heads during this session; both passed. PRs #4/#5 merged under owner authorization. File-scoped diffs of `origin/main` against their original heads (`api/ docker-compose.yml` and `web/`) were empty after merge.
+- `[M]` W0c head `3ef3e235d9ee152cb26855b9c41e7cee1cb16bfc`: coordinator full API and web gates exit 0; independent read-only review found no blocker. CI run `40015869876` API/Web passed. Control #39 at measured head `39a71927668b2f6bed52dc749e15ec07563b3522`, run `40016097101`, Web fails at `HealthPage.tsx(4,9)` with TS2322 and exit 2; control closed unmerged. Worker mistyped the control SHA in its report; coordinator corrected PR metadata after measuring. PR #27 merged; file-scoped workflow diff against main is empty. Main commit `1994fbb` CI run `40016973013` completed successfully (`gh run watch --exit-status`).
 
 ## Usage and cost by wave
 
@@ -27,7 +32,7 @@ Source: totals printed by `scripts/run-worker*.sh` after completion (Codex: `tur
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | W0a | Codex CLI 0.164.0 | worker | gpt-reserve | 3,355,793 | 3,245,184 | 0 | 32,033 | 96.70% | [?] unavailable | #1 | 1 |
 | W0b | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 101,706 | 1,440,128 | 0 | 13,887 | 93.40% | [?] unavailable | #2 | 2 |
-| W0c | not dispatched | — | — | — | — | — | — | — | — | #3 | 0 |
+| W0c | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 19,347 | 330,496 | 0 | 3,760 | 94.47% | [?] unavailable | #3 | 0 |
 
 Measured after all five script invocations finished on 2026-10-24. Include every attempt, not only successful runs:
 
@@ -38,6 +43,7 @@ Measured after all five script invocations finished on 2026-10-24. Include every
 | W0b | 24,573 | 363,648 | 0 | 4,756 | 320 |
 | W0b-retry | 37,952 | 742,272 | 0 | 4,356 | 470 |
 | W0b-review-fix | 39,181 | 334,208 | 0 | 4,775 | 408 |
+| W0c | 19,347 | 330,496 | 0 | 3,760 | 497 |
 
 - Reproduce: sum `turn.completed.usage` in `.agent-runs/W0a{,-retry}.jsonl`; sum `step_finish.part.tokens` in `.agent-runs/W0b.jsonl`, `W0b-retry.jsonl`, `W0b-review-fix.jsonl` with `jq -s`. Script summaries are in the matching `.log` files.
 - **Input is the raw harness field, not directly comparable across harnesses.** Codex `input_tokens` includes cached input: cache hit = cached/input. OpenCode input excludes cache reads/writes: cache hit = cache.read/(input + cache.read + cache.write). All 88 OpenCode events satisfy `tokens.total = input + cache.read + cache.write + output + reasoning` (verified with `jq -s`, zero mismatches). Normalized total prompt tokens: Codex **3,355,793**; OpenCode **1,541,834**. Codex input semantics follow [OpenAI usage documentation](https://developers.openai.com/api/docs/guides/prompt-caching#monitor-cache-performance).
