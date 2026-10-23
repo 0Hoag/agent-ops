@@ -68,3 +68,13 @@ WS-a1 created the public client subtree repository but stopped before a PR becau
 
 **Check:** distinguish canonical runtime checkout from the authorized implementation clone; verify the
 existing clone's remote, clean status and HEAD, then continue in the permitted path through PR creation.
+
+## 8. A local negative control does not prove hosted CI rejection
+
+Client bootstrap #1 had green GitHub CI, but its closed TypeScript control #2 had no workflow runs.
+The worker described it as a fork limitation although the measured head repository was the same repo.
+
+> Cost: one returned bootstrap PR and follow-up #138 before the repository split can continue.
+
+**Check:** inspect the control's head repository and check runs with `gh pr view`; require a hosted run
+that fails at the intended step with the injected diagnostic before accepting a CI negative control.
