@@ -20,11 +20,6 @@ if [ ! -d "$wt" ]; then
   git -C "$root" worktree add "$wt" -b "$branch" origin/main
 fi
 
-# Reuse the main checkout's web dependencies when they exist.
-if [ -d "$root/web/node_modules" ] && [ ! -e "$wt/web/node_modules" ] && [ -d "$wt/web" ]; then
-  ln -s "$root/web/node_modules" "$wt/web/node_modules"
-fi
-
 codex exec \
   --profile worker \
   --json \

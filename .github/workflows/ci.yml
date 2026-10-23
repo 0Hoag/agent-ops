@@ -29,27 +29,3 @@ jobs:
         working-directory: api
       - run: go build ./...
         working-directory: api
-
-  web:
-    name: Web
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.21.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-        working-directory: web
-      - run: pnpm typecheck
-        working-directory: web
-      - run: pnpm lint
-        working-directory: web
-      - run: pnpm test
-        working-directory: web
-      - run: pnpm build
-        working-directory: web

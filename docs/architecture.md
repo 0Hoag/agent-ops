@@ -6,7 +6,7 @@ GitHub / GitLab ──webhook──▶ api: modules/webhook ──▶ scm provid
         └──── cmd/sync (backfill) ─────┘                                                 ▼
 run-worker.sh ──POST /agent-runs──▶ api: modules/agentrun ──────────────────────▶ agent_runs
                                                                                          │
-web (React) ◀── REST /api/v1/* + websocket ◀── api: modules/board, modules/runs ◀────────┘
+client (`../agent-ops-client`, React) ◀── REST /api/v1/* + websocket ◀── api: modules/board, modules/runs ◀────────┘
 ```
 
 ## Provider pattern (theo controlplane `pkg/handlers`)
