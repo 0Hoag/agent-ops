@@ -12,7 +12,7 @@ Commit của các con số: chưa có (repo mới). Đánh dấu: `[M]` đo đư
 
 ## Chi phí theo đợt
 
-Lấy từ `.agent-runs/<wave>.jsonl`: cộng `turn.completed.usage` của mọi turn.
+Lấy từ tổng token mà `scripts/run-worker*.sh` in ra khi xong (Codex: `turn.completed.usage`; OpenCode: `step_finish.part.tokens`).
 
 | Đợt | Harness | Worker | Model | Input | Cached input | Cache write | Output | Cache hit % | $ | Issue | Gửi lại |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
