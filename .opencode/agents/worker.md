@@ -23,6 +23,9 @@ permission:
     "~/.config/gh/**": deny
     "~/agent-ops/**": allow
     "~/agent-ops-wt/**": allow
+    "~/agent-ops-web/**": allow
+    "~/Desktop/controlplane/**": allow
+    "~/Desktop/console/**": allow
     "/tmp/**": allow
     "/private/tmp/**": allow
     "~/Library/Caches/pnpm/**": allow

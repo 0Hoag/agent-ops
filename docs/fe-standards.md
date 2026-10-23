@@ -1,40 +1,42 @@
-# Chuẩn code web (React)
+# Web code standards (React)
 
-Rút gọn từ `console` (margarita) của công ty. **Không** chép `packages/*`, host contract và các gate coupling
-của console: chúng phục vụ tách 21 module của app lớn, quá nặng cho repo này.
+The web app lives in **`0Hoag/agent-ops-web`** (separate repo, ROADMAP 24/10/2026). This page moves there in
+wave WS-a; until then it applies to `web/`.
 
-## Bố cục
+**Source of truth: `~/Desktop/console`** (company React console). Copy its files and conventions; adapt names
+only. Do **not** copy its `packages/*` workspace, host contract or coupling gates: they exist to split a
+21-module app and are too heavy here.
+
+| Topic | console file to follow |
+| --- | --- |
+| Package scripts, engines, packageManager | `package.json` (`dev: RSPACK_MODE=local rspack serve`, `build: tsc --noEmit && NODE_ENV=production RSPACK_MODE=production rspack build`, `typecheck`, `test: vitest run`, `preview`) |
+| Node version | `.nvmrc` (22), engines `node >=20.19.0` |
+| TypeScript | `tsconfig.json` (ES2020, bundler resolution, strict, noUnused*, `@/*` → `src/*`), `tsconfig.node.json` |
+| Bundler + env | `rspack.config.ts` (dotenv: `.env`, `.env.<mode>`, `.env.local` for `local`; HTML template; React refresh) |
+| Tests | `vitest.config.mts` |
+| App composition | `src/app/` (register-<module>.tsx, paths.ts, route tree) |
+| Module shape | `packages/fastchannel/src/{module.ts,route.ts,paths.ts,services/}` → here `src/modules/<m>/` |
+| HTTP seam | `packages/fastchannel/src/services/client.ts`: a module reaches the API only through its `services/client.ts` |
+| Data hooks | `packages/fastchannel/src/services/fastchannel.ts` (TanStack Query hooks + typed responses in one service file) |
+| Code style | single quotes, semicolons, 2-space indent, doc comment on every exported function/type |
+
+## Layout
 
 ```
-web/src/
+src/
 ├── main.tsx  App.tsx
-├── app/                        # composition root
-│   ├── router.tsx              # gom route của mọi module
-│   ├── paths.ts                # một object `paths` cho mọi đường dẫn
-│   ├── register-<module>.tsx   # nối module vào app (route, nav)
-│   └── layout/                 # sidebar, header
-├── modules/<tên>/              # mỗi màn/feature một module
-│   ├── module.ts               # export: route, nav item
-│   ├── paths.ts                # đường dẫn của module
-│   ├── services/               # hook TanStack Query + hàm gọi API; module chỉ gọi BE qua đây
-│   ├── components/             # <Name>/index.tsx
-│   └── <Page>.tsx
-└── shared/                     # http (axios instance), ui, lib dùng chung
+├── app/                        # router, paths.ts, register-<module>.tsx, layout/
+├── modules/<name>/             # module.ts route.ts paths.ts services/{client.ts,<name>.ts,types.ts} components/<Name>/index.tsx <Page>.tsx
+└── shared/                     # http client factory, ui, lib
 ```
 
-## Luật
+## Rules
 
-- TypeScript `strict`. Kiểu cho mọi response API (đặt trong `services/types.ts` của module).
-- **Module chỉ gọi BE qua `services/` của chính nó**; module không import module khác (cần dùng chung → `shared/`).
-- Data: TanStack Query (`useQuery`/`useMutation`), query key dạng mảng `['issues', repoId, filters]`; không fetch trong `useEffect`.
-- Form: react-hook-form. Bảng: TanStack Table.
-- Component: function + hooks; tên thư mục PascalCase `<Name>/index.tsx`, hook `use-<tên>.ts` (kebab-case).
-- Style: Tailwind; không CSS inline trừ giá trị động. Không ép ALL-CAPS cho tiêu đề, tab, badge.
-- Dashboard dày đặc kiểu ERP: header không chứa dữ liệu record; mỗi màn tối đa một nút primary.
-- Có trạng thái loading (skeleton), empty và error cho mọi màn gọi API.
-- File ≤200 dòng; lớn hơn thì tách component/hook.
-
-## Test
-
-- Vitest cho hàm thuần (mapper, format, tính cache hit %, chi phí) và hook có logic.
-- Test phải fail được: đổi logic, thấy đỏ, hoàn nguyên.
+- TypeScript strict; every API response typed.
+- Modules never import other modules; shared code goes to `src/shared/`.
+- TanStack Query for data (array query keys), react-hook-form for forms, TanStack Table for tables.
+- Tailwind for styling. Dense ERP dashboard: no record data in headers, one primary button per screen, no forced ALL-CAPS.
+- Loading (skeleton), empty and error states on every screen that calls the API.
+- ≤200 lines per file. Vitest for pure functions and hooks; a test must be shown to fail once.
+- `APP_API_URL` from env (`.env.example` documents every variable).
+- It must run: `pnpm build && pnpm preview` serves a page that shows real API data (`scripts/smoke.sh` in agent-ops).

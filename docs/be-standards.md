@@ -1,42 +1,44 @@
-# Chuẩn code API (Go)
+# API code standards (Go)
 
-Rút gọn từ `controlplane/docs/code-standards.md` của công ty. Không rõ thì làm theo cách gần nhất đã có trong `api/`.
+**Source of truth: `~/Desktop/controlplane`** (company Go service). Copy its files and conventions; adapt names
+only. When this page and controlplane disagree, controlplane wins. Read these there before changing the API:
 
-## Bố cục
+| Topic | controlplane file to follow |
+| --- | --- |
+| Conventions (naming, errors, file size, tests) | `docs/code-standards.md` |
+| Lint config (golangci v2) | `.golangci.yml` (drop the govmomi errcheck exclusion) |
+| Make targets, LDFLAGS version/commit | `Makefile` (`build run dev install fmt vet lint test test-coverage ci swagger docker-build`) |
+| Hot reload | `.air.toml` |
+| Wiring modules in `main.go` | `main.go` (NewRepository → NewController → NewRoutes(...).Register(group)) |
+| Module layout | `modules/team/` (models, types, repository*, controller*, routes, README) |
+| Response and error JSON | `pkg/response/response.go`, `pkg/response/error.go` |
+| Pagination | `pkg/pagination/pagination.go` |
+| Middleware | `pkg/middleware/requestid.go`, `pkg/middleware/security.go` |
+| Config / logger | `pkg/config/config.go`, `pkg/logger/logger.go` |
+| Migrations | `migrations/NNN_create_<thing>_table.sql` (numbered, never edit a merged one) |
+| Provider pattern | `pkg/handlers/` (interface + `builder` registry + one dir per vendor, `init()` registration) |
+| Swagger | swaggo annotations on handlers, served at `/swagger/*` |
+
+## Layout in this repo
 
 ```
 api/
-├── main.go                    # nối module: NewRepository(db) → NewController(repo) → NewRoutes(ctrl).Register(v1)
-├── cmd/<tool>/main.go         # công cụ dòng lệnh (sync, ...)
-├── modules/<tên>/             # mỗi feature một module
-│   ├── models.go              # GORM model
-│   ├── types.go               # DTO request/response
-│   ├── repository.go          # chỉ truy vấn DB; tách repository_<entity>.go khi lớn
-│   ├── controller.go          # handler Gin; tách controller_<feature>.go khi lớn
-│   ├── service.go             # logic nghiệp vụ (chỉ khi có, không tạo trước)
-│   ├── routes.go              # type Routes; func (r *Routes) Register(g *gin.RouterGroup)
-│   └── README.md              # vài dòng: module làm gì, endpoint
-├── pkg/{config,database,response,pagination,logger,middleware}
-├── pkg/handlers/scm/          # provider pattern, xem docs/architecture.md
-└── migrations/NNN_<mô_tả>.sql # đánh số tăng dần, không sửa file đã merge
+├── main.go
+├── cmd/<tool>/main.go          # agentops CLI, sync, ...
+├── modules/<name>/             # models.go types.go repository*.go controller*.go routes.go README.md (+ service.go only when needed)
+├── pkg/{config,database,logger,middleware,pagination,response}
+├── pkg/handlers/scm/           # SCMProvider + builder + github/ gitlab/
+├── migrations/NNN_<verb>_<thing>_table.sql
+└── Makefile .air.toml .golangci.yml Dockerfile
 ```
 
-## Luật
+## Rules that matter most (from controlplane `docs/code-standards.md`)
 
-- `gofmt`; `golangci-lint` là gate. Package chữ thường không gạch dưới; file `snake_case.go`.
-- **File ≤200 dòng.** Lớn hơn thì tách theo entity/feature. Module > ~6 file thì tách sub-package.
-- Dependency truyền qua constructor (`NewController(repo *Repository)`); không biến toàn cục (trừ registry provider).
-- Luôn truyền `context.Context` (`gctx.Request.Context()`) xuống repository/provider.
-- Động từ repository: `Get` (theo id), `List` (phân trang), `Create`, `Update`, `Delete`, `Exists`, `Count`.
-- Boolean: `IsX`, `HasX`. Tên biến đầy đủ (`issue`, không `i`), trừ `ctx`, `err`, `id`.
-- Lỗi: `fmt.Errorf("get issue %d: %w", n, err)`; controller trả `response.Error(gctx, status, msg)`, không lộ lỗi DB.
-- Response list: `response.List(gctx, data, meta)`. Không trả struct GORM trực tiếp nếu có trường nội bộ.
-- Swagger annotation trên mọi handler public.
-- Secret chỉ từ env; không log secret, token, payload đầy đủ.
-
-## Test
-
-- `testify` + test dạng bảng (table-driven). File `<tên>_test.go` cạnh code.
-- Provider: payload mẫu trong `testdata/`, có ca chữ ký sai.
-- Repository: `go-sqlmock` hoặc Postgres docker (đánh dấu integration bằng build tag `integration`).
-- Test phải fail được: đổi một dòng logic, thấy đỏ, hoàn nguyên (trong worktree, không `git checkout --`).
+- `gofmt` + `goimports`; `golangci-lint` with the copied config is a gate. Files `snake_case.go`, packages lowercase.
+- **≤200 lines per file**; split by entity/feature (`controller_<feature>.go`, `repository_<entity>.go`).
+- Constructor injection, `context.Context` passed down from `gctx.Request.Context()`.
+- Repository verbs: `Get`, `List`, `Create`, `Update`, `Delete`, `Exists`, `Count`. Booleans `IsX`/`HasX`.
+- Errors wrapped with `fmt.Errorf("...: %w", err)`; handlers answer through `pkg/response`, never leak DB errors.
+- Table-driven tests with testify; provider payloads in `testdata/`; a test must be shown to fail once.
+- Secrets only from env; never log tokens or full payloads.
+- It must run: `make ci` and `scripts/smoke.sh` stay green (ROADMAP, 24/10/2026).

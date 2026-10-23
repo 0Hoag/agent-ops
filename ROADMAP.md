@@ -19,11 +19,25 @@
 | 24/10/2026 | Deploy: **local, docker compose** (API + web + Postgres). VPS / hạ tầng công ty quyết sau demo, không làm trong W0-W5. |
 | 24/10/2026 | Usage Claude Code (W3): **đọc transcript local `~/.claude/projects/**/*.jsonl`** (usage mỗi message), cùng cách với Codex / OpenCode (đọc JSON). OTel và log proxy công ty để đợt sau, tạo issue `found-by:agent` nếu cần. |
 | 24/10/2026 | Không auth người dùng ở bản đầu (chạy local / nội bộ). Webhook phải verify chữ ký. Endpoint ghi agent-run dùng token tĩnh từ env. |
+| 24/10/2026 | **Web moves to its own repository `0Hoag/agent-ops-web` (public).** `agent-ops` keeps the Go API, `agentops` CLI, compose, docs. Done in wave WS, right after the in-flight W2b PR. |
+| 24/10/2026 | **Code format follows the company sources literally**: API = `~/Desktop/controlplane` (config files, Makefile targets, package layout, response/error shape), web = `~/Desktop/console` (package scripts, tsconfig, rspack config, module layout, code style). Copy their config files and adapt; do not invent a parallel style. Details: `docs/be-standards.md`, `docs/fe-standards.md`. |
+| 24/10/2026 | **It must run.** Every wave that touches API or web keeps `scripts/smoke.sh` green: compose up → API healthy → web built and served → the page loads real data from the API. A PR that breaks the smoke is sent back. |
 
 ## Các đợt
 
 Mỗi đợt = một nhóm issue cùng vùng code, một worker, một nhánh, một PR. Đợt cùng số có chữ khác nhau
 (W0a, W0b) đụng file khác nhau, chạy song song được.
+
+### WS: split web repo, conform to company sources, run end to end (priority over W2+)
+
+Run after the in-flight W2b PR merges; pause other web waves until WS-a is done.
+
+| Sub-wave | Issues (one deliverable each) | Done when |
+| --- | --- | --- |
+| WS-a `split` | create `0Hoag/agent-ops-web` (public) · move `web/` **with history** (`git subtree split --prefix=web`) · copy agent docs into it (AGENTS.md adapted to web-only gates, ROLES.md, FIVE-MINUTES.md, docs/fe-standards.md, opencode.json, .opencode/, scripts/) · its own CI (typecheck, lint, test, build) · `gh issue transfer` every open `area:web` issue · remove `web/` and the web CI job from `agent-ops` · update README/architecture of both | both repos CI green on `main`; `git log` in agent-ops-web shows the old web commits; no `area:web` issue left open in agent-ops |
+| WS-b `api-conform` | copy controlplane `.golangci.yml` (v2 config: govet, errcheck, ineffassign, staticcheck SA*, unused; gofmt+goimports) · Makefile with controlplane targets (`build run dev install fmt vet lint test test-coverage ci swagger docker-build`, LDFLAGS version/commit) · `.air.toml` like controlplane · `api/migrations/NNN_<verb>_<thing>_table.sql` · `pkg/response/{response,error}.go`, `pkg/pagination`, `pkg/middleware/{requestid,security}.go` · CORS via gin-contrib/cors · Swagger at `/swagger/*` · every module = models/types/repository*/controller*/routes/README | `make ci` green; `golangci-lint run` with the copied config = 0 issues; `/swagger/index.html` 200 |
+| WS-c `web-conform` (in agent-ops-web) | console scripts (`dev: RSPACK_MODE=local rspack serve`, `build: tsc --noEmit && … rspack build`, `typecheck`, `test: vitest run`, `preview`) · `packageManager` pnpm pinned, `.nvmrc` 22, engines node >=20.19 · tsconfig compiler options as console + `@/*` alias · rspack.config.ts loading `.env`, `.env.<mode>`, `.env.local` (dotenv) with `APP_API_URL` · module layout `src/app`, `src/modules/<m>/{module,route,paths}.ts`, `services/client.ts` as the only HTTP seam · console code style (single quotes, semicolons, 2 spaces, doc comment on exported functions) | all scripts green; `.env.example` documents every variable |
+| WS-d `run-e2e` | `scripts/smoke.sh` in agent-ops: compose up Postgres + API, wait healthy, clone/pull agent-ops-web next to it, `pnpm build && pnpm preview`, Playwright (or curl + HTML check) that the board page renders data from the API · `make smoke` · README "Run everything locally" (≤ 5 commands) | `make smoke` exits 0 on a clean checkout; screenshot/log attached to the PR |
 
 ### W0: nền móng (owner theo dõi sát)
 
