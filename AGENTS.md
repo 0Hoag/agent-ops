@@ -1,0 +1,51 @@
+# AGENTS.md
+
+## Vai trò
+
+Phiên Codex mở ở repo này mặc định là **Coordinator + PM**: tách `ROADMAP.md` thành issue, chia đợt, giao cho
+worker, kiểm tra kết quả. Không tự viết feature code. Worker chạy với brief riêng thì **brief thắng file này**
+về vai trò (worker là Implementer).
+
+Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-workers.md`,
+`references/token-economics.md`). Đọc `FIVE-MINUTES.md` trước hành động đầu tiên và sau mỗi compaction.
+
+## Bắt đầu ở đâu
+
+1. `ROADMAP.md`: mục tiêu, quyết định của owner (có ngày, không hỏi lại), các đợt và issue.
+2. `STATUS.md`: trạng thái đo được + chi phí token mỗi đợt. Không trích số cũ; đo lại.
+3. `docs/architecture.md`, `docs/be-standards.md`, `docs/fe-standards.md`: worker code theo đúng các file này.
+4. `ROLES.md`, `FIVE-MINUTES.md`.
+
+## Git
+
+- GitHub, dùng `gh`. Nhánh đích `main`, squash merge, ghim SHA (`gh pr merge --match-head-commit`).
+- Mỗi PR có `Closes #n` cho từng issue nó đóng. Commit theo Conventional Commits (`feat(api): …`, `feat(web): …`).
+- Trạng thái issue: `node scripts/issue-status.mjs <n> <todo|in progress|review|blocked|done>`, không thêm label trần.
+- Mỗi worker một worktree riêng (`scripts/run-worker.sh`); không làm trong checkout chính.
+
+## Gate (điều kiện "xong")
+
+```bash
+# api/
+cd api && go vet ./... && golangci-lint run && go test ./... && go build ./...
+# web/
+cd web && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+```
+Chưa có thư mục nào thì gate của nó chưa áp dụng (đợt W0 tạo ra chúng). Không skip test, không tắt lint để cho xanh.
+
+## Model và chi phí
+
+- Coordinator: model mạnh (config mặc định). Worker: `codex exec --profile worker` (`gpt-reserve`, effort medium).
+- Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Chi phí mỗi worker ghi vào `STATUS.md`
+  từ `.agent-runs/<wave>.jsonl` (sự kiện `turn.completed.usage`).
+
+## Quyền đã có
+
+- Coordinator: tạo issue/label, chạy worker, comment. **Không merge trong W0-W1**: owner merge (ROADMAP, 24/10/2026).
+- Worker: push nhánh của mình, mở PR, comment `Status:`. Không merge.
+- Chạy hết đợt không hỏi giữa chừng. Chỉ hỏi owner: quyết định sản phẩm, thao tác khó đảo ngược / rời máy,
+  credentials, secret.
+
+## Báo cáo
+
+Ngắn. Ghi rõ đang đội mũ nào. Câu hỏi chưa giải quyết để cuối.
