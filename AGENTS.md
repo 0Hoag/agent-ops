@@ -63,9 +63,15 @@ When started with no specific instruction (or "run", "continue", `/autopilot`), 
 
 1. **Sync.** Read new worker output in `.agent-runs/`, `git pull`, `gh pr list`, `gh issue list --state all`.
    Commit any pending `STATUS.md` change.
-2. **Plan.** Every ROADMAP item must have an issue (labels `status:*`, `priority:*`, `type:*`, `wave:*`).
-   Create the missing ones; next wave in detail, later waves one issue per sub-wave. Mark dependencies
-   (`status:blocked` + `Status:` comment).
+2. **Plan: many small issues, all up front.** Break the whole ROADMAP into fine-grained issues before
+   dispatching: one issue per concrete deliverable (one endpoint, one table + repository, one provider
+   event, one page, one component, one script), each with "Done when" as a command or number. Expect
+   dozens, not a handful. Labels `status:*`, `priority:*`, `type:*`, `wave:*`, `area:api|web|ci|docs`.
+   A wave = several issues in the same area, given to one worker; its PR closes all of them.
+   Mark dependencies (`status:blocked` + `Status:` comment).
+   **Work discovered while running becomes a new issue**, never an inline fix: follow-ups, bugs, missing
+   tests, a worker's "Not covered", a review finding. Label it `found-by:agent`, put it in a later wave,
+   keep going.
 3. **Finish open PRs.** For each worker PR: verify (gates on the PR head, CI green once it exists,
    `Closes #n`, no out-of-scope files), then merge (squash, pinned SHA), confirm the content is on `main`,
    remove its worktree. Send back with a comment instead of merging when a check fails.
