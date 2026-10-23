@@ -55,6 +55,13 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 - Chạy hết đợt không hỏi giữa chừng. Chỉ hỏi owner: quyết định sản phẩm, thao tác khó đảo ngược / rời máy,
   credentials, secret.
 
+## Language
+
+**Everything written to the repo or GitHub is in English**: issues (title and body), PRs, commits, briefs,
+comments, `STATUS.md`, code comments. Vietnamese costs more tokens and the output is the expensive part.
+Only the final report to the owner in chat may be Vietnamese, and short. The Vietnamese docs in this repo
+are context, not a template for output language.
+
 ## Báo cáo
 
 Ngắn. Ghi rõ đang đội mũ nào. Câu hỏi chưa giải quyết để cuối.
