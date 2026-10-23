@@ -7,6 +7,9 @@
 #   INTERVAL=300 scripts/autopilot.sh    # every 5 min
 #   touch .agent-runs/STOP               # stop after the current pass
 #
+# If the OpenCode web server is up (scripts/opencode.sh web --port 4096), each pass runs on it
+# (`--attach`) and shows live in the web UI; otherwise it runs locally. Override with WEB=<url>.
+#
 # Per pass: .agent-runs/coordinator/<time>.jsonl (events) and .md (final message).
 # A final message whose first line starts with "AUTOPILOT: STOP" ends the loop.
 set -uo pipefail
@@ -14,6 +17,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
+web=${WEB:-http://127.0.0.1:4096}
 dir=.agent-runs/coordinator
 mkdir -p "$dir"
 rm -f .agent-runs/STOP
@@ -42,7 +46,9 @@ wait_for_event() {
 while true; do
   ts=$(date +%Y%m%d-%H%M%S)
   echo "[$ts] pass start"
-  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
+  attach=()
+  if curl -s -o /dev/null -m 2 "$web"; then attach=(--attach "$web" --dir "$PWD"); echo "  on web UI $web"; fi
+  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run ${attach[@]+"${attach[@]}"} \
     --command autopilot \
     --format json \
     --title "autopilot $ts" \
