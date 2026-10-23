@@ -151,3 +151,8 @@ func TestClosingIssuesRequiresClosingKeywordAndSameRepository(t *testing.T) {
 	body := "Related to #1; closes #2, fixes acme/project#3, resolves acme/other#4"
 	require.Equal(t, []int{2, 3}, closingIssues(body, "acme/project"))
 }
+
+func TestClosingIssuesIgnoresDirectNegation(t *testing.T) {
+	body := "Related to #7; do not close acme/project#9; closes acme/other#10"
+	require.Empty(t, closingIssues(body, "acme/project"))
+}

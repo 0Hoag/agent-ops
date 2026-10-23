@@ -174,10 +174,23 @@ func mapRun(raw runJSON, repo string) scm.PipelineRun {
 }
 
 var refPattern = regexp.MustCompile(`(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
+var negatedRefPattern = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never)\s+(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
 
 func closingIssues(body, repo string) []int {
 	seen := map[int]bool{}
 	result := []int{}
+	for _, match := range negatedRefPattern.FindAllStringSubmatch(body, -1) {
+		num := match[2]
+		if num == "" {
+			num = match[4]
+		}
+		if num == "" {
+			num = match[5]
+		}
+		if n, err := strconv.Atoi(num); err == nil {
+			seen[n] = true
+		}
+	}
 	for _, match := range refPattern.FindAllStringSubmatch(body, -1) {
 		refRepo, num := match[1], match[2]
 		if refRepo == "" {
