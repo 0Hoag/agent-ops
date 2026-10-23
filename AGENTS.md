@@ -79,8 +79,14 @@ When started with no specific instruction (or "run", "continue", `/autopilot`), 
    directories. Write an English brief (`briefs/<wave>.md`), start the worker in the background
    (`nohup scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md > .agent-runs/<wave>.log 2>&1 &`).
    Harness: OpenCode for small or UI-only waves, Codex for larger backend waves; record it.
+   **At most 2 workers running at once** (ChatGPT Plus 5-hour limit). Queue the rest.
+   Keep briefs precise (exact paths, line numbers, commands) so workers do not explore the repo.
 5. **Wait without ending the turn.** Loop `sleep 90` + check `.agent-runs/` and `gh pr list`.
    A worker silent for 20 minutes: read its log, fix the brief, restart it.
+   **Usage limit hit** (error mentions usage/rate limit, quota, 429, "try again at"): this is not an
+   owner question and not a failed wave. Note the reset time from the error (or check every 15 min),
+   `sleep` until then, restart the affected worker on the same branch (its pushed commits are kept),
+   and continue the loop. If the coordinator itself hits the limit, the same applies on the next turn.
 6. **Record.** Per wave in `STATUS.md`: harness, model, token totals printed by the script, PR, send-backs.
    New agent mistakes go to `FIVE-MINUTES.md`.
 7. Back to 1. **Stop only** when the roadmap is done, or on an item from ROADMAP "Câu hỏi mở" or the
