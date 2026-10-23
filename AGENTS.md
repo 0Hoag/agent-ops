@@ -50,7 +50,8 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 
 ## Quyền đã có
 
-- Coordinator: tạo issue/label, chạy worker, comment. **Không merge trong W0-W1**: owner merge (ROADMAP, 24/10/2026).
+- Coordinator: tạo issue/label, chạy worker, comment, **merge** sau khi tự kiểm tra (ROADMAP, 24/10/2026): gate xanh
+  trên đúng head (CI xanh khi đã có), `Closes #n`, không file ngoài phạm vi; `gh pr merge <n> --squash --match-head-commit <sha> --delete-branch`.
 - Worker: push nhánh của mình, mở PR, comment `Status:`. Không merge.
 - Chạy hết đợt không hỏi giữa chừng. Chỉ hỏi owner: quyết định sản phẩm, thao tác khó đảo ngược / rời máy,
   credentials, secret.

@@ -13,7 +13,9 @@
 | --- | --- |
 | 24/10/2026 | Stack: API Go theo flow của controlplane (Gin, GORM, module controller/repository/routes); web React theo console (Rspack, pnpm, TanStack Query). |
 | 24/10/2026 | GitHub làm trước; **GitLab provider là bắt buộc** (để dùng ở công ty). Thiết kế provider interface ngay từ W1. |
-| 24/10/2026 | Coordinator không merge trong W0-W1; owner review và merge. Xét lại sau W1. |
+| 24/10/2026 | ~~Coordinator không merge trong W0-W1~~ (thay bằng dòng dưới). |
+| 24/10/2026 | **Coordinator tự merge** sau khi tự kiểm tra (gate xanh trên đúng head, CI xanh khi đã có W0c, `Closes #n`, không file ngoài phạm vi), squash ghim SHA. Chạy liên tục hết ROADMAP, không chờ owner. Worker vẫn không merge. |
+| 24/10/2026 | PM tách **toàn bộ ROADMAP thành issue** ngay: W1 chi tiết; W2-W5 mỗi đợt con một issue (đủ "xong khi"), làm rõ thêm khi tới lượt. |
 | 24/10/2026 | Không auth người dùng ở bản đầu (chạy local / nội bộ). Webhook phải verify chữ ký. Endpoint ghi agent-run dùng token tĩnh từ env. |
 
 ## Các đợt
