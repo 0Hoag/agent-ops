@@ -18,6 +18,13 @@ permission:
     "*": deny
     "~/agent-ops/**": allow
     "~/agent-ops-wt/**": allow
+    "/tmp/**": allow
+    "/private/tmp/**": allow
+    "~/Library/Caches/pnpm/**": allow
+    "~/Library/pnpm/**": allow
+    "~/go/pkg/mod/**": allow
+    "~/Library/Caches/go-build/**": allow
+    "~/Library/Caches/golangci-lint/**": allow
 ---
 
 You are the **Implementer** for one wave. The brief in the first message is your whole task; it wins over
