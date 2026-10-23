@@ -39,13 +39,44 @@ func (service *Service) Ingest(ctx context.Context, provider, configuredReposito
 	return service.persistVerified(ctx, provider, configuredRepository, providerClient, h, payload)
 }
 
+func (service *Service) VerifyConfigured(ctx context.Context, provider, secret, token, baseURL string, h http.Header, payload []byte) (scm.SCMProvider, error) {
+	providerClient, err := service.registry.Build(provider, scm.Config{WebhookSecret: secret, Token: token, APIBaseURL: baseURL})
+	if err != nil {
+		return nil, ErrRejected
+	}
+	if err := providerClient.VerifyWebhook(ctx, h, payload); err != nil {
+		return nil, ErrRejected
+	}
+	return providerClient, nil
+}
+
+func (service *Service) IngestParsed(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
+	event, err := providerClient.ParseEvent(ctx, header(h, "X-GitHub-Event"), h, payload)
+	if err != nil || !strings.EqualFold(event.Repository, configuredRepository) {
+		return false, ErrCandidateMismatch
+	}
+	return service.persistEvent(ctx, provider, configuredRepository, event, payload)
+}
+
 func (service *Service) persistVerified(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
 	event, err := providerClient.ParseEvent(ctx, header(h, "X-GitHub-Event"), h, payload)
-	if err != nil || !strings.EqualFold(event.Repository, configuredRepository) || event.DeliveryID == "" || !validEntity(event) {
+	if err != nil {
+		return false, ErrRejected
+	}
+	return service.persistEvent(ctx, provider, configuredRepository, event, payload)
+}
+
+var ErrCandidateMismatch = errors.New("webhook candidate mismatch")
+
+func (service *Service) persistEvent(ctx context.Context, provider, configuredRepository string, event scm.Event, payload []byte) (bool, error) {
+	if !strings.EqualFold(event.Repository, configuredRepository) {
+		return false, ErrCandidateMismatch
+	}
+	if event.DeliveryID == "" || !validEntity(event) {
 		return false, ErrRejected
 	}
 	result := false
-	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		st := store.New(tx)
 		repo, lookupErr := st.Repositories.GetByName(ctx, provider, configuredRepository)
 		if lookupErr != nil {
@@ -99,7 +130,7 @@ func validEntity(event scm.Event) bool {
 	}
 	if event.PipelineRun != nil {
 		count++
-		if event.PipelineRun.ExternalID == "" || event.PipelineRun.ExternalID == "0" || event.PipelineRun.SHA == "" || event.PipelineRun.Status == "" {
+		if event.PipelineRun.ExternalID == "" || event.PipelineRun.ExternalID == "0" || event.PipelineRun.SHA == "" || event.PipelineRun.Status == "" || event.PipelineRun.StartedAt.IsZero() {
 			return false
 		}
 	}

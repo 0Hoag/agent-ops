@@ -103,7 +103,7 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 		if err := json.Unmarshal(payload, &raw); err != nil {
 			return scm.Event{}, fmt.Errorf("decode workflow_run event: %w", err)
 		}
-		if raw.WorkflowRun.ID <= 0 || raw.WorkflowRun.SHA == "" || raw.WorkflowRun.Status == "" || raw.Repository.FullName == "" {
+		if raw.WorkflowRun.ID <= 0 || raw.WorkflowRun.SHA == "" || raw.WorkflowRun.Status == "" || raw.WorkflowRun.RunStarted.IsZero() || raw.Repository.FullName == "" {
 			return scm.Event{}, fmt.Errorf("incomplete workflow run event")
 		}
 		run := mapRun(raw.WorkflowRun, raw.Repository.FullName)

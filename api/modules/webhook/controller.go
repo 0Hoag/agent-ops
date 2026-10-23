@@ -1,10 +1,12 @@
 package webhook
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"os"
 
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -46,7 +48,14 @@ func (controller *Controller) Handle(c *gin.Context) {
 	var created bool
 	accepted := false
 	for _, config := range configs {
-		created, err = controller.service.Ingest(c.Request.Context(), c.Param("provider"), config.Repository, os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
+		var verified scm.SCMProvider
+		verified, err = controller.service.VerifyConfigured(c.Request.Context(), c.Param("provider"), os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
+		if err == nil {
+			created, err = controller.service.IngestParsed(c.Request.Context(), c.Param("provider"), config.Repository, verified, c.Request.Header, body)
+		}
+		if errors.Is(err, ErrCandidateMismatch) {
+			continue
+		}
 		if err == nil {
 			accepted = true
 			break

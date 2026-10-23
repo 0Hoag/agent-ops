@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"github.com/gin-gonic/gin"
@@ -26,9 +27,9 @@ func TestValidEntity(t *testing.T) {
 		{"issue state empty", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t"}}, false},
 		{"pull", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadSHA: "sha", HeadBranch: "main"}}, true},
 		{"pull sha empty", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadBranch: "main"}}, false},
-		{"run", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha", Status: "completed"}}, true},
-		{"run id zero", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "0", SHA: "sha", Status: "completed"}}, false},
-		{"run status empty", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha"}}, false},
+		{"run", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha", Status: "completed", StartedAt: time.Now()}}, true},
+		{"run id zero", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "0", SHA: "sha", Status: "completed", StartedAt: time.Now()}}, false},
+		{"run status empty", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha", StartedAt: time.Now()}}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -86,14 +87,14 @@ func TestIngestRejectsMismatchedRepoAndWrongSecretBeforeWrites(t *testing.T) {
 	body := []byte(`{"repository":{"full_name":"org/a"},"issue":{"number":1,"title":"t","state":"open"}}`)
 	h := http.Header{"X-GitHub-Event": []string{"issues"}, "X-GitHub-Delivery": []string{"d1"}}
 	_, err := s.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", h, body)
-	if err != ErrRejected {
+	if err != ErrCandidateMismatch {
 		t.Fatalf("repo mismatch err=%v", err)
 	}
 	mac := hmac.New(sha256.New, []byte("secret-a"))
 	_, _ = mac.Write(body)
 	h.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	_, err = s.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", h, body)
-	if err != ErrRejected {
+	if err != ErrCandidateMismatch {
 		t.Fatalf("wrong secret err=%v", err)
 	}
 }
