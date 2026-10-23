@@ -1,20 +1,23 @@
 package webhook
 
 import (
-	"github.com/0Hoag/agent-ops/api/pkg/response"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/0Hoag/agent-ops/api/pkg/response"
+	"github.com/gin-gonic/gin"
 )
 
 type Controller struct {
 	service *Service
-	configs map[string]Config
+	configs map[string][]Config
 }
-type Config struct{ SecretEnv, TokenEnv, BaseURLEnv string }
+type Config struct {
+	Repository, SecretEnv, TokenEnv, BaseURLEnv string
+}
 
-func NewController(service *Service, configs map[string]Config) *Controller {
+func NewController(service *Service, configs map[string][]Config) *Controller {
 	return &Controller{service: service, configs: configs}
 }
 
@@ -31,14 +34,26 @@ func (controller *Controller) Handle(c *gin.Context) {
 		response.Error(c, 400, "invalid webhook payload")
 		return
 	}
-	config, ok := controller.configs[c.Param("provider")]
-	if !ok {
+	configs := controller.configs[c.Param("provider")]
+	if len(configs) == 0 {
 		response.Error(c, 404, "unknown provider")
 		return
 	}
-	created, err := controller.service.Ingest(c.Request.Context(), c.Param("provider"), os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
-	if err != nil {
-		response.Error(c, 400, err.Error())
+	if len(configs) > 32 {
+		response.Error(c, 400, "invalid webhook configuration")
+		return
+	}
+	var created bool
+	accepted := false
+	for _, config := range configs {
+		created, err = controller.service.Ingest(c.Request.Context(), c.Param("provider"), config.Repository, os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
+		if err == nil {
+			accepted = true
+			break
+		}
+	}
+	if !accepted {
+		response.Error(c, http.StatusBadRequest, "webhook rejected")
 		return
 	}
 	response.JSON(c, http.StatusOK, gin.H{"accepted": created})

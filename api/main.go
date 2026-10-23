@@ -54,9 +54,9 @@ func main() {
 
 func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config) {
 	handlers.NewHealth(db).Register(router)
-	configs := map[string]webhook.Config{}
+	configs := map[string][]webhook.Config{}
 	for _, r := range cfg.Repositories {
-		configs[r.Provider] = webhook.Config{SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv}
+		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
 	}
 	webhook.NewRoutes(webhook.NewController(webhook.NewService(gormDB, builder.Default()), configs)).Register(router.Group("/api/v1"))
 }

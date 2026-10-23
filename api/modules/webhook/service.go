@@ -3,18 +3,23 @@ package webhook
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"net/http"
+	"strings"
+
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"gorm.io/gorm"
-	"net/http"
 )
+
+var ErrRejected = errors.New("webhook rejected")
 
 type Service struct {
 	db           *gorm.DB
 	repositories *store.Store
 	registry     ProviderRegistry
 }
+
 type ProviderRegistry interface {
 	Build(string, scm.Config) (scm.SCMProvider, error)
 }
@@ -23,27 +28,28 @@ func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
 	return &Service{db: db, repositories: store.New(db), registry: registry}
 }
 
-func (service *Service) Ingest(ctx context.Context, provider, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
+func (service *Service) Ingest(ctx context.Context, provider, configuredRepository, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
 	providerClient, err := service.registry.Build(provider, scm.Config{WebhookSecret: secret, Token: token, APIBaseURL: baseURL})
 	if err != nil {
-		return false, fmt.Errorf("unsupported provider")
+		return false, ErrRejected
 	}
 	if err := providerClient.VerifyWebhook(ctx, h, payload); err != nil {
-		return false, fmt.Errorf("invalid webhook signature")
+		return false, ErrRejected
 	}
+	return service.persistVerified(ctx, provider, configuredRepository, providerClient, h, payload)
+}
+
+func (service *Service) persistVerified(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
 	event, err := providerClient.ParseEvent(ctx, header(h, "X-GitHub-Event"), h, payload)
-	if err != nil {
-		return false, fmt.Errorf("invalid webhook event")
-	}
-	if event.Repository == "" || event.DeliveryID == "" {
-		return false, fmt.Errorf("webhook metadata is incomplete")
+	if err != nil || !strings.EqualFold(event.Repository, configuredRepository) || event.DeliveryID == "" || !validEntity(event) {
+		return false, ErrRejected
 	}
 	result := false
 	err = service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		st := store.New(tx)
-		repo, lookupErr := st.Repositories.GetByName(ctx, provider, event.Repository)
+		repo, lookupErr := st.Repositories.GetByName(ctx, provider, configuredRepository)
 		if lookupErr != nil {
-			return fmt.Errorf("repository is not configured")
+			return ErrRejected
 		}
 		id := store.NewUUID()
 		created, createErr := st.WebhookEvents.CreateIfNew(ctx, &store.WebhookEvent{ID: id, RepositoryID: repo.ID, Provider: provider, EventType: event.EventType, DeliveryID: event.DeliveryID, Payload: store.JSONB(payload), ReceivedAt: event.ReceivedAt})
@@ -53,19 +59,51 @@ func (service *Service) Ingest(ctx context.Context, provider, secret, token, bas
 		if !created {
 			return nil
 		}
-		result = true
 		if event.Issue != nil {
-			return st.Issues.Upsert(ctx, issueModel(repo.ID, event.Issue))
+			if err := st.Issues.Upsert(ctx, issueModel(repo.ID, event.Issue)); err != nil {
+				return err
+			}
 		}
 		if event.PullRequest != nil {
-			return st.PullRequests.Upsert(ctx, pullModel(repo.ID, event.PullRequest))
+			if err := st.PullRequests.Upsert(ctx, pullModel(repo.ID, event.PullRequest)); err != nil {
+				return err
+			}
 		}
 		if event.PipelineRun != nil {
-			return st.PipelineRuns.Upsert(ctx, runModel(repo.ID, event.PipelineRun))
+			if err := st.PipelineRuns.Upsert(ctx, runModel(repo.ID, event.PipelineRun)); err != nil {
+				return err
+			}
 		}
+		result = true
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+func validEntity(event scm.Event) bool {
+	count := 0
+	if event.Issue != nil {
+		count++
+		if event.Issue.Number <= 0 || event.Issue.Title == "" || (event.Issue.State != "open" && event.Issue.State != "closed") {
+			return false
+		}
+	}
+	if event.PullRequest != nil {
+		count++
+		if event.PullRequest.Number <= 0 || event.PullRequest.Title == "" || event.PullRequest.HeadSHA == "" || event.PullRequest.HeadBranch == "" || (event.PullRequest.State != "open" && event.PullRequest.State != "closed" && event.PullRequest.State != "merged") {
+			return false
+		}
+	}
+	if event.PipelineRun != nil {
+		count++
+		if event.PipelineRun.ExternalID == "" || event.PipelineRun.ExternalID == "0" || event.PipelineRun.SHA == "" || event.PipelineRun.Status == "" {
+			return false
+		}
+	}
+	return count == 1
 }
 
 func header(h map[string][]string, key string) string {

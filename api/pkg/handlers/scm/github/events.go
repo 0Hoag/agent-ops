@@ -82,12 +82,18 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 		if err := json.Unmarshal(payload, &raw); err != nil {
 			return scm.Event{}, fmt.Errorf("decode issues event: %w", err)
 		}
+		if raw.Issue.ID <= 0 || raw.Issue.Number <= 0 || raw.Issue.Title == "" || (raw.Issue.State != "open" && raw.Issue.State != "closed") || raw.Repository.FullName == "" {
+			return scm.Event{}, fmt.Errorf("incomplete issue event")
+		}
 		issue := mapIssue(raw.Issue, raw.Repository.FullName)
 		event.Repository, event.Issue = raw.Repository.FullName, &issue
 	case "pull_request":
 		var raw pullEvent
 		if err := json.Unmarshal(payload, &raw); err != nil {
 			return scm.Event{}, fmt.Errorf("decode pull_request event: %w", err)
+		}
+		if raw.PullRequest.ID <= 0 || raw.PullRequest.Number <= 0 || raw.PullRequest.Title == "" || raw.PullRequest.Head.SHA == "" || raw.PullRequest.Head.Ref == "" || (raw.PullRequest.State != "open" && raw.PullRequest.State != "closed") || raw.Repository.FullName == "" {
+			return scm.Event{}, fmt.Errorf("incomplete pull request event")
 		}
 		pr := mapPull(raw.PullRequest, raw.Repository.FullName)
 		pr.State = eventState(raw.Action, raw.PullRequest.State, raw.PullRequest.Merged)
@@ -96,6 +102,9 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 		var raw runEvent
 		if err := json.Unmarshal(payload, &raw); err != nil {
 			return scm.Event{}, fmt.Errorf("decode workflow_run event: %w", err)
+		}
+		if raw.WorkflowRun.ID <= 0 || raw.WorkflowRun.SHA == "" || raw.WorkflowRun.Status == "" || raw.Repository.FullName == "" {
+			return scm.Event{}, fmt.Errorf("incomplete workflow run event")
 		}
 		run := mapRun(raw.WorkflowRun, raw.Repository.FullName)
 		event.Repository, event.PipelineRun = raw.Repository.FullName, &run
