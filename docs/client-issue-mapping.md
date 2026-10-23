@@ -1,6 +1,6 @@
 # Client issue transfer mapping
 
-All 17 remaining open `area:client` issues in `0Hoag/agent-ops` were transferred to `0Hoag/agent-ops-client`. GitHub preserved each issue's body and labels. The dependency references in transferred issue bodies continue to use the API repository's fully-qualified URLs where applicable.
+All 17 remaining open `area:client` issues in `0Hoag/agent-ops` were transferred to `0Hoag/agent-ops-client`. GitHub preserved each issue's body and labels. The transferred issue bodies were normalized to use the standalone repository's root (`pnpm ...`) and its README plus `docs/client-standards.md` in agent-ops. Historical scope details remain in the issue titles and ROADMAP wave descriptions.
 
 | Source issue | Destination issue |
 | --- | --- |
