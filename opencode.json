@@ -6,16 +6,21 @@
   },
   "permission": {
     "edit": "allow",
+    "webfetch": "allow",
     "bash": {
-      "*": "ask",
-      "git *": "allow",
-      "gh *": "allow",
-      "jq *": "allow",
-      "ls *": "allow",
-      "node scripts/*": "allow",
-      "scripts/*": "allow",
+      "*": "allow",
+      "sudo *": "deny",
+      "rm -rf /*": "deny",
+      "rm -rf ~*": "deny",
       "git push --force*": "deny",
       "git reset --hard*": "deny"
+    },
+    "external_directory": {
+      "*": "ask",
+      "~/agent-ops-wt/**": "allow",
+      "~/.codex/skills/**": "allow",
+      "/private/tmp/**": "allow",
+      "/tmp/**": "allow"
     }
   }
 }
