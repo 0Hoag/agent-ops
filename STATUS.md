@@ -15,9 +15,14 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 | W1d stale snapshots | queued | | #119; after W1c, before board API acceptance |
 | W2b board UI | merged | [#115](https://github.com/0Hoag/agent-ops/pull/115) | #20/#21/#120 closed; merge confirmed by gh at 2026-10-23T20:49:54Z; W2br supplied fixture browser/mutation evidence |
 | WS-a1 client bootstrap | merged | [client #1](https://github.com/0Hoag/agent-ops-client/pull/1) | #121–#123/#138/#139 closed; coordinator final-head gate passes; scoped merge diff empty; client main CI green |
-| WS-a2 split completion | running | | #124/#135/#136; OpenCode, separate root worktree; removal, naming and issue transfer mapping |
+| WS-a2 split completion | incomplete attempt, retry running | | #124/#135/#136; OpenCode, preserved root worktree; only #132 transferred to client #4, metadata repair and remaining transfers/removal pending |
 
 ## Autopilot single pass — 2026-10-24
+
+- `[M]` Pass inspected 2026-10-23T21:29–21:32Z: `git pull --ff-only` already up to date, clean at `17fddd76e32068f5b7fec795a5ba3d36234ebdc4`; main CI `40027023493` successful on that exact SHA. Root and client open issues inspected; roadmap through W17 remains planned, no owner decision pending.
+- `[M]` WS-a2 runner finished without commits, push, gates or PR; read final report and last 20 log lines. Existing worktree HEAD `b2e5ddd`, eight modified tracked docs/workflow/runner files preserved. Root #132 moved to client #4; destination has only area:client and literal backslash-n body separators. Seventeen source client issues remain. These are unfinished #135 acceptance; retry brief includes metadata repair, mapping, remaining transfers, root removal and actual runner-path checks. Transfer lesson added to FIVE-MINUTES.md.
+- `[M]` W1cr4 runner 59552 still active, elapsed about eight minutes, no final report; last 20 log lines read, not stale. API #114 advanced during inspection to `3e7afc0641a53770b1502f3ca78eab4f8d4c03fc`; CI `40027333976` API/Web in progress at measurement. No completed PR ready for acceptance, no coordinator API gate/smoke or merge claim this pass.
+- `[M]` Spawned detached WS-a2-retry runner 66361, harness 66391, OpenCode `openai/gpt-6-luna` low, same branch/worktree `chore/ws-a2-split`, fresh session with original brief plus measured RESUME at `briefs/WS-a2-resume.md`. Status comments on #124/#135/#136; `pgrep`/`ps` confirm two runners. Both active attempt totals pending; no waiting in this pass.
 
 - `[M]` Pass inspected 2026-10-23T21:25–21:28Z: pull already up to date, initially clean at `8d0fccd76746c1c38c85a0d72250b733386649d8`; main CI `40026525610` successful on that exact SHA. Open issue inventory still covers roadmap through W17; no owner decision. Concurrent coordinator change `b2e5ddd` appeared on main during this pass and was preserved; the earlier main CI measurement does not apply to it.
 - `[M]` WS-a1-docs finished; read final report and last 20 log lines. Coordinator repeated frozen install, typecheck, lint, tests (3), build, shell syntax and JSON parsing in the clean client clone at `6a3f32821db0f465e7b7744d0dc925f643ad1879`: all exit 0, existing bundle warnings. Source comparison confirms corrected same-origin/health-only proxy documentation and external Codex-profile prerequisite. PR scope and all five fully qualified closing references checked; prior independent bootstrap/control review retained. CI `40026492152` green on this exact head.
@@ -79,8 +84,9 @@ Source: totals printed by `scripts/run-worker*.sh` after completion (Codex: `tur
 | W1cr3, incomplete acceptance follow-up | Codex CLI | worker | gpt-reserve | 3,136,578 | 3,062,528 | 0 | 13,295 | 97.64% | [?] unavailable | #118/#137 | returned for remaining #118 criteria; W1cr4 running |
 | WS-a1-control, completed hosted control | OpenCode | worker | openai/gpt-6-luna | 40,743 | 760,064 | 0 | 6,032 | 94.91% | [?] unavailable | #138 | control accepted; bootstrap returned for #139 |
 | WS-a1-docs, completed setup correction | OpenCode | worker | openai/gpt-6-luna | 37,495 | 160,768 | 0 | 2,490 | 81.09% | [?] unavailable | #139 | accepted; bootstrap merged |
+| WS-a2, incomplete split attempt | OpenCode | worker | openai/gpt-6-luna | 73,819 | 700,800 | 0 | 5,471 | 90.47% | [?] unavailable | #124/#135/#136 | fresh retry dispatched |
 
-Latest completed-run totals were read from the last 20 lines of `.agent-runs/WS-a1-docs.log` this pass; reasoning was 0. W1cr4 and WS-a2 are separate attempts with totals pending. W1c has three acceptance send-backs after the initial remediation; client bootstrap has three returns after its first PR (control, hosted control, documentation), now accepted. Earlier rows retain historical usage rather than including retries.
+Latest completed-run totals were read from the last 20 lines of `.agent-runs/WS-a2.log` this pass; reasoning was 209. W1cr4 and WS-a2-retry are separate active attempts with totals pending. W1c has three acceptance send-backs after the initial remediation; client bootstrap has three returns after its first PR (control, hosted control, documentation), now accepted. Earlier rows retain historical usage rather than including retries.
 
 Measured after all five script invocations finished on 2026-10-24. Include every attempt, not only successful runs:
 
