@@ -98,3 +98,13 @@ status, priority, type and wave labels. The attempt ended before producing a com
 
 **Check:** provision destination labels first; compare source and destination metadata immediately after
 each transfer, record old/new URLs, and verify body newlines and cross-repository dependency links.
+
+## 11. A repeat-write test name is not an idempotency assertion
+
+W1cr4's sync test repeated INSERT-prefix SQL mocks but asserted neither conflict keys nor normalized
+values and omitted pipelines, repeating the acceptance gap documented in item 6.
+
+> Cost: another returned ingestion PR and focused follow-up #140 despite green API gates and CI.
+
+**Check:** inspect conflict targets/update clauses and bound normalized values for every entity on both
+passes; a changed identity or state must fail the relevant assertion in a disposable negative control.
