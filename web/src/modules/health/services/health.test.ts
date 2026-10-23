@@ -4,7 +4,8 @@ import { getHealth } from './health';
 
 describe('getHealth', () => {
   it('returns the API health contract', async () => {
-    vi.spyOn(http, 'get').mockResolvedValueOnce({ data: { status: 'ok' } });
+    const get = vi.spyOn(http, 'get').mockResolvedValueOnce({ data: { status: 'ok' } });
     await expect(getHealth()).resolves.toEqual({ status: 'ok' });
+    expect(get).toHaveBeenCalledWith('/healthz');
   });
 });
