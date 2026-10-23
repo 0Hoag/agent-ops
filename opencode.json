@@ -19,6 +19,9 @@
       "*": "ask",
       "~/agent-ops-wt/**": "allow",
       "~/.codex/skills/**": "allow",
+      "~/.codex/worker.config.toml": "allow",
+      "~/.codex/auth.json": "deny",
+      "~/.local/share/opencode/auth.json": "deny",
       "/private/tmp/**": "allow",
       "/tmp/**": "allow"
     }
