@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: agent_ops_dev
       POSTGRES_DB: agent_ops
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - agent_ops_postgres:/var/lib/postgresql/data
     healthcheck:

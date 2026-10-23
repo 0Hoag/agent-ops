@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -20,14 +21,12 @@ func main() {
 	log := logger.New(cfg.LogLevel)
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {
-		log.Error("open database", "error", err)
-		return
+		logger.Fatal(fmt.Errorf("open database: %w", err))
 	}
 	defer database.Close(db)
 
 	if err := database.RunMigrations(context.Background(), db); err != nil {
-		log.Error("run migrations", "error", err)
-		return
+		logger.Fatal(fmt.Errorf("run migrations: %w", err))
 	}
 
 	router := gin.New()
@@ -38,7 +37,7 @@ func main() {
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	log.Info("api listening", "addr", cfg.HTTPAddr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Error("server stopped", "error", err)
+		logger.Fatal(fmt.Errorf("server stopped: %w", err))
 	}
 }
 

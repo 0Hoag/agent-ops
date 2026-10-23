@@ -24,4 +24,7 @@ func Request(log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-func Fatal(err error) { slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("fatal", "error", err) }
+func Fatal(err error) {
+	slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("fatal", "error", err)
+	os.Exit(1)
+}

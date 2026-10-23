@@ -3,6 +3,7 @@ module github.com/0Hoag/agent-ops/api
 go 1.26
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/gin-gonic/gin v1.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/stretchr/testify v1.11.1
