@@ -133,6 +133,24 @@ func TestIngestWithRealGitHubProviderAcceptsValidSignature(t *testing.T) {
 	}
 }
 
+func TestIngestWithRealGitHubProviderRejectsInvalidSignatureWithoutWrites(t *testing.T) {
+	sqlDB, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"repository":{"full_name":"org/a"},"issue":{"id":101,"number":1,"title":"t","state":"open"}}`)
+	h := http.Header{"X-GitHub-Delivery": []string{"invalid-1"}, "X-GitHub-Event": []string{"issues"}, "X-Hub-Signature-256": []string{"sha256=" + hex.EncodeToString(make([]byte, sha256.Size))}}
+	service := NewService(db, configuredRegistry{})
+	if _, err := service.Ingest(context.Background(), "github", "org/a", "secret-a", "", "", h, body); err != ErrRejected {
+		t.Fatalf("invalid signature err=%v, want rejection", err)
+	}
+}
+
 func TestUnknownProviderReturnsSafeError(t *testing.T) {
 	_, err := NewService(nil, badRegistry{}).Ingest(context.Background(), "unknown", "repo", "", "", "", http.Header{}, nil)
 	if err != ErrRejected {
