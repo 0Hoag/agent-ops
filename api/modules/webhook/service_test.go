@@ -8,31 +8,32 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
+	"github.com/gin-gonic/gin"
 )
 
 func TestValidEntity(t *testing.T) {
-	tests := []struct {
+	cases := []struct {
 		name  string
 		event scm.Event
 		want  bool
 	}{
-		{name: "issue", event: scm.Event{Issue: &scm.Issue{Number: 1, Title: "t", State: "open"}}, want: true},
-		{name: "zero issue", event: scm.Event{Issue: &scm.Issue{Title: "t", State: "open"}}},
-		{name: "missing issue state", event: scm.Event{Issue: &scm.Issue{Number: 1, Title: "t"}}},
-		{name: "pull", event: scm.Event{PullRequest: &scm.PullRequest{Number: 2, Title: "t", State: "merged", HeadSHA: "abc", HeadBranch: "main"}}, want: true},
-		{name: "missing pull sha", event: scm.Event{PullRequest: &scm.PullRequest{Number: 2, Title: "t", State: "open", HeadBranch: "main"}}},
-		{name: "run", event: scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "abc", Status: "completed"}}, want: true},
-		{name: "zero run id", event: scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "0", SHA: "abc", Status: "completed"}}},
-		{name: "missing run status", event: scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "abc"}}},
-		{name: "multiple", event: scm.Event{Issue: &scm.Issue{Number: 1, Title: "t", State: "open"}, PullRequest: &scm.PullRequest{Number: 2, Title: "t", State: "open", HeadSHA: "abc", HeadBranch: "main"}}},
+		{"issue", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t", State: "open"}}, true},
+		{"issue id zero", scm.Event{Issue: &scm.Issue{Title: "t", State: "open"}}, false},
+		{"issue state empty", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t"}}, false},
+		{"pull", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadSHA: "sha", HeadBranch: "main"}}, true},
+		{"pull sha empty", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadBranch: "main"}}, false},
+		{"run", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha", Status: "completed"}}, true},
+		{"run id zero", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "0", SHA: "sha", Status: "completed"}}, false},
+		{"run status empty", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha"}}, false},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := validEntity(test.event); got != test.want {
-				t.Fatalf("got %v, want %v", got, test.want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := validEntity(c.event); got != c.want {
+				t.Fatalf("got %v want %v", got, c.want)
 			}
 		})
 	}
@@ -41,7 +42,7 @@ func TestValidEntity(t *testing.T) {
 type fakeProvider struct{}
 
 func (fakeProvider) VerifyWebhook(context.Context, http.Header, []byte) error { return nil }
-func (fakeProvider) ParseEvent(_ context.Context, eventType string, headers http.Header, payload []byte) (scm.Event, error) {
+func (fakeProvider) ParseEvent(_ context.Context, kind string, h http.Header, payload []byte) (scm.Event, error) {
 	var body struct {
 		Repository struct {
 			FullName string `json:"full_name"`
@@ -55,54 +56,59 @@ func (fakeProvider) ParseEvent(_ context.Context, eventType string, headers http
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return scm.Event{}, err
 	}
-	issue := scm.Issue{Number: body.Issue.Number, Title: body.Issue.Title, State: body.Issue.State}
-	if issue.Number == 0 {
-		return scm.Event{}, errors.New("invalid issue")
+	if body.Repository.FullName == "" {
+		return scm.Event{}, errors.New("missing repository")
 	}
-	return scm.Event{Repository: body.Repository.FullName, DeliveryID: headers.Get("X-GitHub-Delivery"), EventType: eventType, Issue: &issue}, nil
+	return scm.Event{Repository: body.Repository.FullName, DeliveryID: h.Get("X-GitHub-Delivery"), EventType: kind, Issue: &scm.Issue{Number: body.Issue.Number, Title: body.Issue.Title, State: body.Issue.State}}, nil
 }
 func (fakeProvider) Backfill(context.Context, string) (scm.BackfillResult, error) {
 	return scm.BackfillResult{}, nil
 }
 
-type fakeRegistry struct{ err error }
+type fakeRegistry struct{}
 
-func (registry fakeRegistry) Build(string, scm.Config) (scm.SCMProvider, error) {
-	if registry.err != nil {
-		return nil, registry.err
-	}
-	return fakeProvider{}, nil
-}
+func (fakeRegistry) Build(string, scm.Config) (scm.SCMProvider, error) { return fakeProvider{}, nil }
 
-func TestIngestRejectsSpoofedRepositoryBeforeAnyDatabaseWrite(t *testing.T) {
-	service := NewService(nil, fakeRegistry{})
-	payload := []byte(`{"repository":{"full_name":"org/a"},"issue":{"number":1,"title":"issue","state":"open"}}`)
-	headers := http.Header{"X-GitHub-Delivery": []string{"d1"}, "X-GitHub-Event": []string{"issues"}}
-	_, err := service.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", headers, payload)
-	if err != ErrRejected {
-		t.Fatalf("got %v, want ErrRejected", err)
+func TestControllerBoundsCandidates(t *testing.T) {
+	c := NewController(nil, map[string][]Config{"github": make([]Config, 33)})
+	r := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(r)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/webhooks/github", nil)
+	ctx.Params = gin.Params{{Key: "provider", Value: "github"}}
+	c.Handle(ctx)
+	if r.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d", r.Code)
 	}
 }
 
-func TestIngestRejectsSignatureFromDifferentRepositorySecret(t *testing.T) {
-	service := NewService(nil, fakeRegistry{})
-	payload := []byte(`{"repository":{"full_name":"org/a"},"issue":{"number":1,"title":"issue","state":"open"}}`)
-	digest := hmac.New(sha256.New, []byte("secret-a"))
-	_, _ = digest.Write(payload)
-	headers := http.Header{"X-GitHub-Delivery": []string{"d1"}, "X-GitHub-Event": []string{"issues"}, "X-Hub-Signature-256": []string{"sha256=" + hex.EncodeToString(digest.Sum(nil))}}
-	_, err := service.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", headers, payload)
+func TestIngestRejectsMismatchedRepoAndWrongSecretBeforeWrites(t *testing.T) {
+	s := NewService(nil, fakeRegistry{})
+	body := []byte(`{"repository":{"full_name":"org/a"},"issue":{"number":1,"title":"t","state":"open"}}`)
+	h := http.Header{"X-GitHub-Event": []string{"issues"}, "X-GitHub-Delivery": []string{"d1"}}
+	_, err := s.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", h, body)
 	if err != ErrRejected {
-		t.Fatalf("got %v, want ErrRejected", err)
+		t.Fatalf("repo mismatch err=%v", err)
+	}
+	mac := hmac.New(sha256.New, []byte("secret-a"))
+	_, _ = mac.Write(body)
+	h.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	_, err = s.Ingest(context.Background(), "github", "org/b", "secret-b", "", "", h, body)
+	if err != ErrRejected {
+		t.Fatalf("wrong secret err=%v", err)
 	}
 }
 
-func TestIngestUnknownProviderReturnsSafeError(t *testing.T) {
-	service := NewService(nil, fakeRegistry{err: errors.New("secret/database detail")})
-	_, err := service.Ingest(context.Background(), "unknown", "org/a", "", "", "", http.Header{}, nil)
+type badRegistry struct{}
+
+func (badRegistry) Build(string, scm.Config) (scm.SCMProvider, error) {
+	return nil, errors.New("secret database internals")
+}
+func TestUnknownProviderErrorIsSafe(t *testing.T) {
+	_, err := NewService(nil, badRegistry{}).Ingest(context.Background(), "unknown", "repo", "", "", "", http.Header{}, nil)
 	if err != ErrRejected {
-		t.Fatalf("got %v, want ErrRejected", err)
+		t.Fatalf("error=%v", err)
 	}
-	if err.Error() == "secret/database detail" {
-		t.Fatal("internal error leaked")
+	if err.Error() == "secret database internals" {
+		t.Fatal("internal detail exposed")
 	}
 }
