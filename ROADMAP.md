@@ -16,6 +16,8 @@
 | 24/10/2026 | ~~Coordinator không merge trong W0-W1~~ (thay bằng dòng dưới). |
 | 24/10/2026 | **Coordinator tự merge** sau khi tự kiểm tra (gate xanh trên đúng head, CI xanh khi đã có W0c, `Closes #n`, không file ngoài phạm vi), squash ghim SHA. Chạy liên tục hết ROADMAP, không chờ owner. Worker vẫn không merge. |
 | 24/10/2026 | PM tách **toàn bộ ROADMAP thành issue** ngay: W1 chi tiết; W2-W5 mỗi đợt con một issue (đủ "xong khi"), làm rõ thêm khi tới lượt. |
+| 24/10/2026 | Deploy: **local, docker compose** (API + web + Postgres). VPS / hạ tầng công ty quyết sau demo, không làm trong W0-W5. |
+| 24/10/2026 | Usage Claude Code (W3): **đọc transcript local `~/.claude/projects/**/*.jsonl`** (usage mỗi message), cùng cách với Codex / OpenCode (đọc JSON). OTel và log proxy công ty để đợt sau, tạo issue `found-by:agent` nếu cần. |
 | 24/10/2026 | Không auth người dùng ở bản đầu (chạy local / nội bộ). Webhook phải verify chữ ký. Endpoint ghi agent-run dùng token tĩnh từ env. |
 
 ## Các đợt
@@ -61,5 +63,4 @@ Tỉ lệ PR bị gửi lại, CI xanh lần đầu, thời gian mỗi issue, g�
 
 ## Câu hỏi mở (owner)
 
-- Deploy ở đâu (local/docker, VPS, nội bộ công ty)? Chưa cần trước W3.
-- Usage của Claude Code (công ty dùng) lấy bằng cách nào: OTel, hook, hay proxy log? Xét ở W3.
+Không còn (đã trả lời 24/10/2026, xem bảng quyết định).
