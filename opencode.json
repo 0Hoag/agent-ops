@@ -35,5 +35,9 @@
       "~/.codex/auth.json": "deny",
       "~/.local/share/opencode/auth.json": "deny"
     }
+  },
+  "tool_output": {
+    "max_lines": 250,
+    "max_bytes": 16384
   }
 }

@@ -2,6 +2,7 @@
 description: Implementer for one orchestrator-workers wave. Runs a coordinator brief to completion in its own git worktree and opens a PR. Use ONLY when dispatched with a brief by the coordinator (scripts/run-worker-opencode.sh).
 mode: all
 model: openai/gpt-6-luna
+variant: low
 permission:
   edit: allow
   webfetch: allow

@@ -41,7 +41,7 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 | --- | --- | --- |
 | Mở coordinator | `codex` | `scripts/opencode.sh` (model `openai/gpt-6.1-sol`, `opencode.json`) |
 | Chạy worker | `scripts/run-worker.sh <wave> <branch> <brief>` | `scripts/run-worker-opencode.sh <wave> <branch> <brief>` |
-| Model worker | `gpt-reserve` (`~/.codex/worker.config.toml`) | `openai/gpt-6-luna` (`.opencode/agents/worker.md`) |
+| Model worker | `gpt-reserve`, effort low (`~/.codex/worker.config.toml`) | `openai/gpt-6-luna`, variant low (`.opencode/agents/worker.md`) |
 | Usage trong `.agent-runs/<wave>.jsonl` | `turn.completed.usage` | `step_finish.part.tokens` |
 
 - Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Script in tổng token khi xong; chép vào `STATUS.md`.
