@@ -88,3 +88,13 @@ base URL and Rspack had only a hardcoded health proxy. Independent review caught
 
 **Check:** trace each documented environment variable to its loader and consumer on the exact PR head;
 describe current behavior when environment-aware configuration belongs to a later wave.
+
+## 10. Issue transfer does not preserve labels automatically
+
+WS-a2 transferred root #132 to client #4, but the destination retained only area:client and lost its
+status, priority, type and wave labels. The attempt ended before producing a complete mapping.
+
+> Cost: a fresh split-completion retry and destination metadata repair before dispatch can continue.
+
+**Check:** provision destination labels first; compare source and destination metadata immediately after
+each transfer, record old/new URLs, and verify body newlines and cross-repository dependency links.
