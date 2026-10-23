@@ -1,7 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
 import { registerHealth } from './register-health';
+import { registerBoard } from './register-board';
 
 export function AppRouter() {
   const health = registerHealth();
-  return <Routes><Route path={health.path} element={health.element} /></Routes>;
+  const board = registerBoard();
+  return <Routes><Route path={health.path} element={health.element} /><Route path={board.path} element={board.element} /></Routes>;
 }
