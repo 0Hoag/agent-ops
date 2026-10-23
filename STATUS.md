@@ -9,8 +9,11 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 | W0a api | merged | [#4](https://github.com/0Hoag/agent-ops/pull/4) | #1 closed; coordinator repeated API gates on exact PR head, all passed |
 | W0b web | merged | [#5](https://github.com/0Hoag/agent-ops/pull/5) | #2 closed; coordinator repeated full web gate on exact PR head, all passed |
 | W0c ci | merged | [#27](https://github.com/0Hoag/agent-ops/pull/27) | #3 closed; OpenCode; independent review and failing control #39 verified |
-| W1a scm | returned, second remediation running | [#101](https://github.com/0Hoag/agent-ops/pull/101) | #6–#11, #102–#107; Codex initial/remediation, OpenCode focused closing-reference follow-up |
+| W1a scm | merged | [#101](https://github.com/0Hoag/agent-ops/pull/101) | #6–#11, #102–#107, #112 closed; Codex initial/remediation, OpenCode two focused follow-ups; 3 returns |
 | W1b store | merged | [#100](https://github.com/0Hoag/agent-ops/pull/100) | #12–#16 and #108–#111 closed; Codex CLI; one return |
+| W1c ingest | returned, remediation running | [#114](https://github.com/0Hoag/agent-ops/pull/114) | #17/#18; initial Codex; OpenCode fixes #116–#118 and completes real DB acceptance |
+| W1d stale snapshots | queued | | #119; after W1c, before board API acceptance |
+| W2b board UI | returned, verification running | [#115](https://github.com/0Hoag/agent-ops/pull/115) | #20/#21/#120; OpenCode; browser/mutation evidence missing in initial report |
 
 Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers occupy gaps), with scoped labels, measurable acceptance and dependencies. #98 covers the initial Claude Code transcript importer; #99 covers local Docker Compose deployment. Owner updates observed during this run: local Docker Compose deployment and Claude Code transcript ingestion are decided; W3 has no owner-decision blocker. Phase 2 W6–W17 is included in planning.
 
@@ -25,6 +28,9 @@ Roadmap through W17 is now split into deliverable issues #6–#99 (PR numbers oc
 - `[M]` W0c head `3ef3e235d9ee152cb26855b9c41e7cee1cb16bfc`: coordinator full API and web gates exit 0; independent read-only review found no blocker. CI run `40015869876` API/Web passed. Control #39 at measured head `39a71927668b2f6bed52dc749e15ec07563b3522`, run `40016097101`, Web fails at `HealthPage.tsx(4,9)` with TS2322 and exit 2; control closed unmerged. Worker mistyped the control SHA in its report; coordinator corrected PR metadata after measuring. PR #27 merged; file-scoped workflow diff against main is empty. Main commit `1994fbb` CI run `40016973013` completed successfully (`gh run watch --exit-status`).
 - `[M]` W1b final head `90e5d231beb40153a06f588b326dc138bcfc9360`: coordinator reran full API gate, all exit 0. Entity-specific SQL tests now inspect conflict/update and lookup clauses; authoritative snapshots clear removed values. CI `40018262684` API/Web green. PR #100 merged, scoped diff of store/migrations/runner tests against main empty. Main CI `40018391525` green on merge `57a7a0b`. End-to-end Postgres ingestion is W1c acceptance, not claimed here.
 - `[M]` W1a initial head `b32a2a3db4087958194f26b87d9e3132f4893ef0`: full API gate green, but coordinator temporary Go regressions failed for encoded repository slash, missing state=all, non-closing refs, merged_at state and actual status:in progress label. Independent review also found registry configuration impossible. Issues #102–#107 created and PR returned. Remediation head `bf5447bbfe363d93995c2b349b0d2207e3d9cbc7` passes coordinator full API gate and CI `40018308933`; read-only re-review resolved five findings but #105 still matches directly negated closing prose. Focused second remediation is running; PR not merged.
+- `[M]` W1a final head `72ce5ab22a6a55435204d6789d453827985a3cb6`: coordinator full API gate passes; inspected occurrence-local negation handling and parser split (all changed Go files <=200 lines). CI `40019286910` API/Web green. PR #101 merged, scoped SCM diff against main empty. Main CI `40019487309` green on merge `1657c07`. Earlier intermediate-head note above is historical.
+- `[M]` W1c head `3bb4b283ec30076f93d6cbcaf6c8e67af83f3a7e`: coordinator full API gate and CI `40019858775` pass, but no webhook or sync tests exist. Coordinator started isolated Docker Postgres on 55433 and actual PR API on 18082 with two fixture repositories/secrets. `.agent-runs/reproduce-w1c.py`: A payload signed with A ->400, same payload signed with B ->200 and persisted under A; same issues body with workflow_run header ->200 and pipeline external_id=0, empty SHA/status. SQL queries confirmed two raw rows and bad normalized records. PR returned for #116–#118. Independent review's stale snapshot finding is queued separately as #119.
+- `[M]` W2b head `aae2a9c17c053ea9e3992bfd5e532aa0111be0ec`: coordinator full web gate exit 0 (3 tests), CI `40019931869` API/Web green. Worker omitted browser and mutation evidence; #120 tracks completion before merge.
 
 ## Usage and cost by wave
 
@@ -35,8 +41,11 @@ Source: totals printed by `scripts/run-worker*.sh` after completion (Codex: `tur
 | W0a | Codex CLI 0.164.0 | worker | gpt-reserve | 3,355,793 | 3,245,184 | 0 | 32,033 | 96.70% | [?] unavailable | #1 | 1 |
 | W0b | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 101,706 | 1,440,128 | 0 | 13,887 | 93.40% | [?] unavailable | #2 | 2 |
 | W0c | OpenCode 1.19.4 | worker | openai/gpt-6-luna | 19,347 | 330,496 | 0 | 3,760 | 94.47% | [?] unavailable | #3 | 0 |
-| W1a, initial + first return only | Codex CLI | worker | gpt-reserve | 3,283,440 | 3,149,184 | 0 | 31,325 | 95.91% | [?] unavailable | #6–#11, #102–#107 | 2 (second in progress) |
+| W1a, initial + first return | Codex CLI | worker | gpt-reserve | 3,283,440 | 3,149,184 | 0 | 31,325 | 95.91% | [?] unavailable | #6–#11, #102–#107 | 3 total across harnesses |
+| W1a, second + third returns | OpenCode | worker | openai/gpt-6-luna | 59,233 | 546,048 | 0 | 5,744 | 90.21% | [?] unavailable | #105/#112 | included above |
 | W1b | Codex CLI | worker | gpt-reserve | 2,241,029 | 2,133,760 | 0 | 24,148 | 95.21% | [?] unavailable | #12–#16, #108–#111 | 1 |
+| W1c, initial only | Codex CLI | worker | gpt-reserve | 1,690,236 | 1,642,112 | 0 | 9,195 | 97.15% | [?] unavailable | #17/#18 | 1, running |
+| W2b, initial only | OpenCode | worker | openai/gpt-6-luna | 36,243 | 168,064 | 0 | 4,969 | 82.26% | [?] unavailable | #20/#21 | 1, running |
 
 Measured after all five script invocations finished on 2026-10-24. Include every attempt, not only successful runs:
 
@@ -52,6 +61,10 @@ Measured after all five script invocations finished on 2026-10-24. Include every
 | W1ar | 1,065,593 | 1,027,968 | 0 | 9,431 | 1,487 |
 | W1b | 1,373,871 | 1,318,400 | 0 | 16,067 | 3,535 |
 | W1br | 867,158 | 815,360 | 0 | 8,081 | 1,150 |
+| W1ar2 | 34,663 | 255,488 | 0 | 2,685 | 191 |
+| W1ar3 | 24,570 | 290,560 | 0 | 3,059 | 62 |
+| W1c | 1,690,236 | 1,642,112 | 0 | 9,195 | 845 |
+| W2b | 36,243 | 168,064 | 0 | 4,969 | 36 |
 
 - Reproduce: sum `turn.completed.usage` in `.agent-runs/W0a{,-retry}.jsonl`; sum `step_finish.part.tokens` in `.agent-runs/W0b.jsonl`, `W0b-retry.jsonl`, `W0b-review-fix.jsonl` with `jq -s`. Script summaries are in the matching `.log` files.
 - **Input is the raw harness field, not directly comparable across harnesses.** Codex `input_tokens` includes cached input: cache hit = cached/input. OpenCode input excludes cache reads/writes: cache hit = cache.read/(input + cache.read + cache.write). All 88 OpenCode events satisfy `tokens.total = input + cache.read + cache.write + output + reasoning` (verified with `jq -s`, zero mismatches). Normalized total prompt tokens: Codex **3,355,793**; OpenCode **1,541,834**. Codex input semantics follow [OpenAI usage documentation](https://developers.openai.com/api/docs/guides/prompt-caching#monitor-cache-performance).
