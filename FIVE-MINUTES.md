@@ -108,3 +108,14 @@ values and omitted pipelines, repeating the acceptance gap documented in item 6.
 
 **Check:** inspect conflict targets/update clauses and bound normalized values for every entity on both
 passes; a changed identity or state must fail the relevant assertion in a disposable negative control.
+
+## 12. Issue migration must preserve the contract, not only the title
+
+WS-a2 retry replaced fourteen transferred client issue bodies with generic boilerplate, removing
+deliverable-specific acceptance and dependencies; fourteen also lacked wave labels.
+
+> Cost: split PR returned and #142 required to reconstruct contracts from GitHub edit histories.
+
+**Check:** compare every destination body against its pre-migration `userContentEdits` history,
+preserving measurable acceptance and fully qualified dependency links; audit all label dimensions
+and real newlines before claiming transfer completion.
