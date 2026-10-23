@@ -8,14 +8,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 )
 
-type Config struct {
-	Token         string
-	WebhookSecret string
-	APIBaseURL    string
-	HTTPClient    *http.Client
-}
+type Config = scm.Config
 
 type Provider struct {
 	token, secret, baseURL string
@@ -32,6 +30,10 @@ func New(config Config) *Provider {
 		client = http.DefaultClient
 	}
 	return &Provider{token: config.Token, secret: config.WebhookSecret, baseURL: base, client: client}
+}
+
+func init() {
+	_ = builder.Register("github", func(config scm.Config) scm.SCMProvider { return New(config) })
 }
 
 func VerifySignature(secret string, payload []byte, signature string) error {

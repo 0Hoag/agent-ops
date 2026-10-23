@@ -125,10 +125,15 @@ func mapIssue(raw issueJSON, repo string) scm.Issue {
 	return scm.Issue{ExternalID: strconv.FormatInt(raw.ID, 10), Number: raw.Number, Repository: repo, Title: raw.Title, State: raw.State, Status: status, Labels: labels, Assignee: assignee, UpdatedAt: raw.UpdatedAt}
 }
 func mapStatus(label string) (scm.IssueStatus, bool) {
+	if !strings.HasPrefix(label, "status:") {
+		return "", false
+	}
 	switch strings.TrimPrefix(label, "status:") {
 	case "todo":
 		return scm.StatusTodo, true
 	case "in_progress":
+		return scm.StatusInProgress, true
+	case "in progress":
 		return scm.StatusInProgress, true
 	case "review":
 		return scm.StatusReview, true
@@ -149,7 +154,12 @@ func eventState(action, state string, merged bool) string {
 	return state
 }
 func mapPull(raw pullJSON, repo string) scm.PullRequest {
-	return scm.PullRequest{ExternalID: strconv.FormatInt(raw.ID, 10), Number: raw.Number, Repository: repo, Title: raw.Title, State: raw.State, HeadSHA: raw.Head.SHA, HeadBranch: raw.Head.Ref, Merged: raw.Merged, MergedAt: raw.MergedAt, ClosingIssueNumbers: closingIssues(raw.Body, repo), UpdatedAt: raw.UpdatedAt}
+	merged := raw.Merged || raw.MergedAt != nil || raw.State == "merged"
+	state := raw.State
+	if merged {
+		state = "merged"
+	}
+	return scm.PullRequest{ExternalID: strconv.FormatInt(raw.ID, 10), Number: raw.Number, Repository: repo, Title: raw.Title, State: state, HeadSHA: raw.Head.SHA, HeadBranch: raw.Head.Ref, Merged: merged, MergedAt: raw.MergedAt, ClosingIssueNumbers: closingIssues(raw.Body, repo), UpdatedAt: raw.UpdatedAt}
 }
 func mapRun(raw runJSON, repo string) scm.PipelineRun {
 	var pr *int
@@ -163,7 +173,7 @@ func mapRun(raw runJSON, repo string) scm.PipelineRun {
 	return scm.PipelineRun{ExternalID: strconv.FormatInt(raw.ID, 10), Repository: repo, PRNumber: pr, SHA: raw.SHA, Status: raw.Status, Conclusion: raw.Conclusion, StartedAt: raw.RunStarted, FinishedAt: finished}
 }
 
-var refPattern = regexp.MustCompile(`(?i)(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
+var refPattern = regexp.MustCompile(`(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
 
 func closingIssues(body, repo string) []int {
 	seen := map[int]bool{}

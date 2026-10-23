@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +42,12 @@ func TestVerifySignature(t *testing.T) {
 	}
 }
 
+func TestProviderRegistersWithConfiguredRegistry(t *testing.T) {
+	provider, err := builder.Build("github", scm.Config{Token: "token", WebhookSecret: "secret"})
+	require.NoError(t, err)
+	require.NotNil(t, provider)
+}
+
 func TestParseEventMappers(t *testing.T) {
 	secret := "secret"
 	tests := []struct {
@@ -52,7 +59,7 @@ func TestParseEventMappers(t *testing.T) {
 			require.Equal(t, "acme/project", e.Repository)
 		}},
 		{"pull request refs", "pull_request", "pull_request.json", func(t *testing.T, e scm.Event) {
-			require.Equal(t, []int{7, 9}, e.PullRequest.ClosingIssueNumbers)
+			require.Equal(t, []int{7}, e.PullRequest.ClosingIssueNumbers)
 			require.Equal(t, "abc", e.PullRequest.HeadSHA)
 		}},
 		{"workflow run", "workflow_run", "workflow_run.json", func(t *testing.T, e scm.Event) {
@@ -77,7 +84,7 @@ func TestIssueStatusMapping(t *testing.T) {
 		label  string
 		status scm.IssueStatus
 	}{
-		{"status:todo", scm.StatusTodo}, {"status:in_progress", scm.StatusInProgress},
+		{"status:todo", scm.StatusTodo}, {"status:in_progress", scm.StatusInProgress}, {"status:in progress", scm.StatusInProgress},
 		{"status:review", scm.StatusReview}, {"status:blocked", scm.StatusBlocked}, {"status:done", scm.StatusDone},
 	}
 	for _, test := range tests {
@@ -118,6 +125,10 @@ func TestBackfillPaginationCancellationAndPRExclusion(t *testing.T) {
 	require.Len(t, result.PullRequests, 1)
 	require.Len(t, result.PipelineRuns, 1)
 	require.Len(t, requests, 4)
+	require.Contains(t, requests[0], "/repos/acme/project/issues?")
+	require.Contains(t, requests[0], "state=all")
+	require.Contains(t, requests[2], "/repos/acme/project/pulls?")
+	require.Contains(t, requests[2], "state=all")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = New(Config{APIBaseURL: server.URL}).Backfill(ctx, "acme/project")
@@ -127,4 +138,16 @@ func TestBackfillPaginationCancellationAndPRExclusion(t *testing.T) {
 func TestMapRunFinishedAt(t *testing.T) {
 	run := mapRun(runJSON{ID: 1, UpdatedAt: time.Now(), Conclusion: "failure"}, "repo")
 	require.NotNil(t, run.FinishedAt)
+}
+
+func TestMapPullNormalizesMergedState(t *testing.T) {
+	mergedAt := time.Now().UTC()
+	pr := mapPull(pullJSON{ID: 1, State: "closed", MergedAt: &mergedAt}, "acme/project")
+	require.True(t, pr.Merged)
+	require.Equal(t, "merged", pr.State)
+}
+
+func TestClosingIssuesRequiresClosingKeywordAndSameRepository(t *testing.T) {
+	body := "Related to #1; closes #2, fixes acme/project#3, resolves acme/other#4"
+	require.Equal(t, []int{2, 3}, closingIssues(body, "acme/project"))
 }

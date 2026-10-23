@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// Config contains provider credentials and transport settings shared by SCM vendors.
+type Config struct {
+	Token         string
+	WebhookSecret string
+	APIBaseURL    string
+	HTTPClient    *http.Client
+}
+
 // IssueStatus is the provider-neutral board status.
 type IssueStatus string
 

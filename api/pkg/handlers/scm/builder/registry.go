@@ -6,10 +6,9 @@ import (
 	"sync"
 
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
-	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 )
 
-type Factory func() scm.SCMProvider
+type Factory func(scm.Config) scm.SCMProvider
 
 type Registry struct {
 	mu        sync.RWMutex
@@ -32,22 +31,20 @@ func (r *Registry) Register(name string, factory Factory) error {
 	return nil
 }
 
-func (r *Registry) Build(name string) (scm.SCMProvider, error) {
+func (r *Registry) Build(name string, config scm.Config) (scm.SCMProvider, error) {
 	r.mu.RLock()
 	factory := r.factories[strings.ToLower(strings.TrimSpace(name))]
 	r.mu.RUnlock()
 	if factory == nil {
 		return nil, fmt.Errorf("unknown SCM provider %q", name)
 	}
-	return factory(), nil
+	return factory(config), nil
 }
 
-var defaultRegistry = func() *Registry {
-	r := NewRegistry()
-	_ = r.Register("github", func() scm.SCMProvider { return github.New(github.Config{}) })
-	return r
-}()
+var defaultRegistry = NewRegistry()
 
 func Register(name string, factory Factory) error { return defaultRegistry.Register(name, factory) }
-func Build(name string) (scm.SCMProvider, error)  { return defaultRegistry.Build(name) }
-func Default() *Registry                          { return defaultRegistry }
+func Build(name string, config scm.Config) (scm.SCMProvider, error) {
+	return defaultRegistry.Build(name, config)
+}
+func Default() *Registry { return defaultRegistry }
