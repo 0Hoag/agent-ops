@@ -156,3 +156,8 @@ func TestClosingIssuesIgnoresDirectNegation(t *testing.T) {
 	body := "Related to #7; do not close acme/project#9; closes acme/other#10"
 	require.Empty(t, closingIssues(body, "acme/project"))
 }
+
+func TestClosingIssuesForeignNegationDoesNotSuppressLocalReference(t *testing.T) {
+	body := "never close acme/other#9; closes #9"
+	require.Equal(t, []int{9}, closingIssues(body, "acme/project"))
+}

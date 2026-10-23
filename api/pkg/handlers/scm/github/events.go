@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -171,42 +170,4 @@ func mapRun(raw runJSON, repo string) scm.PipelineRun {
 		finished = &raw.UpdatedAt
 	}
 	return scm.PipelineRun{ExternalID: strconv.FormatInt(raw.ID, 10), Repository: repo, PRNumber: pr, SHA: raw.SHA, Status: raw.Status, Conclusion: raw.Conclusion, StartedAt: raw.RunStarted, FinishedAt: finished}
-}
-
-var refPattern = regexp.MustCompile(`(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
-var negatedRefPattern = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never)\s+(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https://github\.com/([\w.-]+/[\w.-]+)/issues/([0-9]+)|([\w.-]+/[\w.-]+)#([0-9]+)|#([0-9]+))`)
-
-func closingIssues(body, repo string) []int {
-	seen := map[int]bool{}
-	result := []int{}
-	for _, match := range negatedRefPattern.FindAllStringSubmatch(body, -1) {
-		num := match[2]
-		if num == "" {
-			num = match[4]
-		}
-		if num == "" {
-			num = match[5]
-		}
-		if n, err := strconv.Atoi(num); err == nil {
-			seen[n] = true
-		}
-	}
-	for _, match := range refPattern.FindAllStringSubmatch(body, -1) {
-		refRepo, num := match[1], match[2]
-		if refRepo == "" {
-			refRepo, num = match[3], match[4]
-		}
-		if refRepo != "" && !strings.EqualFold(refRepo, repo) {
-			continue
-		}
-		if num == "" {
-			num = match[5]
-		}
-		n, err := strconv.Atoi(num)
-		if err == nil && !seen[n] {
-			seen[n] = true
-			result = append(result, n)
-		}
-	}
-	return result
 }
