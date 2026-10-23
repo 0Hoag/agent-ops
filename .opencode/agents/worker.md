@@ -16,6 +16,10 @@ permission:
     "gh pr merge*": deny
   external_directory:
     "*": deny
+    "~/.ssh/**": deny
+    "~/.codex/auth.json": deny
+    "~/.local/share/opencode/auth.json": deny
+    "~/.config/gh/**": deny
     "~/agent-ops/**": allow
     "~/agent-ops-wt/**": allow
     "/tmp/**": allow

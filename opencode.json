@@ -9,6 +9,7 @@
   "permission": {
     "edit": "allow",
     "webfetch": "allow",
+    "doom_loop": "allow",
     "bash": {
       "*": "allow",
       "sudo *": "deny",
@@ -18,9 +19,11 @@
       "git reset --hard*": "deny"
     },
     "external_directory": {
-      "*": "ask",
+      "*": "allow",
       "~/agent-ops-wt/**": "allow",
       "~/.codex/skills/**": "allow",
+      "~/.ssh/**": "deny",
+      "~/.config/gh/**": "deny",
       "~/.codex/worker.config.toml": "allow",
       "/private/tmp/**": "allow",
       "/tmp/**": "allow",
