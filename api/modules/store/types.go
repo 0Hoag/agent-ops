@@ -1,6 +1,7 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,14 @@ import (
 
 // UUID is a canonical UUID string. PostgreSQL enforces its UUID format.
 type UUID string
+
+func NewUUID() UUID {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 15) | 64
+	b[8] = (b[8] & 63) | 128
+	return UUID(fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]))
+}
 
 // JSONB keeps persistence independent from any SCM provider package.
 type JSONB []byte

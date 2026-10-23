@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -8,9 +9,18 @@ import (
 )
 
 type Config struct {
-	HTTPAddr    string
-	DatabaseURL string
-	LogLevel    string
+	HTTPAddr     string
+	DatabaseURL  string
+	LogLevel     string
+	Repositories []RepositoryConfig
+}
+
+type RepositoryConfig struct {
+	Provider         string `json:"provider"`
+	FullName         string `json:"full_name"`
+	WebhookSecretEnv string `json:"webhook_secret_env"`
+	TokenEnv         string `json:"token_env"`
+	BaseURLEnv       string `json:"base_url_env"`
 }
 
 func Load() (Config, error) {
@@ -19,6 +29,11 @@ func Load() (Config, error) {
 		HTTPAddr:    envOr("HTTP_ADDR", ":8080"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		LogLevel:    envOr("LOG_LEVEL", "info"),
+	}
+	if raw := os.Getenv("SCM_REPOSITORIES_JSON"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &cfg.Repositories); err != nil {
+			return Config{}, fmt.Errorf("SCM_REPOSITORIES_JSON is invalid")
+		}
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
