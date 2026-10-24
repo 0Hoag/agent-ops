@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	_ "github.com/0Hoag/agent-ops/api/docs"
+	"github.com/0Hoag/agent-ops/api/modules/agentrun"
 	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
@@ -61,7 +63,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID(), middleware.SecurityHeaders())
-	router.Use(cors.New(cors.Config{AllowOrigins: cfg.CORSOrigins, AllowMethods: []string{"GET", "POST", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "X-Request-ID", "X-Hub-Signature-256", "X-Gitlab-Token"}, AllowCredentials: false, MaxAge: 12 * time.Hour}))
+	router.Use(cors.New(cors.Config{AllowOrigins: cfg.CORSOrigins, AllowMethods: []string{"GET", "POST", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "X-Request-ID", "X-Hub-Signature-256", "X-Gitlab-Token", "X-Agent-Run-Token"}, AllowCredentials: false, MaxAge: 12 * time.Hour}))
 	router.Use(logger.Request(log))
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	registerRoutes(router, database.AsPinger(db), db, cfg)
@@ -82,4 +84,12 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 	hub := board.NewHub()
 	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisher(gormDB, builder.Default(), hub), configs)).Register(router.Group("/api/v1"))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(router.Group("/api/v1"))
+	prices := map[string]agentrun.Price{}
+	for model, raw := range cfg.AgentRunModelPrices {
+		var p agentrun.Price
+		if err := json.Unmarshal(raw, &p); err == nil {
+			prices[model] = p
+		}
+	}
+	agentrun.NewRoutes(agentrun.NewController(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices)).Register(router.Group("/api/v1"))
 }

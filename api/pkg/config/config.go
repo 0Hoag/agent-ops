@@ -10,11 +10,13 @@ import (
 )
 
 type Config struct {
-	HTTPAddr     string
-	DatabaseURL  string
-	LogLevel     string
-	CORSOrigins  []string
-	Repositories []RepositoryConfig
+	HTTPAddr            string
+	DatabaseURL         string
+	LogLevel            string
+	CORSOrigins         []string
+	Repositories        []RepositoryConfig
+	AgentRunToken       string
+	AgentRunModelPrices map[string]json.RawMessage
 }
 
 type RepositoryConfig struct {
@@ -28,10 +30,16 @@ type RepositoryConfig struct {
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	cfg := Config{
-		HTTPAddr:    envOr("HTTP_ADDR", ":8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		LogLevel:    envOr("LOG_LEVEL", "info"),
-		CORSOrigins: splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
+		HTTPAddr:      envOr("HTTP_ADDR", ":8080"),
+		DatabaseURL:   os.Getenv("DATABASE_URL"),
+		LogLevel:      envOr("LOG_LEVEL", "info"),
+		CORSOrigins:   splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
+		AgentRunToken: os.Getenv("AGENT_RUN_TOKEN"),
+	}
+	if raw := os.Getenv("AGENT_RUN_MODEL_PRICES"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &cfg.AgentRunModelPrices); err != nil {
+			return Config{}, fmt.Errorf("AGENT_RUN_MODEL_PRICES is invalid")
+		}
 	}
 	if raw := os.Getenv("SCM_REPOSITORIES_JSON"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.Repositories); err != nil {
