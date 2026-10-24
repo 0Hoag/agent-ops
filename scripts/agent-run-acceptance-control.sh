@@ -2,9 +2,11 @@
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 mutation=${1:?usage: $0 auth|validation|pricing|repository-list|repository-aggregate|wave-list|wave-aggregate|issue-list|issue-aggregate|noop}
-tmp=$(mktemp -d)
+tmp=$(mktemp -d /private/tmp/agent-run-control.XXXXXX)
 trap 'rm -rf "$tmp"' EXIT
-export GOMODCACHE="$tmp/go-mod-cache" GOCACHE="$tmp/go-cache"
+control_cache=${AGENT_RUN_CONTROL_CACHE:-/private/tmp/agent-run-control-cache}
+mkdir -p "$control_cache/mod" "$control_cache/build"
+export GOMODCACHE="$control_cache/mod" GOCACHE="$control_cache/build"
 git -C "$ROOT" archive HEAD | tar -x -C "$tmp"
 cp "$ROOT/scripts/agent-run-acceptance.sh" "$tmp/scripts/"
 git -C "$tmp" init -q
