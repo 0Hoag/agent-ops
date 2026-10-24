@@ -16,10 +16,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	githubprovider "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 	postgresDriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -193,6 +196,132 @@ func TestControllerHandleBindsSignedPayloadToConfiguredRepository(t *testing.T) 
 		}
 		assertNoDatabaseAccess(t, mock)
 	})
+}
+
+func TestWebhookRoutePublishesWebSocketInvalidationOnlyAfterCommit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const (
+		repositoryA   = "org/a"
+		repositoryB   = "org/b"
+		repositoryAID = "11111111-1111-1111-1111-111111111111"
+		repositoryBID = "22222222-2222-2222-2222-222222222222"
+	)
+	payload := []byte(`{"repository":{"full_name":"org/a"},"issue":{"id":101,"number":1,"title":"signed issue","state":"open"}}`)
+	sign := func(body []byte) string {
+		mac := hmac.New(sha256.New, []byte("secret-a"))
+		_, _ = mac.Write(body)
+		return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	}
+	for _, tc := range []struct {
+		name           string
+		setup          func(sqlmock.Sqlmock)
+		delivery       string
+		validSignature bool
+		wantEvent      bool
+	}{
+		{name: "commit", setup: func(mock sqlmock.Sqlmock) {
+			expectWebhookCommit(mock, repositoryA, repositoryAID, "delivery-commit", true)
+		}, delivery: "delivery-commit", validSignature: true, wantEvent: true},
+		{name: "duplicate", setup: func(mock sqlmock.Sqlmock) {
+			expectWebhookCommit(mock, repositoryA, repositoryAID, "delivery-duplicate", false)
+		}, delivery: "delivery-duplicate", validSignature: true},
+		{name: "rollback", setup: func(mock sqlmock.Sqlmock) {
+			expectWebhookRollback(mock, repositoryA, repositoryAID, "delivery-rollback")
+		}, delivery: "delivery-rollback", validSignature: true},
+		{name: "failed commit", setup: func(mock sqlmock.Sqlmock) {
+			expectWebhookFailedCommit(mock, repositoryA, repositoryAID, "delivery-failed-commit")
+		}, delivery: "delivery-failed-commit", validSignature: true},
+		{name: "rejected signature", delivery: "delivery-rejected"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, db := newWebhookMockDB(t)
+			hub := board.NewHub()
+			router := gin.New()
+			NewRoutes(NewController(NewServiceWithPublisher(db, configuredRegistry{}, hub), map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W2C_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W2C_B_SECRET"}}})).Register(router.Group("/api/v1"))
+			board.NewRoutes(board.NewControllerWithHub(nil, hub)).Register(router.Group("/api/v1"))
+			server := httptest.NewServer(router)
+			t.Cleanup(server.Close)
+			connect := func(id string) *websocket.Conn {
+				conn, _, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):]+"/api/v1/board/ws?repository_id="+id, nil)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = conn.Close() })
+				return conn
+			}
+			connA, connB := connect(repositoryAID), connect(repositoryBID)
+			if tc.setup != nil {
+				tc.setup(mock)
+			}
+			t.Setenv("W2C_A_SECRET", "secret-a")
+			t.Setenv("W2C_B_SECRET", "secret-b")
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/github", strings.NewReader(string(payload)))
+			request.Header.Set("X-GitHub-Delivery", tc.delivery)
+			request.Header.Set("X-GitHub-Event", "issues")
+			if tc.validSignature {
+				request.Header.Set("X-Hub-Signature-256", sign(payload))
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if tc.wantEvent {
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				_ = connA.SetReadDeadline(time.Now().Add(time.Second))
+				_, message, err := connA.ReadMessage()
+				require.NoError(t, err)
+				require.JSONEq(t, `{"type":"board.invalidate","repository_id":"`+repositoryAID+`"}`, string(message))
+			} else {
+				if tc.name == "duplicate" {
+					require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"accepted":false`)
+				} else if tc.validSignature {
+					require.NotEqual(t, http.StatusOK, response.Code, response.Body.String())
+				} else {
+					require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				}
+			}
+			for label, conn := range map[string]*websocket.Conn{"repository A": connA, "repository B": connB} {
+				if label == "repository A" && tc.wantEvent {
+					continue
+				}
+				_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+				_, _, err := conn.ReadMessage()
+				require.Error(t, err, "%s unexpectedly received an event", label)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func expectWebhookCommit(mock sqlmock.Sqlmock, name, id, delivery string, created bool) {
+	expectWebhookTransactionStart(mock, name, id, delivery)
+	rows := int64(1)
+	if !created {
+		rows = 0
+	}
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WillReturnResult(sqlmock.NewResult(1, rows))
+	if created {
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WillReturnResult(sqlmock.NewResult(1, 1))
+	}
+	mock.ExpectCommit()
+}
+
+func expectWebhookRollback(mock sqlmock.Sqlmock, name, id, delivery string) {
+	expectWebhookTransactionStart(mock, name, id, delivery)
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WillReturnError(errors.New("issue write failed"))
+	mock.ExpectRollback()
+}
+
+func expectWebhookFailedCommit(mock sqlmock.Sqlmock, name, id, delivery string) {
+	expectWebhookTransactionStart(mock, name, id, delivery)
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+}
+
+func expectWebhookTransactionStart(mock sqlmock.Sqlmock, name, id, delivery string) {
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("github", name, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "created_at", "updated_at"}).AddRow(id, "github", name, "SECRET", nil, nil))
+	// Entity parsing uses the real GitHub provider and identity; the persisted JSON is asserted by the model tests.
+	_ = delivery
 }
 
 func assertNoDatabaseAccess(t *testing.T, mock sqlmock.Sqlmock) {
