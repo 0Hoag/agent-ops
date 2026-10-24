@@ -184,9 +184,17 @@ for harness in codex opencode; do
   launcher=run-worker.sh
   [[ $harness == opencode ]] && launcher=run-worker-opencode.sh
   cp "$root/scripts/$launcher" "$control/scripts/launcher.sh"
-  printf 'wrong-token' > "$FIXTURE_EXPECTED_TOKEN"
+  printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
   : > "$FIXTURE_CREDENTIAL_ERRORS"; : > "$FIXTURE_RESPONSES"; printf '0' > "$FIXTURE_MODE"
   set +e
+  cp "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh"
+  python3 - "$control/scripts/report-agent-run.sh" <<'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1]); s=p.read_text()
+needle='-H "X-Agent-Run-Token: $AGENT_RUN_TOKEN"'
+if needle not in s: raise SystemExit('credential reporter mutation target not found')
+p.write_text(s.replace(needle, '-H "X-Agent-Run-Token: wrong-token"', 1))
+PY
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
     AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN=fixture-secret \
     AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
@@ -194,8 +202,13 @@ for harness in codex opencode; do
   control_status=$?
   set -e
   diagnostic=$(<"$FIXTURE_CREDENTIAL_ERRORS")
-  [[ $control_status == 0 && $diagnostic == *'credential header mismatch: expected '\''wrong-token'\'', got '\''fixture-secret'\'''* ]] || { echo "$harness credential mutation failed its same credential assertion: $diagnostic"; exit 1; }
-  echo "fixture $harness credential mutation: $diagnostic"
+  set +e
+  assert_http_result "$control_status" 0 "$control" "$tmp/credential-control-$harness.out" 0 > "$tmp/credential-assert-$harness.out" 2>&1
+  assertion_status=$?
+  set -e
+  assertion_diagnostic=$(<"$tmp/credential-assert-$harness.out")
+  [[ $control_status == 0 && $assertion_status != 0 && $assertion_diagnostic == *"credential header mismatch: expected 'fixture-secret', got 'wrong-token'"* ]] || { echo "$harness credential mutation failed its same credential assertion: $assertion_diagnostic"; exit 1; }
+  echo "fixture $harness credential mutation: $assertion_diagnostic (launcher exit=$control_status)"
 done
 printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
 printf '0' > "$FIXTURE_MODE"
@@ -293,6 +306,10 @@ PY
   echo "fixture $harness opt-out mutation: unchanged request-count assertion failed: $(<"$tmp/optout-assert-$harness.out")"
 done
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
+printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
+: > "$FIXTURE_CREDENTIAL_ERRORS"
+: > "$FIXTURE_RESPONSES"
+printf '0' > "$FIXTURE_MODE"
 zero="$tmp/zero"
 mkdir -p "$zero/scripts" "$zero/.agent-runs" "$zero/../$(basename "$zero")-wt"
 cp "$root/scripts/run-worker.sh" "$zero/scripts/launcher.sh"
@@ -321,12 +338,22 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_inpu
 SH
 chmod +x "$tmp/bin/codex"
 control="$tmp/control"
+printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
+: > "$FIXTURE_CREDENTIAL_ERRORS"
+: > "$FIXTURE_RESPONSES"
+printf '0' > "$FIXTURE_MODE"
 mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
 cp "$root/scripts/run-worker.sh" "$control/scripts/launcher.sh"
 cp "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh"
 git -C "$control" init -q; git -C "$control" config user.email fixture@example.invalid; git -C "$control" config user.name Fixture; git -C "$control" commit --allow-empty -qm fixture; git -C "$control" remote add origin "$tmp/worktree"
 ln -s "$tmp/worktree" "$control/../$(basename "$control")-wt/fixture-branch"
-sed 's/\[\$u\[\].input_tokens/[$u[].output_tokens/' "$root/scripts/run-worker.sh" > "$tmp/mutated-launcher.sh"
+python3 - "$root/scripts/run-worker.sh" "$tmp/mutated-launcher.sh" <<'PY'
+import pathlib,sys
+src=pathlib.Path(sys.argv[1]).read_text()
+needle='[$u[].input_tokens // 0]'
+if needle not in src: raise SystemExit('normalization launcher mutation target not found')
+pathlib.Path(sys.argv[2]).write_text(src.replace(needle, '[$u[].output_tokens // 0]', 1))
+PY
 cp "$tmp/mutated-launcher.sh" "$control/scripts/launcher.sh"
 set +e
 (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 FIXTURE_HTTP_REJECT=0 \
@@ -334,14 +361,18 @@ set +e
  bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/control.out" 2>&1
 control_status=$?
 set -e
-control_diagnostic=$(python3 - "$tmp/request.json" <<'PY'
+set +e
+control_diagnostic=$(python3 - "$tmp/request.json" 2>&1 <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1])); expected=100
 if p.get("input_tokens") != expected:
     print(f"payload mismatch: input_tokens expected {expected}, got {p.get('input_tokens')}")
     sys.exit(1)
 PY
- 2>&1)
+)
+control_assertion_status=$?
+set -e
+[[ $control_assertion_status != 0 ]] || { echo 'normalization assertion unexpectedly accepted mutated payload'; exit 1; }
 [[ $control_status == 0 && $control_diagnostic == *'payload mismatch: input_tokens expected 100, got 20'* ]] || { printf 'normalization control failed unexpectedly (exit=%s): %s\n' "$control_status" "$control_diagnostic"; exit 1; }
 echo "$control_diagnostic"
 echo 'normalization control: exact-payload assertion rejected mutated input token normalization (expected input_tokens=100)'
