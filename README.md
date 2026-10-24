@@ -10,7 +10,7 @@ worker mở PR/MR, coordinator kiểm tra và merge. Agent Ops cho biết:
 Hỗ trợ **GitHub và GitLab** (provider pattern), để dùng được cho repo cá nhân lẫn repo công ty.
 
 Project này cũng được xây **bằng chính quy trình orchestrator-workers** (Codex coordinator + worker).
-Số liệu quá trình xây nằm trong `STATUS.md`.
+Số liệu quá trình xây nằm trong issue ghim **Status board** (label `status-board`).
 
 ## Stack
 
@@ -23,7 +23,7 @@ Số liệu quá trình xây nằm trong `STATUS.md`.
 
 - Agent: `AGENTS.md` (bắt buộc), rồi `ROLES.md`, `FIVE-MINUTES.md`.
 - Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/client-standards.md`.
-- Kế hoạch và trạng thái: `ROADMAP.md`, `STATUS.md`.
+- Kế hoạch: `ROADMAP.md`; trạng thái hiện tại: issue ghim Status board.
 
 ## Run everything locally
 

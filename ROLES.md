@@ -5,7 +5,7 @@
 | Vai | Làm | Không làm |
 | --- | --- | --- |
 | Owner (người) | quyết định, credentials, bước không đảo ngược | |
-| PM | đo, viết issue, sắp thứ tự, giữ `STATUS.md` | code, merge |
+| PM | đo, viết issue, sắp thứ tự, giữ status board (issue ghim) | code, merge |
 | Coordinator | lấy issue, brief, chạy worker, kiểm tra, merge ghim SHA | tự đặt ưu tiên, làm thay worker |
 | Implementer | 1 issue / 1 nhánh / 1 PR, báo phần chưa làm | merge, đụng issue khác |
 | Reviewer | chỉ đọc, tìm false pass | sửa, commit, merge |
@@ -30,7 +30,7 @@ gh pr list && gh issue list --label "status:in progress"
 6. Reviewer độc lập nếu đụng CI/gate/auth.
 7. `gh pr checks <pr>` xanh → `gh pr merge <pr> --squash --match-head-commit <sha> --delete-branch`.
 8. Kiểm nội dung đã vào main; `git worktree remove`.
-9. Issue đóng qua `Closes #n`; cập nhật `STATUS.md`.
+9. Issue đóng qua `Closes #n`; cập nhật status board.
 
 ## Gửi lại khi
 

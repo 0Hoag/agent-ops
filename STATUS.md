@@ -1,9 +1,9 @@
 # Status
 
 ## Now
-- Measured 2026-10-24T05:10Z: main `6c402e5`; code-main CI `40064906909` successful after #163 merged, closing #162. Confirmed smoke script identical to accepted PR head. No merge this pass.
-- Restarted stopped WS-d as detached OpenCode WS-d-r2 (#133/#134), preserving pushed implementation; unblocked #159 and resumed WS-audit-r2 on existing PR #161 (returned 1/2) for current-main gates, successful signed smoke and raw output.
-- Fresh board audit: 64 root and 15 client open issues, none missing status labels, none todo; two detached worker runners verified. No owner decision. Pass: `.agent-runs/coordinator/20261024-0510-pass.md`.
+- Measured 2026-10-24T05:28Z: synced clean main `99c60b5`; no open PR in either repository. Latest main CI queried: successful code run `40064906909` at `6c402e5`; newer main changes are documentation-only.
+- WS-d-r4 stopped without PR after occupied preview port and denied env-file read; four partial harness/docs changes preserved at `3918f8d`. Dispatched detached OpenCode WS-d-r5 for #133/#134/#164 with fresh disposable client and unused ports.
+- Fresh board audit: 64 root and 15 client open issues; none missing status labels, none todo. One detached runner/worker verified (cap 1); WS completion precedes W2+. No owner decision. Pass: `.agent-runs/coordinator/20261024-0528-pass.md`.
 
 ## Waves
 | Wave | State | PR / issues | Harness; next action |
@@ -21,10 +21,10 @@
 | WS-a2 split | merged | #141 | OpenCode; complete |
 | WS-c client conformity | merged | client #22 | OpenCode; env/browser checks recorded |
 | WS runner dispatch | merged | #154 / #151 closed | OpenCode; one send-back; real detached client-root fixture accepted |
-| WS-b API conformity | merged; module audit resumed | #156 / #125–#129 closed; #161/#159 | OpenCode WS-audit-r2; send-back 1/2, current-main evidence pending |
+| WS-b API conformity | merged; module audit accepted | #156 / #125–#129 closed; #161/#159 closed | OpenCode WS-audit-r2; accepted after one send-back; content verified |
 | W2a board API | merged; acceptance complete | #160 / #19/#113 closed | OpenCode W2a-r3; SQL/HTTP/isolation/control evidence accepted |
 | WS-health client | merged | client #25 / #24 closed | OpenCode WS-health-r2; accepted after one send-back |
-| WS-d real-data smoke | resumed; implementation pushed, evidence pending | #133/#134 | OpenCode WS-d-r2; clean-worktree/browser/control evidence and PR due |
+| WS-d real-data smoke | resumed; isolated-port acceptance pending | #133/#134/#164 | OpenCode WS-d-r5; partial repair preserved; smoke/control/README/gates and PR due |
 | WS signed-smoke repair | merged | #163 / #162 closed | OpenCode WS-smoke-envelope; exact-head main CI green, content verified |
 | W3–W17 | planned; dependency-blocked | GitHub issue board | dispatch in roadmap dependency order |
 
@@ -48,5 +48,9 @@ Raw harness fields; USD unverified. Codex input includes cache; OpenCode input e
 | W1e-r2 | OpenCode / openai/gpt-6-luna low | 29,272 | 537,344 | 0 | 4,539 | 929 | accepted; #157 merged after one send-back |
 | WS-audit | OpenCode / openai/gpt-6-luna low | 66,692 | 1,193,600 | 0 | 5,505 | 0 | #161 returned 1/2; blocked on #162 |
 | WS-smoke-envelope | OpenCode / openai/gpt-6-luna low | 38,289 | 177,920 | 0 | 1,787 | 0 | #163 merged; #162 closed |
+| WS-audit-r2 | OpenCode / openai/gpt-6-luna low | 45,227 | 758,272 | 0 | 7,684 | 0 | #161 accepted and merged after one send-back |
+| WS-d-r2 | OpenCode / openai/gpt-6-luna low | 16,130 | 103,296 | 0 | 984 | 0 | stopped at dirty canonical client; no PR |
+| WS-d-r3 | OpenCode / openai/gpt-6-luna low | 34,036 | 165,248 | 0 | 1,366 | 183 | stopped at disabled repository selection; no PR |
+| WS-d-r4 | OpenCode / openai/gpt-6-luna low | 83,502 | 3,430,272 | 0 | 11,091 | 0 | stopped at occupied port/env read denial; partial repair preserved, no PR |
 
-WS-smoke-envelope totals freshly read from its log tail; earlier completed totals are historical. Coordinator usage excluded. WS-d's stopped attempt has no completed log summary; usage unknown, not zero. Resumed attempts have no completed totals yet. #161 remains at `cc0ef2c124bbb815a7d7360972c20ac07b2ddbfe` with green CI on the old head; refreshed signed-smoke and gate evidence is due before review.
+WS-d-r4 totals freshly read from log tail; earlier completed totals are historical. Coordinator usage excluded. Original WS-d attempt has no completed summary; usage unknown, not zero. WS-d-r5 is running without completed totals. #161 accepted head: `caa9880ad074ff54f4c722afe253780cb0579712`.
