@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -15,9 +14,6 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
-	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
-	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
-	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
@@ -78,6 +74,12 @@ func TestConfiguredRepositoriesSelectProvidersCredentialsAndIsolatedPersistence(
 		default:
 			t.Errorf("unexpected provider request: %s", r.RequestURI)
 		}
+		if strings.HasPrefix(r.URL.Path, "/gh/") {
+			require.Equal(t, "Bearer gh-one", credential, "GitHub credential resolution")
+		}
+		if strings.HasPrefix(r.URL.Path, "/gl/") || strings.HasPrefix(r.URL.EscapedPath(), "/gl/") {
+			require.Equal(t, "gl-two", credential, "GitLab credential resolution")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/issues") && strings.Contains(r.URL.Path, "/repos/"):
@@ -113,27 +115,16 @@ func TestConfiguredRepositoriesSelectProvidersCredentialsAndIsolatedPersistence(
 	ids := []store.UUID{store.NewUUID(), store.NewUUID()}
 	query := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET`)
 	for pass := 0; pass < 2; pass++ {
-		err = forEachConfiguredRepository(cfg.Repositories, func(repository config.RepositoryConfig) error {
-			idx := 0
-			if repository.Provider == "gitlab" {
-				idx = 1
-			}
-			provider, buildErr := builder.Build(repository.Provider, scm.Config{Token: os.Getenv(repository.TokenEnv), WebhookSecret: os.Getenv(repository.WebhookSecretEnv), APIBaseURL: os.Getenv(repository.BaseURLEnv)})
-			if buildErr != nil {
-				return buildErr
-			}
-			result, backfillErr := provider.Backfill(context.Background(), repository.FullName)
-			if backfillErr != nil {
-				return backfillErr
-			}
-			require.Len(t, result.Issues, 1)
-			require.Equal(t, repository.FullName, result.Issues[0].Repository)
+		for idx, repository := range cfg.Repositories {
+			mock.ExpectBegin()
+			mock.ExpectExec(regexp.MustCompile(`INSERT INTO "repositories".*ON CONFLICT`).String()).WithArgs(sqlmock.AnyArg(), repository.Provider, repository.FullName, repository.WebhookSecretEnv, sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+			mock.ExpectQuery(regexp.MustCompile(`SELECT \* FROM "repositories"`).String()).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref"}).AddRow(ids[idx], repository.Provider, repository.FullName, repository.WebhookSecretEnv))
 			mock.ExpectBegin()
 			mock.ExpectExec(query.String()).WithArgs(sqlmock.AnyArg(), ids[idx], int64(7), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`[]`), "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectCommit()
-			return persistBackfill(context.Background(), st, ids[idx], result)
-		})
-		require.NoError(t, err)
+		}
+		require.NoError(t, syncConfiguredRepositories(context.Background(), cfg.Repositories, st))
 	}
 	require.Len(t, requests, 12)
 	require.Contains(t, requests[0].uri, "/gh/repos/acme/one/issues?per_page=100&page=1&state=all")
