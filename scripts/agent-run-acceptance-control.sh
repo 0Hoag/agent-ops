@@ -20,7 +20,7 @@ case "$mutation" in
  *) echo "unknown mutation: $mutation" >&2; exit 2;;
 esac
 if [[ $(shasum "$target" | awk '{print $1}') == $(git -C "$tmp" show "HEAD:${target#"$tmp"/}" | shasum | awk '{print $1}') ]]; then echo "control $mutation FAIL: mutation did not change target" >&2; exit 1; fi
-if [[ $mutation == noop ]]; then echo 'control noop passed: unchanged target rejected before execution'; exit 0; fi
+if [[ $mutation == noop ]]; then echo 'control noop passed: wrapper rejected no-op mutation; nested acceptance not invoked'; exit 0; fi
 set +e
 output=$(cd "$tmp" && bash scripts/agent-run-acceptance.sh 2>&1)
 nested_status=$?
@@ -28,3 +28,4 @@ set -e
 printf '%s\n' "$output"
 [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
 if ! printf '%s\n' "$output" | NEEDLE="$pattern" perl -ne 'if (/^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0) { $found=1 } END { exit($found ? 0 : 1) }'; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
+echo "control $mutation passed: nested acceptance exit=$nested_status at '$pattern'; wrapper exit=0"
