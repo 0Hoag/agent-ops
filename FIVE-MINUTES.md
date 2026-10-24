@@ -150,3 +150,13 @@ WS-a6 created a local merge but selected coordinator files from an older main sn
 
 **Check:** fetch main immediately before synchronization and compare STATUS.md/FIVE-MINUTES.md against
 that fetched SHA; retain every current coordinator record before pushing, then verify hosted CI.
+
+## 16. Verify fixture cleanup rather than trusting the evidence text
+
+W1cr11 reported its disposable Postgres removed, but coordinator inspection found it still healthy;
+the smoke script EXIT trap killed only the API, leaving the container and its anonymous volume.
+
+> Cost: manual fixture cleanup before and after coordinator smoke reproduction.
+
+**Check:** inspect both container and mounted volumes after smoke. Install cleanup for every owned
+fixture on every exit; never remove unrelated services. Confirm absence before claiming cleanup.
