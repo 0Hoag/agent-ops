@@ -34,6 +34,13 @@ import json, os
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         assert self.path == "/api/v1/agent-runs", self.path
+        token = self.headers.get("X-Agent-Run-Token", "")
+        expected_token = open(os.environ["FIXTURE_EXPECTED_TOKEN"]).read()
+        if token != expected_token:
+            with open(os.environ["FIXTURE_CREDENTIAL_ERRORS"], "a") as responses:
+                responses.write(f"credential header mismatch: expected {expected_token!r}, got {token!r}\n")
+            self.send_error(400, "credential header mismatch")
+            return
         body = self.rfile.read(int(self.headers["Content-Length"]))
         open(os.environ["FIXTURE_BODY"], "wb").write(body)
         status = 503 if open(os.environ["FIXTURE_MODE"]).read().strip() == "1" else 201
@@ -45,16 +52,19 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
 HTTPServer(("127.0.0.1", int(os.environ["FIXTURE_PORT"])), Handler).serve_forever()
 PY
-export FIXTURE_PORT=$((20000 + $$ % 20000)) FIXTURE_BODY="$tmp/request.json" FIXTURE_RESPONSES="$tmp/responses.log" FIXTURE_MODE="$tmp/mode"
+export FIXTURE_PORT=$((20000 + $$ % 20000)) FIXTURE_BODY="$tmp/request.json" FIXTURE_RESPONSES="$tmp/responses.log" FIXTURE_MODE="$tmp/mode" FIXTURE_EXPECTED_TOKEN="$tmp/expected-token" FIXTURE_CREDENTIAL_ERRORS="$tmp/credential-errors.log"
 touch "$FIXTURE_RESPONSES"
+touch "$FIXTURE_CREDENTIAL_ERRORS"
 printf '0' > "$FIXTURE_MODE"
 python3 "$tmp/server.py" > "$tmp/server.log" 2>&1 & server_pid=$!
 for _ in {1..50}; do if python3 -c 'import socket,sys; s=socket.socket(); s.settimeout(.1); r=s.connect_ex(("127.0.0.1",int(sys.argv[1]))); s.close(); sys.exit(r)' "$FIXTURE_PORT"; then break; fi; sleep .05; done
 
 run_fixture() {
   local harness=$1 expected_status=$2 reject=${3:-0} worker_status=${4:-0}
+  printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
   printf '%s' "$reject" > "$FIXTURE_MODE"
   : > "$FIXTURE_RESPONSES"
+  : > "$FIXTURE_CREDENTIAL_ERRORS"
   local runroot="$tmp/${harness:-codex}-$reject-$worker_status"
   mkdir -p "$runroot/scripts" "$runroot/.agent-runs" "$runroot/../$(basename "$runroot")-wt"
   cp "$root/scripts/report-agent-run.sh" "$runroot/scripts/report-agent-run.sh"
@@ -79,6 +89,11 @@ run_fixture() {
   assert_http_result() {
     local status=$1 expected_status=$2 runroot=$3 output=$4 reject=$5
     [[ $status == $expected_status ]] || { printf 'worker status mismatch: %s\n' "$status"; cat "$output"; return 1; }
+    if [[ -s $FIXTURE_EXPECTED_TOKEN ]]; then
+      [[ ! -s $FIXTURE_CREDENTIAL_ERRORS ]] || { printf '%s\n' "$(<"$FIXTURE_CREDENTIAL_ERRORS")"; return 1; }
+      [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 ]] || { echo 'credential header assertion missing request'; return 1; }
+      [[ $(<"$FIXTURE_RESPONSES") == 201 || $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo 'credential header assertion request failed'; return 1; }
+    fi
     if (( reject != 0 )); then
       grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'HTTP rejection fixture request missing'; return 1; }
       [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo 'HTTP rejection server did not return 503'; return 1; }
@@ -144,7 +159,7 @@ needle='report_agent_run "$usage" "$started_at" "$ended_at" || printf'
 if needle not in s: raise SystemExit('HTTP launcher mutation target not found')
 p.write_text(s.replace(needle, 'report_agent_run "$usage" "$started_at" "$ended_at" || exit $? # || printf', 1))
 PY
-  printf '1' > "$FIXTURE_MODE"; : > "$FIXTURE_RESPONSES"
+  printf '1' > "$FIXTURE_MODE"; : > "$FIXTURE_RESPONSES"; : > "$FIXTURE_CREDENTIAL_ERRORS"; printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
   set +e
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
     AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN=fixture-secret \
@@ -160,6 +175,42 @@ PY
   [[ $assertion_status != 0 && $control_status != 0 && $(<"$tmp/reject-assert-$harness.out") == *'worker status mismatch'* ]] || { echo "$harness rejection control did not fail unchanged worker-status assertion"; cat "$tmp/reject-assert-$harness.out"; exit 1; }
   echo "fixture $harness rejection mutation: unchanged worker-status assertion failed: $(<"$tmp/reject-assert-$harness.out")"
 done
+for harness in codex opencode; do
+  control="$tmp/credential-control-$harness"
+  mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
+  cp "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh"
+  git -C "$control" init -q; git -C "$control" config user.email fixture@example.invalid; git -C "$control" config user.name Fixture; git -C "$control" commit --allow-empty -qm fixture; git -C "$control" remote add origin "$tmp/worktree"
+  ln -sfn "$tmp/worktree" "$control/../$(basename "$control")-wt/fixture-branch"
+  launcher=run-worker.sh
+  [[ $harness == opencode ]] && launcher=run-worker-opencode.sh
+  cp "$root/scripts/$launcher" "$control/scripts/launcher.sh"
+  printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
+  : > "$FIXTURE_CREDENTIAL_ERRORS"; : > "$FIXTURE_RESPONSES"; printf '0' > "$FIXTURE_MODE"
+  set +e
+  cp "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh"
+  python3 - "$control/scripts/report-agent-run.sh" <<'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1]); s=p.read_text()
+needle='-H "X-Agent-Run-Token: $AGENT_RUN_TOKEN"'
+if needle not in s: raise SystemExit('credential reporter mutation target not found')
+p.write_text(s.replace(needle, '-H "X-Agent-Run-Token: wrong-token"', 1))
+PY
+  (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
+    AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN=fixture-secret \
+    AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
+    bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/credential-control-$harness.out" 2>&1
+  control_status=$?
+  set -e
+  diagnostic=$(<"$FIXTURE_CREDENTIAL_ERRORS")
+  set +e
+  assert_http_result "$control_status" 0 "$control" "$tmp/credential-control-$harness.out" 0 > "$tmp/credential-assert-$harness.out" 2>&1
+  assertion_status=$?
+  set -e
+  assertion_diagnostic=$(<"$tmp/credential-assert-$harness.out")
+  [[ $control_status == 0 && $assertion_status != 0 && $assertion_diagnostic == *"credential header mismatch: expected 'fixture-secret', got 'wrong-token'"* ]] || { echo "$harness credential mutation failed its same credential assertion: $assertion_diagnostic"; exit 1; }
+  echo "fixture $harness credential mutation: $assertion_diagnostic (launcher exit=$control_status)"
+done
+printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
 printf '0' > "$FIXTURE_MODE"
 
 # Opt-out baseline and controls use the same fake worker output and inputs.
@@ -234,7 +285,7 @@ if needle not in s: raise SystemExit('opt-out reporter guard mutation target not
 replacement='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0'
 p.write_text(s.replace(needle, replacement, 1))
 PY
-  : > "$FIXTURE_RESPONSES"; printf '0' > "$FIXTURE_MODE"
+  : > "$FIXTURE_RESPONSES"; : > "$FIXTURE_CREDENTIAL_ERRORS"; printf '0' > "$FIXTURE_MODE"; : > "$FIXTURE_EXPECTED_TOKEN"
   set +e
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
     AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" \
@@ -255,6 +306,10 @@ PY
   echo "fixture $harness opt-out mutation: unchanged request-count assertion failed: $(<"$tmp/optout-assert-$harness.out")"
 done
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
+printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
+: > "$FIXTURE_CREDENTIAL_ERRORS"
+: > "$FIXTURE_RESPONSES"
+printf '0' > "$FIXTURE_MODE"
 zero="$tmp/zero"
 mkdir -p "$zero/scripts" "$zero/.agent-runs" "$zero/../$(basename "$zero")-wt"
 cp "$root/scripts/run-worker.sh" "$zero/scripts/launcher.sh"
@@ -283,12 +338,22 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_inpu
 SH
 chmod +x "$tmp/bin/codex"
 control="$tmp/control"
+printf 'fixture-secret' > "$FIXTURE_EXPECTED_TOKEN"
+: > "$FIXTURE_CREDENTIAL_ERRORS"
+: > "$FIXTURE_RESPONSES"
+printf '0' > "$FIXTURE_MODE"
 mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
 cp "$root/scripts/run-worker.sh" "$control/scripts/launcher.sh"
 cp "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh"
 git -C "$control" init -q; git -C "$control" config user.email fixture@example.invalid; git -C "$control" config user.name Fixture; git -C "$control" commit --allow-empty -qm fixture; git -C "$control" remote add origin "$tmp/worktree"
 ln -s "$tmp/worktree" "$control/../$(basename "$control")-wt/fixture-branch"
-sed 's/\[\$u\[\].input_tokens/[$u[].output_tokens/' "$root/scripts/run-worker.sh" > "$tmp/mutated-launcher.sh"
+python3 - "$root/scripts/run-worker.sh" "$tmp/mutated-launcher.sh" <<'PY'
+import pathlib,sys
+src=pathlib.Path(sys.argv[1]).read_text()
+needle='[$u[].input_tokens // 0]'
+if needle not in src: raise SystemExit('normalization launcher mutation target not found')
+pathlib.Path(sys.argv[2]).write_text(src.replace(needle, '[$u[].output_tokens // 0]', 1))
+PY
 cp "$tmp/mutated-launcher.sh" "$control/scripts/launcher.sh"
 set +e
 (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 FIXTURE_HTTP_REJECT=0 \
@@ -296,14 +361,18 @@ set +e
  bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/control.out" 2>&1
 control_status=$?
 set -e
-control_diagnostic=$(python3 - "$tmp/request.json" <<'PY'
+set +e
+control_diagnostic=$(python3 - "$tmp/request.json" 2>&1 <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1])); expected=100
 if p.get("input_tokens") != expected:
     print(f"payload mismatch: input_tokens expected {expected}, got {p.get('input_tokens')}")
     sys.exit(1)
 PY
- 2>&1)
+)
+control_assertion_status=$?
+set -e
+[[ $control_assertion_status != 0 ]] || { echo 'normalization assertion unexpectedly accepted mutated payload'; exit 1; }
 [[ $control_status == 0 && $control_diagnostic == *'payload mismatch: input_tokens expected 100, got 20'* ]] || { printf 'normalization control failed unexpectedly (exit=%s): %s\n' "$control_status" "$control_diagnostic"; exit 1; }
 echo "$control_diagnostic"
 echo 'normalization control: exact-payload assertion rejected mutated input token normalization (expected input_tokens=100)'
