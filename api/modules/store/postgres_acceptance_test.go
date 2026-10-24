@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -149,26 +148,50 @@ func TestPostgresStaleSnapshotAcceptance(t *testing.T) {
 	t.Run("equal and missing timestamps do not overwrite known version", func(t *testing.T) {
 		resetAcceptanceRows(t, db, repositoryID)
 		equal := newer
-		base := &Issue{ID: UUID("33333333-3333-3333-3333-333333333333"), RepositoryID: repositoryID, Number: 1, Title: "new snapshot", State: "closed", Status: "closed", Labels: JSONB(`[]`), UpstreamUpdatedAt: &newer}
-		require.NoError(t, store.Issues.Upsert(ctx, base))
-		for _, at := range []*time.Time{&equal, nil} {
-			candidate := *base
-			candidate.Title = "old snapshot"
-			candidate.State = "open"
-			candidate.UpstreamUpdatedAt = at
-			require.NoError(t, store.Issues.Upsert(ctx, &candidate))
+		for _, entity := range []string{"issue", "pull", "pipeline"} {
+			t.Run(entity, func(t *testing.T) {
+				switch entity {
+				case "issue":
+					base := &Issue{ID: UUID("33333333-3333-3333-3333-333333333333"), RepositoryID: repositoryID, Number: 1, Title: "new snapshot", State: "closed", Status: "closed", Labels: JSONB(`[]`), UpstreamUpdatedAt: &newer}
+					require.NoError(t, store.Issues.Upsert(ctx, base))
+					for _, at := range []*time.Time{&equal, nil} {
+						candidate := *base
+						candidate.Title, candidate.State, candidate.UpstreamUpdatedAt = "old snapshot", "open", at
+						require.NoError(t, store.Issues.Upsert(ctx, &candidate))
+					}
+					var got Issue
+					require.NoError(t, db.Where("repository_id = ? AND number = 1", repositoryID).First(&got).Error)
+					require.Equal(t, "closed", got.State)
+					require.Equal(t, "new snapshot", got.Title)
+					require.True(t, newer.Equal(*got.UpstreamUpdatedAt))
+				case "pull":
+					base := &PullRequest{ID: UUID("44444444-4444-4444-4444-444444444444"), RepositoryID: repositoryID, Number: 2, Title: "new snapshot", State: "closed", HeadSHA: "new", Branch: "main", Closes: JSONB(`[]`), UpstreamUpdatedAt: &newer}
+					require.NoError(t, store.PullRequests.Upsert(ctx, base))
+					for _, at := range []*time.Time{&equal, nil} {
+						candidate := *base
+						candidate.Title, candidate.State, candidate.UpstreamUpdatedAt = "old snapshot", "open", at
+						require.NoError(t, store.PullRequests.Upsert(ctx, &candidate))
+					}
+					var got PullRequest
+					require.NoError(t, db.Where("repository_id = ? AND number = 2", repositoryID).First(&got).Error)
+					require.Equal(t, "closed", got.State)
+					require.Equal(t, "new snapshot", got.Title)
+					require.True(t, newer.Equal(*got.UpstreamUpdatedAt))
+				case "pipeline":
+					base := &PipelineRun{ID: UUID("55555555-5555-5555-5555-555555555555"), RepositoryID: repositoryID, ExternalID: "3", SHA: "new", Status: "completed", Conclusion: "success", StartedAt: &newer, UpstreamUpdatedAt: &newer}
+					require.NoError(t, store.PipelineRuns.Upsert(ctx, base))
+					for _, at := range []*time.Time{&equal, nil} {
+						candidate := *base
+						candidate.SHA, candidate.Status, candidate.UpstreamUpdatedAt = "old", "running", at
+						require.NoError(t, store.PipelineRuns.Upsert(ctx, &candidate))
+					}
+					var got PipelineRun
+					require.NoError(t, db.Where("repository_id = ? AND external_id = '3'", repositoryID).First(&got).Error)
+					require.Equal(t, "completed", got.Status)
+					require.Equal(t, "new", got.SHA)
+					require.True(t, newer.Equal(*got.UpstreamUpdatedAt))
+				}
+			})
 		}
-		var got Issue
-		require.NoError(t, db.Where("repository_id = ? AND number = 1", repositoryID).First(&got).Error)
-		require.Equal(t, "closed", got.State)
-		require.Equal(t, "new snapshot", got.Title)
-		require.True(t, newer.Equal(*got.UpstreamUpdatedAt))
 	})
-}
-
-func resetAcceptanceRows(t *testing.T, db *gorm.DB, repositoryID UUID) {
-	t.Helper()
-	for _, table := range []string{"issues", "pull_requests", "pipeline_runs"} {
-		require.NoError(t, db.Exec(fmt.Sprintf("DELETE FROM %s WHERE repository_id = ?", table), repositoryID).Error)
-	}
 }

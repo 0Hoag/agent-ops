@@ -1,50 +1,46 @@
-# W1d stale snapshot evidence
+# W1d stale snapshot acceptance evidence
 
-## Implementation
+## Coverage
 
-Issues, pull requests, and pipeline runs now persist nullable `upstream_updated_at` separately from local `updated_at`.
-Their PostgreSQL `ON CONFLICT` updates use an atomic freshness predicate: a strictly newer non-null upstream timestamp
-updates the row; an equal or older timestamp does not; a missing timestamp cannot replace a known timestamp. Two
-missing timestamps remain duplicate-safe. Webhook and backfill mappers bind the provider-normalized timestamp.
+Sync backfill tests bind non-zero provider `UpdatedAt` values and assert the conflict keys and every original update assignment plus `upstream_updated_at`/freshness predicate for issue, pull request, and pipeline. Their disposable controls remove one sync mapper revision at a time; the focused test fails on the intended argument mismatch (`expected ... 2026-01-02 03:00:00 UTC`, `actual <nil>`).
 
-Migration `003_add_upstream_updated_at.sql` is append-only and adds the three columns and indexes.
+Webhook coverage calls `persistEvent` directly with a non-zero revision, asserting the bound timestamp for all three entities. This is service-persistence coverage, not a signed-POST test. Existing HMAC and repository-binding tests remain unchanged. In a disposable worktree, removing only the issue, pull-request, or pipeline `UpstreamUpdatedAt: upstreamTime(...)` mapping in turn made its corresponding focused subtest fail on the timestamp argument (`expected [time.Time ...]`, `actual [<nil>]`).
 
-## Reproduction
+PostgreSQL acceptance runs actual production migrations and the actual issue, pull-request, and pipeline `Upsert` repositories. It covers both arrival orders, concurrent writers, state/value/revision, equal and missing candidates for each entity, and duplicate missing timestamps. A separate disposable worktree removed all three production repository `Where` freshness predicates (no handwritten SQL substitution); the same acceptance test failed with stale values: `newer-first` issue `closed`→`open`, concurrent issue `closed`→`open`, equal/missing issue and pull request `closed`→`open`, pipeline `completed`→`running`.
 
-Measured acceptance head: `870c7ca4fd6f342189ef13c4acf6afd16b75d04f`. The focused test uses
-`database.RunMigrations` and the actual `store.Issues`, `store.PullRequests`, and `store.PipelineRuns.Upsert` repository
-methods against a disposable PostgreSQL 16 container. The test exercises issue/PR/pipeline both arrival orders,
-concurrent writers, normalized state/value plus timestamp, equal/missing timestamp policy and null-timestamp
-duplicate safety. Webhook and sync mapping tests continue asserting timestamp binding.
+## Measured commands and results
+
+API test commit: `a01672de236a4f6cb7d078517927cec3b4de47f1`.
 
 ```sh
 cd api
-docker run --detach --rm --name w1d-accept-20261024 -e POSTGRES_USER=w1d -e POSTGRES_PASSWORD=w1d -e POSTGRES_DB=w1d -p 127.0.0.1:55441:5432 postgres:16-alpine
-W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
-W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotPredicateControl$' -count=1 -v
-docker rm -f w1d-accept-20261024
+GOCACHE=/tmp/w1d-gocache go test ./cmd/sync ./modules/webhook ./modules/store
+# PASS: all three packages
+go vet ./...
+# PASS (exit 0)
+golangci-lint run
+# PASS (0 issues)
+go test ./...
+# PASS: all packages
+go build ./...
+# PASS (exit 0)
+git diff --check
+# PASS (exit 0)
 ```
 
-Result: PASS for `newer-first`, `older-first`, missing-timestamp duplicate safety for all three entities, `concurrent_writers`, and
-`equal_and_missing_timestamps_do_not_overwrite_known_version`. The test applies all embedded production migrations,
-including versions 001–003.
+Production PostgreSQL 16 baseline:
 
-Predicate-removal control: `TestPostgresStaleSnapshotPredicateControl` runs a disposable unconditional conflict update
-(the production assignment set, with its `WHERE` freshness predicate omitted) and asserts newer issue state/value.
-Against the disposable PostgreSQL fixture, it failed as intended: `expected: "closed" actual: "open"`, diagnostic
-`predicate removal should expose stale overwrite: expected newer state closed, got "open"`. This distinguishes actual
-state corruption from fixture setup failure.
+```sh
+W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55443 user=w1d password=w1d dbname=w1d sslmode=disable' \
+  go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
+```
 
-Cleanup: the named container ran with `--rm` and was additionally stopped/removed with `docker rm -f` after both test
-runs. Inspected `docker ps` afterward: no `w1d-accept-20261024` container; inspected volume inventory: no volume owned
-by this fixture (anonymous volume count unchanged by disposable run). No API process was started. Existing Postgres,
-Redis, MongoDB and RabbitMQ containers were only inspected and left untouched.
+Result: PASS for `newer-first`, `older-first`, duplicate missing timestamps, `concurrent writers`, and equal/missing policy for issue, pull request, and pipeline. The test applies all production migrations (001–003). Disposable actual-predicate-removal control: the same test failed on the stale state/value diagnostics listed above, not on migration or fixture setup.
 
-The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at `870c7ca`:
-vet exit 0; lint reported `0 issues`; tests passed for sync, store, webhook, database and SCM packages; build exit 0.
-Exact-head hosted API CI run `40045744857` on `4236d77edd45490db053ef997d6aa64b9defee4d` completed successfully:
-vet, golangci-lint, test, build and job completion all passed.
+Both final acceptance runs installed EXIT cleanup using `docker rm -fv`: baseline fixture `w1d153-exit-base` passed (exit 0), and actual-predicate-removal fixture `w1d153-exit-control` failed as intended (exit 1). The baseline anonymous volume `0de1c1a900fc396556abec5e58e053ed1d8e466cba744ea75dcfdd49466e65b0` and control anonymous volume `82e2bd6690c0e3d17928b9c49e53d7371bf3bcee8afafd9493934a9c6b0b6b35` were each confirmed absent by `docker volume inspect`; `docker ps -a` showed neither owned container. Earlier trial fixtures `w1d153-baseline`, `w1d153-baseline2`, `w1d153-control`, and `w1d153-exit-control` were also verified absent with their anonymous volumes; no unrelated containers were changed.
+
+Hosted API CI on exact test head `a01672de236a4f6cb7d078517927cec3b4de47f1`: run `40048072350`, `API` job PASS.
 
 ## Not covered
 
-- None; final evidence commit triggers a subsequent hosted CI run.
+Client, coordinator records, runner, workflow, and unrelated services are outside scope. Hosted CI for the final evidence-document commit must pass on its exact head.
