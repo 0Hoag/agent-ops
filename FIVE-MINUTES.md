@@ -191,3 +191,13 @@ explicit GH_ARGS repaired the operation.
 
 **Check:** run coordinator helpers from their owning checkout or use their absolute path; select the
 target repository explicitly rather than changing the helper's working directory.
+
+## 20. Count aggregate values, not aggregate result lines
+
+W1e's smoke checked `grep -c '^raw|'` and `grep -c '^issue|'` against aggregate SQL output. Each query
+always returns one line; coordinator reproduced `raw|2` and `issue|2` passing the exactly-one checks.
+
+> Cost: smoke PR #157 returned and follow-up #158 before acceptance could be trusted.
+
+**Check:** compare the exact expected snapshot or parsed numeric counts; inject an extra persisted row
+and require the real count assertion to fail, rather than relying on a generic forced-failure hook.
