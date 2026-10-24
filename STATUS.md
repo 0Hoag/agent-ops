@@ -15,7 +15,7 @@ Baseline `[M]` on 2026-10-24: `git rev-parse HEAD` = `ec7a6941946f00c5a61d62a391
 | W1d stale snapshots | queued | | #119; after W1c, before board API acceptance |
 | W2b board UI | merged | [#115](https://github.com/0Hoag/agent-ops/pull/115) | #20/#21/#120 closed; merge confirmed by gh at 2026-10-23T20:49:54Z; W2br supplied fixture browser/mutation evidence |
 | WS-a1 client bootstrap | merged | [client #1](https://github.com/0Hoag/agent-ops-client/pull/1) | #121–#123/#138/#139 closed; coordinator final-head gate passes; scoped merge diff empty; client main CI green |
-| WS-a2 split completion | returned, finalizing | [#141](https://github.com/0Hoag/agent-ops/pull/141) | WS-a5 corrected dependency/provenance and PR metadata; this pass restored current coordinator records and synchronized split with main; exact-head hosted CI pending |
+| WS-a2 split completion | returned, finalizing | [#141](https://github.com/0Hoag/agent-ops/pull/141) | WS-a5 corrected dependency/provenance and PR metadata; this pass restored current coordinator records and synchronized split with main; pushed `947f87f5b9a5ee4d504d14a16677b5612268924c`; GitHub reports UNKNOWN mergeability and no checks yet |
 
 ## Autopilot single pass — 2026-10-24
 
