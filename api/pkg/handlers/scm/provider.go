@@ -60,6 +60,7 @@ type PipelineRun struct {
 	Conclusion string
 	StartedAt  time.Time
 	FinishedAt *time.Time
+	UpdatedAt  time.Time
 }
 
 // Event contains normalized data and the delivery metadata needed for idempotency.

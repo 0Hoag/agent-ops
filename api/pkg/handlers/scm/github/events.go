@@ -178,5 +178,5 @@ func mapRun(raw runJSON, repo string) scm.PipelineRun {
 	if raw.Conclusion != "" {
 		finished = &raw.UpdatedAt
 	}
-	return scm.PipelineRun{ExternalID: strconv.FormatInt(raw.ID, 10), Repository: repo, PRNumber: pr, SHA: raw.SHA, Status: raw.Status, Conclusion: raw.Conclusion, StartedAt: raw.RunStarted, FinishedAt: finished}
+	return scm.PipelineRun{ExternalID: strconv.FormatInt(raw.ID, 10), Repository: repo, PRNumber: pr, SHA: raw.SHA, Status: raw.Status, Conclusion: raw.Conclusion, StartedAt: raw.RunStarted, FinishedAt: finished, UpdatedAt: raw.UpdatedAt}
 }

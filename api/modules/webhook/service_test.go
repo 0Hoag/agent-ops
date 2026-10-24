@@ -161,7 +161,7 @@ func TestControllerHandleBindsSignedPayloadToConfiguredRepository(t *testing.T) 
 		mock.ExpectBegin()
 		mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("github", repositoryA, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "created_at", "updated_at"}).AddRow(repositoryAID, "github", repositoryA, "GITHUB_A_SECRET", nil, nil))
 		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WithArgs(sqlmock.AnyArg(), repositoryAID, "github", "issues", "delivery-a", payloadContains("org/a"), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WithArgs(sqlmock.AnyArg(), repositoryAID, int64(1), "signed issue", "open", "review", sqlmock.AnyArg(), "", sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WithArgs(sqlmock.AnyArg(), repositoryAID, int64(1), "signed issue", "open", "review", sqlmock.AnyArg(), "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-a", sign(payload, secretA))
 		if response.Code != http.StatusOK {

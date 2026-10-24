@@ -28,22 +28,22 @@ func TestPersistBackfillTwiceUpsertsStableEntitiesAndNormalizedStates(t *testing
 		Issues:       []scm.Issue{{Number: 31, Title: "closed issue", State: "closed", Status: scm.StatusDone, Labels: []string{"accepted"}, Assignee: "reviewer"}},
 		PullRequests: []scm.PullRequest{{Number: 32, Title: "merged PR", State: "closed", Merged: true, MergedAt: &mergedAt, HeadSHA: "abc", HeadBranch: "main"}},
 	}
-	issueInsert := regexp.MustCompile(`INSERT INTO "issues" \("id","repository_id","number","title","state","status","labels","assignee","created_at","updated_at"\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10\) ON CONFLICT \("repository_id","number"\) DO UPDATE SET "assignee"=EXCLUDED\.assignee,"labels"=EXCLUDED\.labels,"state"=EXCLUDED\.state,"status"=EXCLUDED\.status,"title"=EXCLUDED\.title,"updated_at"=NOW\(\)`)
-	pullInsert := regexp.MustCompile(`INSERT INTO "pull_requests" \("id","repository_id","number","title","state","head_sha","branch","closes","merged_at","created_at","updated_at"\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$11\) ON CONFLICT \("repository_id","number"\) DO UPDATE SET "branch"=EXCLUDED\.branch,"closes"=EXCLUDED\.closes,"head_sha"=EXCLUDED\.head_sha,"merged_at"=EXCLUDED\.merged_at,"state"=EXCLUDED\.state,"title"=EXCLUDED\.title,"updated_at"=NOW\(\)`)
-	pipelineInsert := regexp.MustCompile(`INSERT INTO "pipeline_runs" \("id","repository_id","external_id","pr_number","sha","status","conclusion","started_at","finished_at","created_at","updated_at"\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$11\) ON CONFLICT \("repository_id","external_id"\) DO UPDATE SET "conclusion"=EXCLUDED.conclusion,"finished_at"=EXCLUDED.finished_at,"pr_number"=EXCLUDED.pr_number,"sha"=EXCLUDED.sha,"started_at"=EXCLUDED.started_at,"status"=EXCLUDED.status,"updated_at"=NOW\(\)`)
+	issueInsert := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT.*WHERE .*upstream_updated_at`)
+	pullInsert := regexp.MustCompile(`INSERT INTO "pull_requests".*ON CONFLICT.*WHERE .*upstream_updated_at`)
+	pipelineInsert := regexp.MustCompile(`INSERT INTO "pipeline_runs".*ON CONFLICT.*WHERE .*upstream_updated_at`)
 	startedAt := time.Date(2026, 1, 2, 2, 0, 0, 0, time.UTC)
 	finishedAt := time.Date(2026, 1, 2, 4, 0, 0, 0, time.UTC)
 	pipelinePRNumber := 32
 	result.PipelineRuns = []scm.PipelineRun{{ExternalID: "run-33", PRNumber: &pipelinePRNumber, SHA: "def", Status: "completed", Conclusion: "success", StartedAt: startedAt, FinishedAt: &finishedAt}}
 	for pass := 0; pass < 2; pass++ {
 		mock.ExpectBegin()
-		mock.ExpectExec(issueInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, int64(31), "closed issue", "closed", "done", []byte(`["accepted"]`), "reviewer", sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(issueInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, int64(31), "closed issue", "closed", "done", []byte(`["accepted"]`), "reviewer", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		mock.ExpectBegin()
-		mock.ExpectExec(pullInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, int64(32), "merged PR", "closed", "abc", "main", []byte("null"), mergedAt, sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(pullInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, int64(32), "merged PR", "closed", "abc", "main", []byte("null"), mergedAt, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		mock.ExpectBegin()
-		mock.ExpectExec(pipelineInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, "run-33", int64(32), "def", "completed", "success", startedAt, finishedAt, sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(pipelineInsert.String()).WithArgs(sqlmock.AnyArg(), repoID, "run-33", int64(32), "def", "completed", "success", startedAt, finishedAt, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		require.NoError(t, persistBackfill(context.Background(), st, repoID, result))
 	}
