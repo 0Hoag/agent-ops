@@ -130,3 +130,13 @@ guards still passed every focused test in the coordinator's disposable control.
 
 **Check:** independently observe unexpected database access, including Begin, and require guard-removal
 controls to fail an explicit access assertion; returned database errors must not stand in for rejection.
+
+## 14. Missing pull-request CI can be a merge-conflict symptom
+
+WS-a5 pushed and reopened split PR #141 but stopped without hosted CI. Coordinator measured
+`mergeable=CONFLICTING`; `git merge-tree` reproduced conflicts in STATUS.md and FIVE-MINUTES.md.
+
+> Cost: another split finalization retry before exact-head CI could run.
+
+**Check:** inspect PR mergeability and reproduce conflicts before retrying triggers. Synchronize main
+without losing coordinator records, then require hosted CI on the resulting full head SHA.
