@@ -76,7 +76,27 @@ run_fixture() {
     bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/$harness.out" 2>&1
   local status=$?
   set -e
-  [[ $status == $expected_status ]] || { printf 'worker status mismatch: %s\n' "$status"; cat "$tmp/$harness.out"; return 1; }
+  assert_http_result() {
+    local status=$1 expected_status=$2 runroot=$3 output=$4 reject=$5
+    [[ $status == $expected_status ]] || { printf 'worker status mismatch: %s\n' "$status"; cat "$output"; return 1; }
+    if (( reject != 0 )); then
+      grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'HTTP rejection fixture request missing'; return 1; }
+      [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo 'HTTP rejection server did not return 503'; return 1; }
+    fi
+    [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; return 1; }
+    [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode final report missing'; return 1; }
+  }
+  if (( reject != 0 )); then
+    # Keep control execution on the common assertion below; capture the failure
+    # for the outer proof while retaining observed request evidence.
+    set +e
+    assert_http_result "$status" "$expected_status" "$runroot" "$tmp/$harness.out" "$reject"
+    local assertion_status=$?
+    set -e
+    [[ $assertion_status == 0 ]] || return "$assertion_status"
+  else
+    assert_http_result "$status" "$expected_status" "$runroot" "$tmp/$harness.out" "$reject"
+  fi
   if (( worker_status != 0 )); then
     grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'failed-worker report missing'; return 1; }
   fi
@@ -90,12 +110,8 @@ assert "fixture-secret" not in json.dumps(p) and "transcript" not in json.dumps(
 PY
     fi
   else
-    grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'HTTP rejection fixture request missing'; return 1; }
-    [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo 'HTTP rejection server did not return 503'; return 1; }
+    :
   fi
-  [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; return 1; }
-  [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode final report missing'; return 1; }
-  [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode summary missing'; return 1; }
   ! grep -Eq 'fixture-secret|transcript' "$runroot/.agent-runs/W3b.jsonl" "$tmp/$harness.out"
   if [[ $harness == opencode ]]; then ! grep -Eq 'fixture-secret|transcript' "$runroot/.agent-runs/W3b.md"; fi
   printf 'fixture %s reject=%s worker=%s exit=%s passed\n' "${harness:-codex}" "$reject" "$worker_status" "$status"
@@ -138,8 +154,7 @@ PY
   set -e
   [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo "$harness rejection mutation did not reach fake server"; exit 1; }
   set +e
-  ( [[ $control_status == 0 ]] || { echo "worker status mismatch: $control_status"; cat "$tmp/reject-control-$harness.out"; exit 1; }
-    [[ -f $control/.agent-runs/W3b.jsonl && -f $control/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; exit 1; } ) > "$tmp/reject-assert-$harness.out" 2>&1
+  assert_http_result "$control_status" 0 "$control" "$tmp/reject-control-$harness.out" 1 > "$tmp/reject-assert-$harness.out" 2>&1
   assertion_status=$?
   set -e
   [[ $assertion_status != 0 && $control_status != 0 && $(<"$tmp/reject-assert-$harness.out") == *'worker status mismatch'* ]] || { echo "$harness rejection control did not fail unchanged worker-status assertion"; cat "$tmp/reject-assert-$harness.out"; exit 1; }
@@ -147,16 +162,21 @@ PY
 done
 printf '0' > "$FIXTURE_MODE"
 
-# Opt-out baseline and controls use the same explicit empty token, valid
-# repository ID, and owned fake-server URL.
+# Opt-out baseline and controls use the same fake worker output and inputs.
 unset FIXTURE_BODY
 : > "$FIXTURE_RESPONSES"
 response_count_before=$(wc -l < "$FIXTURE_RESPONSES")
 cat > "$tmp/bin/codex" <<'SH'
 #!/usr/bin/env bash
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":100}}'
 exit 0
 SH
-chmod +x "$tmp/bin/codex"
+cat > "$tmp/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"step_finish","part":{"tokens":{"input":100}}}' '{"type":"text","part":{"text":"fixture final"}}'
+exit 0
+SH
+chmod +x "$tmp/bin/codex" "$tmp/bin/opencode"
 noapi="$tmp/noapi"
 mkdir -p "$noapi/scripts" "$noapi/.agent-runs" "$noapi/../$(basename "$noapi")-wt"
 cp "$root/scripts/run-worker.sh" "$noapi/scripts/launcher.sh"
@@ -165,17 +185,34 @@ git -C "$noapi" init -q; git -C "$noapi" config user.email fixture@example.inval
 mkdir -p "$noapi/../$(basename "$noapi")-wt"
 ln -sfn "$tmp/worktree" "$noapi/../$(basename "$noapi")-wt/fixture-branch"
 git -C "$noapi" remote add origin "$tmp/worktree"
-(cd "$noapi" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
+run_optout_assertion() {
+  local actual=$1
+  [[ $actual -eq $response_count_before ]] || { echo "opt-out unexpectedly sent a request (baseline=$response_count_before actual=$actual)"; return 1; }
+}
+run_optout() {
+local harness=$1 runroot=$2
+(cd "$runroot" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
   AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN='' \
   AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
-  bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/noapi.out" 2>&1
-[[ -f $noapi/.agent-runs/W3b.jsonl && -f $noapi/.agent-runs/W3b-usage.json ]] || { echo 'empty-usage local output missing'; exit 1; }
-python3 - "$noapi/.agent-runs/W3b-usage.json" <<'PY'
+  bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/optout-$harness.out" 2>&1
+  local requests=$(wc -l < "$FIXTURE_RESPONSES" | tr -d ' ')
+  run_optout_assertion "$requests"
+}
+for harness in codex opencode; do
+  runroot="$tmp/noapi-$harness"
+  mkdir -p "$runroot/scripts" "$runroot/.agent-runs" "$runroot/../$(basename "$runroot")-wt"
+  cp "$root/scripts/$([[ $harness == codex ]] && printf run-worker.sh || printf run-worker-opencode.sh)" "$runroot/scripts/launcher.sh"
+  cp "$root/scripts/report-agent-run.sh" "$runroot/scripts/report-agent-run.sh"
+  git -C "$runroot" init -q; git -C "$runroot" config user.email fixture@example.invalid; git -C "$runroot" config user.name Fixture; git -C "$runroot" commit --allow-empty -qm fixture; git -C "$runroot" remote add origin "$tmp/worktree"
+  ln -sfn "$tmp/worktree" "$runroot/../$(basename "$runroot")-wt/fixture-branch"
+  run_optout "$harness" "$runroot"
+  [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json ]] || { echo 'empty-usage local output missing'; exit 1; }
+  python3 - "$runroot/.agent-runs/W3b-usage.json" <<'PY'
 import json,sys
-u=json.load(open(sys.argv[1])); assert all(u.get(k)==0 for k in ("input","cached_input","cache_write","output","reasoning")),u
+u=json.load(open(sys.argv[1])); assert u.get("input")==100,u
 PY
+done
 echo 'fixture opt-out passed'
-[[ $(wc -l < "$FIXTURE_RESPONSES") -eq $response_count_before ]] || { echo 'opt-out unexpectedly sent a request'; exit 1; }
 
 # Both harnesses must reject bypassing the actual reporter opt-out guard.
 # Identical inputs make the mutated guard send the empty-token request.
@@ -197,12 +234,6 @@ if needle not in s: raise SystemExit('opt-out reporter guard mutation target not
 replacement='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0'
 p.write_text(s.replace(needle, replacement, 1))
 PY
-  cat > "$tmp/bin/$harness" <<'SH'
-#!/usr/bin/env bash
-printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":100}}' '{"type":"step_finish","part":{"tokens":{"input":100}}}'
-exit 0
-SH
-  chmod +x "$tmp/bin/$harness"
   : > "$FIXTURE_RESPONSES"; printf '0' > "$FIXTURE_MODE"
   set +e
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
@@ -217,7 +248,7 @@ SH
   mutation_count=$(wc -l < "$FIXTURE_RESPONSES" | tr -d ' ')
   [[ $mutation_count -eq 1 ]] || { echo "$harness opt-out mutation did not reach fake server exactly once (count=$mutation_count)"; cat "$tmp/optout-control-$harness.out"; cat "$tmp/server.log"; exit 1; }
   set +e
-  ( [[ $mutation_count -eq $response_count_before ]] || { echo "opt-out unexpectedly sent a request (baseline=$response_count_before actual=$mutation_count)"; exit 1; } ) > "$tmp/optout-assert-$harness.out" 2>&1
+  run_optout_assertion "$mutation_count" > "$tmp/optout-assert-$harness.out" 2>&1
   assertion_status=$?
   set -e
   [[ $assertion_status != 0 && $(<"$tmp/optout-assert-$harness.out") == *'opt-out unexpectedly sent a request'* ]] || { echo "$harness unchanged opt-out assertion did not fail with request diagnostic"; cat "$tmp/optout-assert-$harness.out"; exit 1; }
