@@ -74,8 +74,8 @@ func TestSubmitPayloadCheckpointAfterSuccessAndDeduplicatesAcrossInvocations(t *
 	require.Equal(t, 2, requests)
 	require.Equal(t, []string{"top-secret", "top-secret"}, headers)
 	wantPayloads := []map[string]any{
-		{"repository_id": "00000000-0000-0000-0000-000000000001", "wave": "W3d", "worker": "test", "model": "claude-test", "issue_numbers": nil, "input_tokens": float64(7), "cached_input_tokens": float64(5), "cache_write_tokens": float64(6), "output_tokens": float64(8), "reasoning_tokens": float64(0), "started_at": "2026-10-24T02:00:00Z", "ended_at": "2026-10-24T02:00:00Z"},
-		{"repository_id": "00000000-0000-0000-0000-000000000001", "wave": "W3d", "worker": "test", "model": "claude-test", "issue_numbers": nil, "input_tokens": float64(10), "cached_input_tokens": float64(3), "cache_write_tokens": float64(2), "output_tokens": float64(4), "reasoning_tokens": float64(0), "started_at": "2026-10-24T01:00:00Z", "ended_at": "2026-10-24T01:00:00Z"},
+		{"repository_id": "00000000-0000-0000-0000-000000000001", "wave": "W3d", "worker": "test", "model": "claude-test", "issue_numbers": []any{}, "input_tokens": float64(7), "cached_input_tokens": float64(5), "cache_write_tokens": float64(6), "output_tokens": float64(8), "reasoning_tokens": float64(0), "started_at": "2026-10-24T02:00:00Z", "ended_at": "2026-10-24T02:00:00Z"},
+		{"repository_id": "00000000-0000-0000-0000-000000000001", "wave": "W3d", "worker": "test", "model": "claude-test", "issue_numbers": []any{}, "input_tokens": float64(10), "cached_input_tokens": float64(3), "cache_write_tokens": float64(2), "output_tokens": float64(4), "reasoning_tokens": float64(0), "started_at": "2026-10-24T01:00:00Z", "ended_at": "2026-10-24T01:00:00Z"},
 	}
 	for i, body := range bodies {
 		require.NotContains(t, body, "DO NOT LOG")

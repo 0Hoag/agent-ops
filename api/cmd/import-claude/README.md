@@ -20,3 +20,12 @@ AGENT_RUN_TOKEN=secret go run ./cmd/import-claude \
   -repository-id 00000000-0000-0000-0000-000000000001 \
   -endpoint http://127.0.0.1:8080/api/v1/agent-runs
 ```
+
+## Real persisted-repeat acceptance
+
+Run `./persisted-repeat.sh` from this directory. It builds the importer and API, starts a uniquely named
+PostgreSQL fixture with a dynamically selected host port other than 5432, seeds one repository, then runs
+the compiled importer twice as separate processes against the same checkpoint and database. It queries the
+actual `agent_runs` rows after each invocation and asserts the exact count and token sums are unchanged on
+the second run. The script removes only its own compose project and verifies its containers, volumes, and
+API listener are absent on exit.

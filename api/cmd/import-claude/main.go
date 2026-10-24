@@ -31,7 +31,7 @@ func (s apiSubmitter) Submit(ctx context.Context, in session) error {
 		ReasoningTokens   int64     `json:"reasoning_tokens"`
 		StartedAt         time.Time `json:"started_at"`
 		EndedAt           time.Time `json:"ended_at"`
-	}{s.repository, s.wave, s.worker, in.Model, nil, in.Usage.Input, in.Usage.CachedInput, in.Usage.CacheWrite, in.Usage.Output, in.Usage.Reasoning, in.Started, in.Ended}
+	}{s.repository, s.wave, s.worker, in.Model, []int64{}, in.Usage.Input, in.Usage.CachedInput, in.Usage.CacheWrite, in.Usage.Output, in.Usage.Reasoning, in.Started, in.Ended}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return err
