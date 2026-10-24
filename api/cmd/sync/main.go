@@ -13,6 +13,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
+	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 )
 
 func main() {
