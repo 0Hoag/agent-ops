@@ -180,3 +180,14 @@ the API checkout, outside the client's permitted readable paths. No acceptance w
 
 **Check:** inline the complete remaining contract and measured RESUME in the dispatched prompt; every
 required file reference must be readable from the worker's actual session root and permissions.
+
+## 19. Resolve coordinator helper paths independently of the target repository
+
+Coordinator invoked the root issue-status helper from the client bootstrap checkout, where that helper
+does not exist. The command failed before any issue metadata changed; rerunning from the API root with
+explicit GH_ARGS repaired the operation.
+
+> Cost: one failed metadata-cleanup command during a merge pass.
+
+**Check:** run coordinator helpers from their owning checkout or use their absolute path; select the
+target repository explicitly rather than changing the helper's working directory.
