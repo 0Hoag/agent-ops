@@ -40,6 +40,19 @@ host process.
 
 ## Run everything locally
 
+Prerequisites: Docker with Compose and a sibling client checkout. From the repository root, start the complete persistent local stack (four commands):
+
+```sh
+export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
+docker compose config
+docker compose up --build -d
+curl -f http://localhost:${SMOKE_CLIENT_PORT:-4173}/healthz && curl -f http://localhost:${SMOKE_CLIENT_PORT:-4173}/readyz
+```
+
+Open `http://localhost:4173` for the board and runs dashboard. The client proxies `/api/*`, `/healthz`, and `/readyz` to the API over the Compose network; the browser never receives the agent-run write token. Set `CLIENT_DIR` to the client source directory, `SMOKE_CLIENT_PORT` for the client host port (default 4173), `SMOKE_API_PORT` for direct API access (default 18080), and `POSTGRES_HOST_PORT` for Postgres (default 5432). Postgres credentials are development-only defaults in Compose. Data persists in the named `agent_ops_postgres` volume; stop with `docker compose down` (do not add `-v` to preserve data).
+
+## Browser smoke test
+
 Prerequisites: Docker with Compose, Node.js 20.19+ and pnpm 11.21+, and Chromium available to Playwright (`pnpm exec playwright install chromium` once in the client checkout if needed). The smoke uses `~/agent-ops-client` by default, cloning it if absent and only fast-forwarding a clean checkout. To avoid modifying a canonical checkout with user changes, use a clean disposable client clone and set `CLIENT_DIR` as shown below. No external credentials or shared database are used; the smoke creates an isolated Postgres/API stack and disposable repository, issue, pull request, and CI fixtures.
 
 From a fresh `agent-ops` worktree, run these commands (the smoke clones the client automatically when it does not exist):
