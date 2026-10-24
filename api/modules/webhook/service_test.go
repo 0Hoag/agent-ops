@@ -51,6 +51,12 @@ func TestValidEntity(t *testing.T) {
 	}
 }
 
+func TestEventTypeUsesProviderHeader(t *testing.T) {
+	h := http.Header{"X-GitHub-Event": []string{"issues"}, "X-Gitlab-Event": []string{"Issue Hook"}}
+	require.Equal(t, "issues", eventType("github", h))
+	require.Equal(t, "Issue Hook", eventType("gitlab", h))
+}
+
 type fakeProvider struct{}
 
 func (fakeProvider) VerifyWebhook(context.Context, http.Header, []byte) error { return nil }

@@ -57,15 +57,22 @@ func (service *Service) VerifyConfigured(ctx context.Context, provider, secret, 
 }
 
 func (service *Service) IngestParsed(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
-	event, err := providerClient.ParseEvent(ctx, header(h, "X-GitHub-Event"), h, payload)
+	event, err := providerClient.ParseEvent(ctx, eventType(provider, h), h, payload)
 	if err != nil || !strings.EqualFold(event.Repository, configuredRepository) {
 		return false, ErrCandidateMismatch
 	}
 	return service.persistEvent(ctx, provider, configuredRepository, event, payload)
 }
 
+func eventType(provider string, h http.Header) string {
+	if strings.EqualFold(provider, "gitlab") {
+		return header(h, "X-Gitlab-Event")
+	}
+	return header(h, "X-GitHub-Event")
+}
+
 func (service *Service) persistVerified(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
-	event, err := providerClient.ParseEvent(ctx, header(h, "X-GitHub-Event"), h, payload)
+	event, err := providerClient.ParseEvent(ctx, eventType(provider, h), h, payload)
 	if err != nil {
 		return false, ErrRejected
 	}

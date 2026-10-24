@@ -22,8 +22,8 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	if len(cfg.Repositories) != 1 {
-		fail(fmt.Errorf("configure exactly one repository"))
+	if len(cfg.Repositories) == 0 {
+		fail(fmt.Errorf("configure at least one repository"))
 	}
 	db, err := database.Open(cfg.DatabaseURL)
 	if err != nil {
@@ -34,27 +34,40 @@ func main() {
 		fail(err)
 	}
 	st := store.New(db)
-	c := cfg.Repositories[0]
-	token := os.Getenv(c.TokenEnv)
-	secret := os.Getenv(c.WebhookSecretEnv)
-	p, err := builder.Build(c.Provider, scmConfig(token, secret, os.Getenv(c.BaseURLEnv)))
-	if err != nil {
+	if err = forEachConfiguredRepository(cfg.Repositories, func(c config.RepositoryConfig) error {
+		token := os.Getenv(c.TokenEnv)
+		secret := os.Getenv(c.WebhookSecretEnv)
+		p, buildErr := builder.Build(c.Provider, scmConfig(token, secret, os.Getenv(c.BaseURLEnv)))
+		if buildErr != nil {
+			return buildErr
+		}
+		if err = st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
+			return err
+		}
+		repo, getErr := st.Repositories.GetByName(ctx, c.Provider, c.FullName)
+		if getErr != nil {
+			return getErr
+		}
+		result, backfillErr := p.Backfill(ctx, c.FullName)
+		if backfillErr != nil {
+			return backfillErr
+		}
+		if err = persistBackfill(ctx, st, repo.ID, result); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		fail(err)
 	}
-	if err = st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
-		fail(err)
+}
+
+func forEachConfiguredRepository(repositories []config.RepositoryConfig, syncRepository func(config.RepositoryConfig) error) error {
+	for _, repository := range repositories {
+		if err := syncRepository(repository); err != nil {
+			return err
+		}
 	}
-	repo, err := st.Repositories.GetByName(ctx, c.Provider, c.FullName)
-	if err != nil {
-		fail(err)
-	}
-	result, err := p.Backfill(ctx, c.FullName)
-	if err != nil {
-		fail(err)
-	}
-	if err = persistBackfill(ctx, st, repo.ID, result); err != nil {
-		fail(err)
-	}
+	return nil
 }
 
 func persistBackfill(ctx context.Context, st *store.Store, repositoryID store.UUID, result scm.BackfillResult) error {
