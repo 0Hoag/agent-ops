@@ -7,6 +7,8 @@ LDFLAGS := -X 'main.Version=$(VERSION)' -X 'main.BuildTime=$(BUILD_TIME)' -X 'ma
 BINARY_DIR := bin
 BINARY_NAME := $(APP_NAME)
 DOCKER_IMAGE := $(APP_NAME)
+GOCMD := go
+GOTEST := $(GOCMD) test
 .PHONY: build run dev install fmt vet lint test test-coverage ci swagger docker-build
 build:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY_DIR)/$(BINARY_NAME) .
@@ -29,7 +31,18 @@ test:
 test-coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
-ci: fmt vet lint test build
+ci:
+	@echo "→ fmt"
+	@test -z "$$($(GOCMD) fmt ./...)" || { echo "gofmt changes detected"; exit 1; }
+	@echo "→ vet"
+	@$(GOCMD) vet ./...
+	@echo "→ lint"
+	@$(MAKE) --no-print-directory lint
+	@echo "→ test (race)"
+	@$(GOTEST) -race -count=1 -timeout=180s ./...
+	@echo "→ build"
+	@CGO_ENABLED=0 $(GOCMD) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY_DIR)/$(BINARY_NAME) .
+	@echo "✓ ci pipeline passed locally"
 swagger:
 	swag init --parseDependency --parseInternal
 docker-build:

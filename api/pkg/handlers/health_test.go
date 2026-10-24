@@ -20,7 +20,7 @@ func TestHealthzIsIndependentFromDatabase(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest("GET", "/healthz", nil))
 	require.Equal(t, 200, recorder.Code)
-	require.JSONEq(t, `{"status":"ok"}`, recorder.Body.String())
+	require.JSONEq(t, `{"status":200,"data":{"status":"ok"}}`, recorder.Body.String())
 }
 
 func TestReadyzReportsDatabaseState(t *testing.T) {
