@@ -16,15 +16,15 @@ cleanup() {
  listener=$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null || true)
  if [[ -n "$listener" ]]; then log "cleanup FAILED: API listener remains on $API_PORT: $listener"; status=1; else log "cleanup verified: no API listener on $API_PORT"; fi
  if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then log "cleanup FAILED: API PID $API_PID remains"; status=1; else log "cleanup verified: API PID absent"; fi
-if [[ ${AGENT_RUN_ACCEPTANCE_INJECT_CLEANUP_FAILURE:-0} == 1 ]]; then log 'cleanup FAILED: injected cleanup failure'; status=1; exit "$status"; fi
- docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null || { log 'cleanup FAILED: compose down'; status=1; }
+  docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null || { log 'cleanup FAILED: compose down'; status=1; }
  containers=$(docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.ID}}' || true)
  volumes=$(docker volume ls --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Name}}' || true)
  [[ -z "$containers" ]] || { log "cleanup FAILED: owned containers remain: $containers"; status=1; }
  [[ -z "$volumes" ]] || { log "cleanup FAILED: owned volumes remain: $volumes"; status=1; }
- [[ -n "$containers" || -n "$volumes" ]] || log "cleanup verified: no owned containers or volumes ($PROJECT)"
- [[ -z "$TMP" ]] || rm -rf "$TMP" || { log 'cleanup FAILED: temporary directory'; status=1; }
- exit "$status"
+  [[ -n "$containers" || -n "$volumes" ]] || log "cleanup verified: no owned containers or volumes ($PROJECT)"
+  [[ -z "$TMP" ]] || rm -rf "$TMP" || { log 'cleanup FAILED: temporary directory'; status=1; }
+  if [[ ${AGENT_RUN_ACCEPTANCE_INJECT_CLEANUP_FAILURE:-0} == 1 ]]; then log 'cleanup FAILED: injected cleanup failure'; status=1; fi
+  exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT

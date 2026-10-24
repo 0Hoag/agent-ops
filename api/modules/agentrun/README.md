@@ -12,7 +12,8 @@ From the repository root, run `scripts/agent-run-acceptance.sh`. It builds the A
 binary, starts that owned process directly, and starts a uniquely named PostgreSQL Compose project on
 an available host port. It asserts authenticated HTTP writes, normalized SQL fields, exact filtered run
 identities and the complete aggregate snapshot. Cleanup verifies API PID/listener and owned container/
-volume absence on every exit. Set `AGENT_RUN_ACCEPTANCE_API_PORT` and
+volume absence on every exit; UTC `started_at` and `ended_at` are compared against the persisted SQL
+row. Set `AGENT_RUN_ACCEPTANCE_API_PORT` and
 `AGENT_RUN_ACCEPTANCE_PG_PORT` to choose free ports; PostgreSQL host port 5432 is refused.
 
 The disposable mutation controls prove the acceptance can detect defects without changing production:
@@ -28,7 +29,13 @@ scripts/agent-run-acceptance-control.sh issue-list
 scripts/agent-run-acceptance-control.sh issue-aggregate
 scripts/agent-run-acceptance-control.sh pricing
 scripts/agent-run-acceptance-control.sh noop
+scripts/agent-run-acceptance-control.sh timestamp
+scripts/agent-run-acceptance-control.sh cleanup-failure
 ```
+
+The timestamp control corrupts the persisted row and must fail its exact SQL assertion. The cleanup-failure
+control combines a failing list assertion with an injected cleanup failure; the wrapper must observe both
+diagnostics while verifying real fixture cleanup.
 
 The exact-token case-only control is already covered by `TestCreateValidationPrecedesRepositoryAccess`
 from #192 and is intentionally not duplicated here.
