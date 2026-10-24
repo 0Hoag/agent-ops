@@ -107,6 +107,9 @@ One pass:
    `gh issue edit <n> --body-file <file>` when something changed. **Never commit status updates.** Pass details
    go in the pass report (`.agent-runs/coordinator/`) and PR/issue comments.
    New agent mistakes go to `FIVE-MINUTES.md`, committed only together with a PR or at most once a day.
+   Then run `node scripts/project-sync.mjs` (mirrors labels into the GitHub Project "Agent Ops": kanban,
+   roadmap, one epic per wave with sub-issues; idempotent, no tokens). Every new issue needs `wave:*`,
+   `area:*`, `priority:*`, `status:*` labels or it lands in the Project without them.
 6. **End the pass** with a report of at most 10 lines. **First line** is one of:
    `AUTOPILOT: CONTINUE` (normal) · `AUTOPILOT: STOP roadmap done` · `AUTOPILOT: STOP owner decision: <question>`
    (only for ROADMAP "Câu hỏi mở" or the "ask the owner" list above). Never sleep or wait inside a pass.
