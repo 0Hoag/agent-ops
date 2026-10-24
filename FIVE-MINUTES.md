@@ -170,3 +170,13 @@ not change the patch tool's session root; the attempt stopped with only package.
 
 **Check:** verify session `--dir`, Git remote, branch and agent/config all belong to the intended client
 worktree before dispatch. Preserve partial work and start the retry there; use relative edit paths.
+
+## 18. Cross-repository resume briefs must be self-contained
+
+WS-c-r2 started in the correct client worktree but stopped because its controlling old brief lived in
+the API checkout, outside the client's permitted readable paths. No acceptance work was performed.
+
+> Cost: another client retry before environment/server/browser verification.
+
+**Check:** inline the complete remaining contract and measured RESUME in the dispatched prompt; every
+required file reference must be readable from the worker's actual session root and permissions.
