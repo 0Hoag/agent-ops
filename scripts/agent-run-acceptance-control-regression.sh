@@ -92,15 +92,3 @@ if s.count(old) != 1:
 p.write_text(s.replace(old, new, 1))
 PY
 }
-
-run_unchanged_baseline() {
-  local fixture=$1 mutation=$2 expected=$3 status=0 out
-  out=$(cd "$fixture" && bash scripts/agent-run-acceptance-control.sh "$mutation" 2>&1) || status=$?
-  [[ $status -eq 1 ]] || {
-    printf '%s\n' "$out" >&2
-    printf 'expected unchanged baseline to fail for %s (exit 1), got exit %s\n' "$expected" "$status" >&2
-    exit 1
-  }
-  printf '%s\n' "$out"
-  printf 'regression guard-removal %s passed: unchanged baseline failed with named assertion (exit=%s)\n' "$expected" "$status"
-}
