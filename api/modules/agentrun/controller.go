@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
@@ -43,7 +42,7 @@ func NewController(repository RunRepository, token string, prices map[string]Pri
 // @Failure 401 {object} response.ErrorResponse
 // @Router /api/v1/agent-runs [post]
 func (c *Controller) Create(ctx *gin.Context) {
-	if c.token == "" || !strings.EqualFold(ctx.GetHeader("X-Agent-Run-Token"), c.token) {
+	if c.token == "" || ctx.GetHeader("X-Agent-Run-Token") != c.token {
 		response.Error(ctx, http.StatusUnauthorized, "unauthorized")
 		return
 	}
