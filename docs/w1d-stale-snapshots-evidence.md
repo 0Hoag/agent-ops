@@ -11,7 +11,7 @@ Migration `003_add_upstream_updated_at.sql` is append-only and adds the three co
 
 ## Reproduction
 
-Measured head: `116b70a89ab50696727e8f2c108ac910557cc6fe` before acceptance additions. The focused test uses
+Measured acceptance head: `870c7ca4fd6f342189ef13c4acf6afd16b75d04f`. The focused test uses
 `database.RunMigrations` and the actual `store.Issues`, `store.PullRequests`, and `store.PipelineRuns.Upsert` repository
 methods against a disposable PostgreSQL 16 container. The test exercises issue/PR/pipeline both arrival orders,
 concurrent writers, normalized state/value plus timestamp, equal/missing timestamp policy and null-timestamp
@@ -40,10 +40,11 @@ runs. Inspected `docker ps` afterward: no `w1d-accept-20261024` container; inspe
 by this fixture (anonymous volume count unchanged by disposable run). No API process was started. Existing Postgres,
 Redis, MongoDB and RabbitMQ containers were only inspected and left untouched.
 
-The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at the acceptance head:
+The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at `870c7ca`:
 vet exit 0; lint reported `0 issues`; tests passed for sync, store, webhook, database and SCM packages; build exit 0.
-Exact-head hosted CI is pending push.
+Exact-head hosted API CI run `40045549685` completed all five acceptance gates successfully (vet, golangci-lint, test,
+build and job completion); `gh run view` showed the job completing while the overall run was still transitioning.
 
 ## Not covered
 
-- Final SHA and exact-head hosted CI (to be updated after commit/push).
+- Exact-head hosted run's terminal conclusion (job gates are successful; overall run was still transitioning at last query).
