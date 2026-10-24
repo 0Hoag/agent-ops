@@ -1,0 +1,19 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API for repository synchronization and signed webhooks.",
+        "title": "Agent Ops API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/api/v1/webhooks/{provider}": {
+            "post": {
+                "summary": "Ingest provider webhook",
+                "responses": {}
+            }
+        }
+    }
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	HTTPAddr     string
 	DatabaseURL  string
 	LogLevel     string
+	CORSOrigins  []string
 	Repositories []RepositoryConfig
 }
 
@@ -29,6 +31,7 @@ func Load() (Config, error) {
 		HTTPAddr:    envOr("HTTP_ADDR", ":8080"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		LogLevel:    envOr("LOG_LEVEL", "info"),
+		CORSOrigins: splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
 	}
 	if raw := os.Getenv("SCM_REPOSITORIES_JSON"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.Repositories); err != nil {
@@ -39,6 +42,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 	return cfg, nil
+}
+
+func splitCSV(value string) []string {
+	var values []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			values = append(values, item)
+		}
+	}
+	return values
 }
 
 func envOr(key, fallback string) string {

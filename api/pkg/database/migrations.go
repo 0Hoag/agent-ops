@@ -2,18 +2,15 @@ package database
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"sort"
 	"strconv"
 	"strings"
 
+	appmigrations "github.com/0Hoag/agent-ops/api/migrations"
 	"gorm.io/gorm"
 )
-
-//go:embed migrations/*.sql
-var migrationFiles embed.FS
 
 type migration struct {
 	Version int
@@ -51,11 +48,11 @@ func RunMigrations(ctx context.Context, db *gorm.DB) error {
 
 func loadMigrations() ([]migration, error) {
 	var migrations []migration
-	err := fs.WalkDir(migrationFiles, "migrations", func(path string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(appmigrations.FS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(path, ".sql") {
 			return walkErr
 		}
-		base := strings.TrimSuffix(strings.TrimPrefix(path, "migrations/"), ".sql")
+		base := strings.TrimSuffix(strings.TrimPrefix(path, "./"), ".sql")
 		parts := strings.SplitN(base, "_", 2)
 		if len(parts) != 2 {
 			return fmt.Errorf("migration %q must be NNN_name.sql", path)
@@ -64,11 +61,13 @@ func loadMigrations() ([]migration, error) {
 		if err != nil || version < 1 {
 			return fmt.Errorf("migration %q has invalid version", path)
 		}
-		contents, err := fs.ReadFile(migrationFiles, path)
+		contents, err := fs.ReadFile(appmigrations.FS, path)
 		if err != nil {
 			return fmt.Errorf("read migration %q: %w", path, err)
 		}
-		migrations = append(migrations, migration{Version: version, Name: parts[1], SQL: string(contents)})
+		name := parts[1]
+		name = strings.TrimSuffix(name, "_table")
+		migrations = append(migrations, migration{Version: version, Name: name, SQL: string(contents)})
 		return nil
 	})
 	if err != nil {

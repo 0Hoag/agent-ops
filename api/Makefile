@@ -1,17 +1,36 @@
 SHELL := /bin/sh
-
-.PHONY: dev test lint build ci
-
+APP_NAME := agent-ops-api
+VERSION := $(shell cat .build-version 2>/dev/null || echo "0.1.0")
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME := $(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
+LDFLAGS := -X 'main.Version=$(VERSION)' -X 'main.BuildTime=$(BUILD_TIME)' -X 'main.GitCommit=$(GIT_COMMIT)'
+BINARY_DIR := bin
+BINARY_NAME := $(APP_NAME)
+DOCKER_IMAGE := $(APP_NAME)
+.PHONY: build run dev install fmt vet lint test test-coverage ci swagger docker-build
+build:
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY_DIR)/$(BINARY_NAME) .
+run: build
+	./$(BINARY_DIR)/$(BINARY_NAME)
 dev:
-	go run .
-
-test:
-	go test ./...
-
+	air
+install:
+	go mod download
+	go install github.com/air-verse/air@latest
+	go install github.com/swaggo/swag/cmd/swag@latest
+fmt:
+	go fmt ./...
+vet:
+	go vet ./...
 lint:
 	golangci-lint run
-
-build:
-	go build ./...
-
-ci: test lint build
+test:
+	go test -v -cover ./...
+test-coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+ci: fmt vet lint test build
+swagger:
+	swag init --parseDependency --parseInternal
+docker-build:
+	docker build --platform linux/amd64 --build-arg VERSION=$(VERSION) --build-arg BUILD_TIME="$(BUILD_TIME)" --build-arg GIT_COMMIT=$(GIT_COMMIT) -t $(DOCKER_IMAGE):$(VERSION) -t $(DOCKER_IMAGE):latest .

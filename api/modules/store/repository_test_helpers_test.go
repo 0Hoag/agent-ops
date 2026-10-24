@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"database/sql/driver"
+
 	"github.com/DATA-DOG/go-sqlmock"
 )
 

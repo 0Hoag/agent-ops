@@ -1,8 +1,23 @@
 version: "2"
+run:
+  timeout: "5m"
+  concurrency: 10
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
 linters:
-  default: standard
+  enable: [govet, errcheck, ineffassign, staticcheck, unused]
   settings:
-    govet:
-      disable: [fieldalignment]
+    staticcheck:
+      checks: ["SA*"]
   exclusions:
-    generated: lax
+    rules:
+      - path: "(^|/)scratchpad/"
+        linters: [govet, errcheck, ineffassign, staticcheck, unused]
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    paths: ["(^|/)scratchpad/"]

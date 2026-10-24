@@ -14,9 +14,25 @@ import (
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/0Hoag/agent-ops/api/pkg/logger"
+	"github.com/0Hoag/agent-ops/api/pkg/middleware"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
 )
+
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
+// @title Agent Ops API
+// @version 1.0
+// @description API for repository synchronization and signed webhooks.
+// @host localhost:8080
+// @BasePath /
 
 func main() {
 	cfg, err := config.Load()
@@ -42,7 +58,10 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.RequestID(), middleware.SecurityHeaders())
+	router.Use(cors.New(cors.Config{AllowOrigins: cfg.CORSOrigins, AllowMethods: []string{"GET", "POST", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "X-Request-ID", "X-Hub-Signature-256", "X-Gitlab-Token"}, AllowCredentials: false, MaxAge: 12 * time.Hour}))
 	router.Use(logger.Request(log))
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	registerRoutes(router, database.AsPinger(db), db, cfg)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router, ReadHeaderTimeout: 5 * time.Second}
