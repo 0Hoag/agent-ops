@@ -56,15 +56,15 @@ set -e
 printf '%s\n' "$output"
 [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
 if ! printf '%s\n' "$output" | NEEDLE="$pattern" perl -ne 'if (/^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0) { $found=1 } END { exit($found ? 0 : 1) }'; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
-if printf '%s\n' "$output" | perl -ne 'if (/^acceptance: cleanup FAILED:/) {$bad=1} END {exit($bad ? 0 : 1)}'; then
-  if [[ $mutation == cleanup-failure ]]; then
-   if ! printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: / && index($_, "LIST FILTER ASSERTION:") >= 0) {$assert=1} if (/^acceptance: cleanup FAILED: injected cleanup failure$/) {$inject=1} END {exit($assert && $inject ? 0 : 1)}'; then
-    echo 'control cleanup-failure FAIL: expected assertion plus injected cleanup failure diagnostics' >&2; exit 1
-   fi
-   echo "control cleanup-failure passed: nested acceptance exit=$nested_status; intended assertion and injected cleanup failure observed; wrapper exit=0"
-   exit 0
+if ! printf '%s\n' "$output" | perl -ne '$pid=1 if /^acceptance: cleanup verified: API PID absent$/; $listener=1 if /^acceptance: cleanup verified: no API listener on \d+$/; $fixtures=1 if /^acceptance: cleanup verified: no owned containers or volumes \(/; END {exit($pid && $listener && $fixtures ? 0 : 1)}'; then echo "control $mutation FAIL: missing distinct verified cleanup evidence" >&2; exit 1; fi
+if [[ $mutation == cleanup-failure ]]; then
+  if ! printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: / && index($_, "LIST FILTER ASSERTION:") >= 0) {$assert=1} if (/^acceptance: cleanup FAILED: injected cleanup failure$/) {$inject++} if (/^acceptance: cleanup FAILED:/ && $_ !~ /^acceptance: cleanup FAILED: injected cleanup failure\n$/) {$real=1} END {exit($assert && $inject == 1 && !$real ? 0 : 1)}'; then
+    echo 'control cleanup-failure FAIL: expected only the intended assertion and single injected cleanup failure diagnostic' >&2; exit 1
   fi
+  echo "control cleanup-failure passed: nested acceptance exit=$nested_status; intended assertion, single injected failure, and verified cleanup evidence observed; wrapper exit=0"
+  exit 0
+fi
+if printf '%s\n' "$output" | perl -ne 'if (/^acceptance: cleanup FAILED:/) {$bad=1} END {exit($bad ? 0 : 1)}'; then
  echo "control $mutation FAIL: cleanup failure evidence present (nested exit=$nested_status)" >&2; exit 1
 fi
-if ! printf '%s\n' "$output" | perl -ne '$pid=1 if /^acceptance: cleanup verified: API PID absent$/; $listener=1 if /^acceptance: cleanup verified: no API listener on \d+$/; $fixtures=1 if /^acceptance: cleanup verified: no owned containers or volumes \(/; END {exit($pid && $listener && $fixtures ? 0 : 1)}'; then echo "control $mutation FAIL: missing distinct verified cleanup evidence" >&2; exit 1; fi
 echo "control $mutation passed: nested acceptance exit=$nested_status at '$pattern'; verified cleanup; wrapper exit=0"
