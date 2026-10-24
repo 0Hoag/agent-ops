@@ -88,7 +88,7 @@ One pass:
    - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
    - **At most 2 send-backs per PR.** On the 3rd review, if CI and gates are green, merge and file what is
      still missing as `found-by:agent` follow-up issues.
-4. **Dispatch.** If fewer than **2 workers** are running (`pgrep -f run-worker`; cap 2, owner 24/10: speed over quota), start the next unblocked
+4. **Dispatch.** If fewer than **3 workers** are running (`pgrep -f run-worker`; cap 3, owner 24/10: speed over quota), start the next unblocked
    sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
    and commands; every brief says "commit and push after every finished issue". Start **detached** so it survives this pass:
    `scripts/spawn.sh .agent-runs/<wave>.log scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md`
