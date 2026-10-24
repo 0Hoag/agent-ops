@@ -12,7 +12,7 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
 ## Bắt đầu ở đâu
 
 1. `ROADMAP.md`: mục tiêu, quyết định của owner (có ngày, không hỏi lại), các đợt và issue.
-2. `STATUS.md`: trạng thái đo được + chi phí token mỗi đợt. Không trích số cũ; đo lại.
+2. **Status board** = issue ghim có label `status-board` (`gh issue list --label status-board`): trạng thái + chi phí token mỗi đợt. Không trích số cũ; đo lại.
 3. `docs/architecture.md`, `docs/be-standards.md`, `docs/client-standards.md`: worker code theo đúng các file này.
    Chuẩn gốc là source công ty: `~/Desktop/controlplane` (API), `~/Desktop/console` (client), chỉ đọc.
    Client nằm ở repo riêng `0Hoag/agent-ops-client`, checkout cạnh repo này tại `~/agent-ops-client`.
@@ -37,7 +37,7 @@ Chưa có thư mục nào thì gate của nó chưa áp dụng (đợt W0 tạo 
 
 ## Harness, model và chi phí
 
-Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào cột Harness của `STATUS.md`.
+Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào cột Harness của status board.
 
 | | Codex CLI | OpenCode |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 | Model worker | `gpt-reserve`, effort low (`~/.codex/worker.config.toml`) | `openai/gpt-6-luna`, variant low (`.opencode/agents/worker.md`) |
 | Usage trong `.agent-runs/<wave>.jsonl` | `turn.completed.usage` | `step_finish.part.tokens` |
 
-- Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Script in tổng token khi xong; chép vào `STATUS.md`.
+- Worker chạy liên tục tới khi mở PR, không dừng hỏi (giữ cache ấm). Script in tổng token khi xong; chép vào status board.
 - OpenCode không có sandbox: agent `worker` được chạy mọi lệnh bash trừ danh sách deny (sudo, `rm -rf`,
   force-push, `gh pr merge`), chỉ trong `~/agent-ops` và `~/agent-ops-wt`.
 
@@ -62,14 +62,14 @@ Hai harness, cùng docs và cùng skill. Chọn một cho mỗi đợt, ghi vào
 
 The loop is driven by **`scripts/autopilot.sh`** (the owner starts it once). Each call is a fresh, short
 session that does **one pass** and exits; the shell sleeps between passes (no tokens spent waiting).
-`STATUS.md`, the issues and the PRs are the memory between passes: write there, not in chat.
+The **status board issue**, the issues and the PRs are the memory between passes: write there, not in chat.
 Run in a terminal: `scripts/autopilot.sh` (every 10 min) · stop: `touch .agent-runs/STOP`.
 
 One pass:
 
 1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only
    `tail -20 .agent-runs/<wave>.log` and `.agent-runs/<wave>.md` if present (never the whole `.jsonl`).
-   Commit any pending `STATUS.md` change.
+   Read the status board issue body.
 2. **Plan: many small issues, all up front.** Break the whole ROADMAP into fine-grained issues before
    dispatching: one issue per concrete deliverable (one endpoint, one table + repository, one provider
    event, one page, one component, one script), each with "Done when" as a command or number. Expect
@@ -101,12 +101,12 @@ One pass:
    `git status` in its worktree and the log tail: commits already on the branch, issues done, issues left
    (with files), last failing gate. Always a fresh worker session: the old one's cache has expired, so
    resuming it would resend its whole context.
-5. **Record, briefly.** `STATUS.md` is a **current-state page, not a log**: the wave table, the cost table
-   and a 3-line "Now" section; keep it under 80 lines (if longer, compact it this pass). Pass details belong
-   in the pass report (`.agent-runs/coordinator/`) and in PR/issue comments, never in `STATUS.md`.
-   **Commit `STATUS.md` only when a wave changes state** (merged, dispatched, returned, blocked), at most once
-   per pass, message `docs(status): <what changed> [skip ci]`. Nothing changed → no commit.
-   New agent mistakes go to `FIVE-MINUTES.md` (same commit).
+5. **Record, without commits.** Current state lives in **one pinned GitHub issue labelled `status-board`**
+   (create and `gh issue pin` it if missing; seed it from `STATUS.md`, then reduce `STATUS.md` to a one-line
+   pointer). Body = wave table, cost table, 3-line "Now"; under 80 lines; a page, not a log. Update it with
+   `gh issue edit <n> --body-file <file>` when something changed. **Never commit status updates.** Pass details
+   go in the pass report (`.agent-runs/coordinator/`) and PR/issue comments.
+   New agent mistakes go to `FIVE-MINUTES.md`, committed only together with a PR or at most once a day.
 6. **End the pass** with a report of at most 10 lines. **First line** is one of:
    `AUTOPILOT: CONTINUE` (normal) · `AUTOPILOT: STOP roadmap done` · `AUTOPILOT: STOP owner decision: <question>`
    (only for ROADMAP "Câu hỏi mở" or the "ask the owner" list above). Never sleep or wait inside a pass.
@@ -114,7 +114,7 @@ One pass:
 ## Language
 
 **Everything written to the repo or GitHub is in English**: issues (title and body), PRs, commits, briefs,
-comments, `STATUS.md`, code comments. Vietnamese costs more tokens and the output is the expensive part.
+comments, the status board, code comments. Vietnamese costs more tokens and the output is the expensive part.
 Only the final report to the owner in chat may be Vietnamese, and short. The Vietnamese docs in this repo
 are context, not a template for output language.
 
