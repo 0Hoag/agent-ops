@@ -2,45 +2,45 @@
 
 ## Coverage
 
-The acceptance tests exercise the actual sync and webhook persistence paths for issue, pull request, and pipeline revisions. Sync tests bind a non-zero provider `UpdatedAt` and assert the exact conflict key and freshness update SQL for every entity. Signed webhook ingestion tests assert the same non-zero revision binding for every entity. PostgreSQL acceptance uses production migrations and repository `Upsert` methods for both arrival orders, concurrent writers, missing timestamps, and equal/missing candidates against a known version.
+Sync backfill tests bind non-zero provider `UpdatedAt` values and assert the conflict keys and every original update assignment plus `upstream_updated_at`/freshness predicate for issue, pull request, and pipeline. Their disposable controls remove one sync mapper revision at a time; the focused test fails on the intended argument mismatch (`expected ... 2026-01-02 03:00:00 UTC`, `actual <nil>`).
 
-The policy is: a strictly newer non-null upstream revision may update; equal or older revisions do not; a missing revision cannot replace a known revision; two missing revisions remain duplicate-safe. `upstream_updated_at` is separate from local `updated_at`.
+Webhook coverage calls `persistEvent` directly with a non-zero revision, asserting the bound timestamp for all three entities. This is service-persistence coverage, not a signed-POST test. Existing HMAC and repository-binding tests remain unchanged. In a disposable worktree, removing only the issue, pull-request, or pipeline `UpstreamUpdatedAt: upstreamTime(...)` mapping in turn made its corresponding focused subtest fail on the timestamp argument (`expected [time.Time ...]`, `actual [<nil>]`).
+
+PostgreSQL acceptance runs actual production migrations and the actual issue, pull-request, and pipeline `Upsert` repositories. It covers both arrival orders, concurrent writers, state/value/revision, equal and missing candidates for each entity, and duplicate missing timestamps. A separate disposable worktree removed all three production repository `Where` freshness predicates (no handwritten SQL substitution); the same acceptance test failed with stale values: `newer-first` issue `closed`→`open`, concurrent issue `closed`→`open`, equal/missing issue and pull request `closed`→`open`, pipeline `completed`→`running`.
 
 ## Measured commands and results
 
-Acceptance-test commit before this evidence update: `b5a9d838e06d59218efb0f3fa8dd935bc4b37d9e`.
+API test commit: `a01672de236a4f6cb7d078517927cec3b4de47f1`.
 
 ```sh
 cd api
 GOCACHE=/tmp/w1d-gocache go test ./cmd/sync ./modules/webhook ./modules/store
+# PASS: all three packages
+go vet ./...
+# PASS (exit 0)
+golangci-lint run
+# PASS (0 issues)
+go test ./...
+# PASS: all packages
+go build ./...
+# PASS (exit 0)
+git diff --check
+# PASS (exit 0)
 ```
 
-Result: PASS for all three packages.
-
-Production acceptance baseline, using an owned PostgreSQL 16 Alpine container and `W1D_ACCEPTANCE_DSN`:
+Production PostgreSQL 16 baseline:
 
 ```sh
-W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55442 user=w1d password=w1d dbname=w1d sslmode=disable' GOCACHE=/tmp/w1d-gocache go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
+W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55443 user=w1d password=w1d dbname=w1d sslmode=disable' \
+  go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
 ```
 
-Result: PASS for `newer-first`, `older-first`, missing-timestamp duplicate safety, `concurrent_writers`, and equal/missing protection for issue, pull request, and pipeline. Container: `w1d-accept-20261024-r4`.
+Result: PASS for `newer-first`, `older-first`, duplicate missing timestamps, `concurrent writers`, and equal/missing policy for issue, pull request, and pipeline. The test applies all production migrations (001–003). Disposable actual-predicate-removal control: the same test failed on the stale state/value diagnostics listed above, not on migration or fixture setup.
 
-Negative control: in a separate disposable worktree, the actual `Where` freshness predicates were removed from the three production repository files and the same acceptance command was run on port `55443`. It failed at intended state/value assertions: `newer-first` expected `closed`, got `open`; concurrent writers expected `closed`, got `open`; equal/missing issue and pull expected `closed`, got `open`; equal/missing pipeline expected `completed`, got `running`. This proves stale state/value corruption rather than fixture setup failure. The control worktree was never committed or pushed.
+Both final acceptance runs installed EXIT cleanup using `docker rm -fv`: baseline fixture `w1d153-exit-base` passed (exit 0), and actual-predicate-removal fixture `w1d153-exit-control` failed as intended (exit 1). The baseline anonymous volume `0de1c1a900fc396556abec5e58e053ed1d8e466cba744ea75dcfdd49466e65b0` and control anonymous volume `82e2bd6690c0e3d17928b9c49e53d7371bf3bcee8afafd9493934a9c6b0b6b35` were each confirmed absent by `docker volume inspect`; `docker ps -a` showed neither owned container. Earlier trial fixtures `w1d153-baseline`, `w1d153-baseline2`, `w1d153-control`, and `w1d153-exit-control` were also verified absent with their anonymous volumes; no unrelated containers were changed.
 
-Cleanup used an EXIT trap with `docker rm -f` for both named containers. After success/failure, `docker ps -a` returned no `w1d-accept-20261024-r4` or `w1d-control-20261024-r4` container. No API process was started and no unrelated service was modified.
-
-## Full API gate
-
-Run sequentially from `api`:
-
-```sh
-go vet ./...                 # PASS (exit 0)
-golangci-lint run           # PASS (0 issues)
-go test ./...               # PASS
-go build ./...              # PASS (exit 0)
-git diff --check            # PASS (exit 0)
-```
+Hosted API CI on exact test head `a01672de236a4f6cb7d078517927cec3b4de47f1`: run `40048072350`, `API` job PASS.
 
 ## Not covered
 
-Hosted CI and exact-head PR checks are pending the pushed evidence commit. Client, coordinator records, runner, workflow, and unrelated services are not covered by this PR.
+Client, coordinator records, runner, workflow, and unrelated services are outside scope. Hosted CI for the final evidence-document commit must pass on its exact head.
