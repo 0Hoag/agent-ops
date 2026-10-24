@@ -1,9 +1,9 @@
 # Client issue transfer mapping
 
-The 18 client issues below were transferred from the root repository. GitHub's transfer rewrite replaced their
-deliverable-specific bodies with a generic placeholder, so each body was restored from the destination issue's
-`userContentEdits` history. The restored text keeps the original measurable acceptance and dependency statements,
-with standalone-client paths (`pnpm` from the client repository root and `docs/client-standards.md`).
+The 18 client issues below were transferred from the root repository. During split follow-up, a prior worker
+replaced several issue bodies with generic boilerplate; the deliverable-specific contracts were then restored
+from the destination issues' `userContentEdits` histories. Transfer itself did not generate that boilerplate.
+Paths were adapted for the standalone client (`pnpm` from its repository root and `docs/client-standards.md`).
 
 Canonical client checkout: `/Users/zeross/agent-ops-client`.
 
@@ -25,10 +25,11 @@ Canonical client checkout: `/Users/zeross/agent-ops-client`.
 | [#51](https://github.com/0Hoag/agent-ops/issues/51) | [#17](https://github.com/0Hoag/agent-ops-client/issues/17) | W7 | Login/logout and session-expiry browser coverage | Earlier roadmap phase dependencies |
 | [#47](https://github.com/0Hoag/agent-ops/issues/47) | [#18](https://github.com/0Hoag/agent-ops-client/issues/18) | W6 | Generated OpenAPI TypeScript client replaces handwritten HTTP calls | Earlier roadmap phase dependencies |
 | [#36](https://github.com/0Hoag/agent-ops/issues/36) | [#19](https://github.com/0Hoag/agent-ops-client/issues/19) | W5 | Loading/empty/error/data browser states and unknown metrics | W5a |
-| [#30](https://github.com/0Hoag/agent-ops/issues/30) | [#20](https://github.com/0Hoag/agent-ops-client/issues/20) | W3 | Cache-hit and known/unknown dollar cost arithmetic by wave/worker/issue | W3a plus the deployment/usage-source owner gate |
-| [#23](https://github.com/0Hoag/agent-ops/issues/23) | [#21](https://github.com/0Hoag/agent-ops-client/issues/21) | W2 | Signed webhook moves a card without reload; repo switch leaks no subscriptions | W2b and W2c |
+| [#30](https://github.com/0Hoag/agent-ops/issues/30) | [#20](https://github.com/0Hoag/agent-ops-client/issues/20) | W3 | Cache-hit and known/unknown dollar cost arithmetic by wave/worker/issue; loading/empty/error/data browser states | [W3a](https://github.com/0Hoag/agent-ops/issues/25); deployment and Claude usage-source decision resolved by [ROADMAP.md](../ROADMAP.md) |
+| [#23](https://github.com/0Hoag/agent-ops/issues/23) | [#21](https://github.com/0Hoag/agent-ops-client/issues/21) | W2 | Signed webhook moves a card without reload; repository switch leaks no subscriptions | Board UI [#20](https://github.com/0Hoag/agent-ops/issues/20) and [#21](https://github.com/0Hoag/agent-ops/issues/21) are implemented by [PR #115](https://github.com/0Hoag/agent-ops/pull/115); [#19 board API](https://github.com/0Hoag/agent-ops/issues/19) and [#22 websocket API](https://github.com/0Hoag/agent-ops/issues/22) are separate prerequisites |
 
 ## Label audit
 
-Every destination issue `#4`-`#21` has exactly one `status:blocked`, `priority:p1`, `type:feature`, and wave label,
-plus `area:client`. Dependency-blocked status remains intentional until the prerequisite waves complete.
+Every destination issue `#4`-`#21` has exactly one status, priority, type, and wave label, plus `area:client`.
+Status values were audited against prerequisites; resolved owner decisions are not blockers. Board API work remains
+distinct from the completed W2b/W2c client UI deliverables.
