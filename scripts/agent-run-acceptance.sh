@@ -79,5 +79,5 @@ list_assert "$API/api/v1/agent-runs?repository_id=$REPO&issue_number=191" "$id1,
 agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&issue_number=191" "$expected_repo_issue"
 list_assert "$API/api/v1/agent-runs?wave=W3G&issue_number=191" "$id1,$id3"
 agg_assert "$API/api/v1/agent-runs/aggregate?wave=W3G&issue_number=191" "$expected_wave_issue"
-log "wire/SQL acceptance passed: ids=$id1; exact aggregate snapshot=$expected_filtered"
+log "wire/SQL acceptance passed: ids=$id1; exact aggregate snapshot=$expected_exact"
 log 'success path complete'
