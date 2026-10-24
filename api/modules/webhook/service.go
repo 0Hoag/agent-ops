@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
@@ -155,11 +156,11 @@ func equalFold(a, b string) bool {
 }
 func issueModel(id store.UUID, i *scm.Issue) *store.Issue {
 	labels, _ := json.Marshal(i.Labels)
-	return &store.Issue{ID: store.NewUUID(), RepositoryID: id, Number: int64(i.Number), Title: i.Title, State: i.State, Status: string(i.Status), Labels: store.JSONB(labels), Assignee: i.Assignee, UpdatedAt: i.UpdatedAt}
+	return &store.Issue{ID: store.NewUUID(), RepositoryID: id, Number: int64(i.Number), Title: i.Title, State: i.State, Status: string(i.Status), Labels: store.JSONB(labels), Assignee: i.Assignee, UpstreamUpdatedAt: upstreamTime(i.UpdatedAt), UpdatedAt: i.UpdatedAt}
 }
 func pullModel(id store.UUID, p *scm.PullRequest) *store.PullRequest {
 	closes, _ := json.Marshal(p.ClosingIssueNumbers)
-	return &store.PullRequest{ID: store.NewUUID(), RepositoryID: id, Number: int64(p.Number), Title: p.Title, State: p.State, HeadSHA: p.HeadSHA, Branch: p.HeadBranch, Closes: store.JSONB(closes), MergedAt: p.MergedAt, UpdatedAt: p.UpdatedAt}
+	return &store.PullRequest{ID: store.NewUUID(), RepositoryID: id, Number: int64(p.Number), Title: p.Title, State: p.State, HeadSHA: p.HeadSHA, Branch: p.HeadBranch, Closes: store.JSONB(closes), MergedAt: p.MergedAt, UpstreamUpdatedAt: upstreamTime(p.UpdatedAt), UpdatedAt: p.UpdatedAt}
 }
 func runModel(id store.UUID, p *scm.PipelineRun) *store.PipelineRun {
 	var n *int64
@@ -167,5 +168,12 @@ func runModel(id store.UUID, p *scm.PipelineRun) *store.PipelineRun {
 		v := int64(*p.PRNumber)
 		n = &v
 	}
-	return &store.PipelineRun{ID: store.NewUUID(), RepositoryID: id, ExternalID: p.ExternalID, PRNumber: n, SHA: p.SHA, Status: p.Status, Conclusion: p.Conclusion, StartedAt: &p.StartedAt, FinishedAt: p.FinishedAt}
+	return &store.PipelineRun{ID: store.NewUUID(), RepositoryID: id, ExternalID: p.ExternalID, PRNumber: n, SHA: p.SHA, Status: p.Status, Conclusion: p.Conclusion, StartedAt: &p.StartedAt, FinishedAt: p.FinishedAt, UpstreamUpdatedAt: upstreamTime(p.UpdatedAt)}
+}
+
+func upstreamTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
 }

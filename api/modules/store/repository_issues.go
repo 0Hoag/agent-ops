@@ -13,8 +13,9 @@ type IssueRepository struct{ db *gorm.DB }
 func (repository *IssueRepository) Upsert(ctx context.Context, item *Issue) error {
 	err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "repository_id"}, {Name: "number"}},
+		Where:   clause.Where{Exprs: []clause.Expression{gorm.Expr("(issues.upstream_updated_at IS NULL AND EXCLUDED.upstream_updated_at IS NULL) OR (EXCLUDED.upstream_updated_at IS NOT NULL AND (issues.upstream_updated_at IS NULL OR EXCLUDED.upstream_updated_at > issues.upstream_updated_at))")}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"title": gorm.Expr("EXCLUDED.title"), "state": gorm.Expr("EXCLUDED.state"), "status": gorm.Expr("EXCLUDED.status"), "labels": gorm.Expr("EXCLUDED.labels"), "assignee": gorm.Expr("EXCLUDED.assignee"), "updated_at": gorm.Expr("NOW()"),
+			"title": gorm.Expr("EXCLUDED.title"), "state": gorm.Expr("EXCLUDED.state"), "status": gorm.Expr("EXCLUDED.status"), "labels": gorm.Expr("EXCLUDED.labels"), "assignee": gorm.Expr("EXCLUDED.assignee"), "upstream_updated_at": gorm.Expr("EXCLUDED.upstream_updated_at"), "updated_at": gorm.Expr("NOW()"),
 		}),
 	}).Create(item).Error
 	if err != nil {

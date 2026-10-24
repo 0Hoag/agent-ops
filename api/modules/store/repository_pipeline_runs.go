@@ -11,8 +11,8 @@ import (
 type PipelineRunRepository struct{ db *gorm.DB }
 
 func (repository *PipelineRunRepository) Upsert(ctx context.Context, item *PipelineRun) error {
-	err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "external_id"}}, DoUpdates: clause.Assignments(map[string]any{
-		"pr_number": gorm.Expr("EXCLUDED.pr_number"), "sha": gorm.Expr("EXCLUDED.sha"), "status": gorm.Expr("EXCLUDED.status"), "conclusion": gorm.Expr("EXCLUDED.conclusion"), "started_at": gorm.Expr("EXCLUDED.started_at"), "finished_at": gorm.Expr("EXCLUDED.finished_at"), "updated_at": gorm.Expr("NOW()"),
+	err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "external_id"}}, Where: clause.Where{Exprs: []clause.Expression{gorm.Expr("(pipeline_runs.upstream_updated_at IS NULL AND EXCLUDED.upstream_updated_at IS NULL) OR (EXCLUDED.upstream_updated_at IS NOT NULL AND (pipeline_runs.upstream_updated_at IS NULL OR EXCLUDED.upstream_updated_at > pipeline_runs.upstream_updated_at))")}}, DoUpdates: clause.Assignments(map[string]any{
+		"pr_number": gorm.Expr("EXCLUDED.pr_number"), "sha": gorm.Expr("EXCLUDED.sha"), "status": gorm.Expr("EXCLUDED.status"), "conclusion": gorm.Expr("EXCLUDED.conclusion"), "started_at": gorm.Expr("EXCLUDED.started_at"), "finished_at": gorm.Expr("EXCLUDED.finished_at"), "upstream_updated_at": gorm.Expr("EXCLUDED.upstream_updated_at"), "updated_at": gorm.Expr("NOW()"),
 	})}).Create(item).Error
 	if err != nil {
 		return fmt.Errorf("upsert pipeline run %s: %w", item.ExternalID, err)
