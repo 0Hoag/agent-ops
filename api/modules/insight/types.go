@@ -37,6 +37,7 @@ type Evidence struct {
 	DeliveryID  string    `json:"delivery_id"`
 	EventType   string    `json:"event_type"`
 	ReceivedAt  time.Time `json:"received_at"`
+	SourceAt    time.Time `json:"source_at,omitempty"`
 	PRNumber    *int64    `json:"pr_number,omitempty"`
 	IssueNumber *int64    `json:"issue_number,omitempty"`
 }
