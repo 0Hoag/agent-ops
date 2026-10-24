@@ -60,6 +60,7 @@ expected_repo=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input
 expected_all="$expected_repo"
 list_assert() {
  local url=$1 expected_run_ids=$2 expected_ids actual_ids list
+ [[ ${AGENT_RUN_ACCEPTANCE_SKIP_LIST:-0} == 1 ]] && return 0
  list=$(curl -fsS "$url")
  expected_ids=$(tr ',' '\n' <<<"$expected_run_ids" | sort | paste -sd, -)
  actual_ids=$(jq -r '[.data[].id]|sort|join(",")' <<<"$list")

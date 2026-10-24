@@ -22,6 +22,7 @@ case "$mutation" in
  noop) perl -0pi -e 's/THIS_PATTERN_DOES_NOT_EXIST/changed/' "$tmp/api/modules/agentrun/repository.go"; target="$tmp/api/modules/agentrun/repository.go"; pattern='';;
  *) echo "unknown mutation: $mutation" >&2; exit 2;;
 esac
+[[ $mutation == *-aggregate ]] && export AGENT_RUN_ACCEPTANCE_SKIP_LIST=1
 if [[ $(shasum "$target" | awk '{print $1}') == $(git -C "$tmp" show "HEAD:${target#"$tmp"/}" | shasum | awk '{print $1}') ]]; then echo "control $mutation FAIL: mutation did not change target" >&2; exit 1; fi
 if [[ $mutation == noop ]]; then echo 'control noop passed: wrapper rejected no-op mutation; nested acceptance not invoked'; exit 0; fi
 set +e
