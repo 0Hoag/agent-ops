@@ -14,8 +14,8 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
 1. `ROADMAP.md`: mục tiêu, quyết định của owner (có ngày, không hỏi lại), các đợt và issue.
 2. `STATUS.md`: trạng thái đo được + chi phí token mỗi đợt. Không trích số cũ; đo lại.
 3. `docs/architecture.md`, `docs/be-standards.md`, `docs/client-standards.md`: worker code theo đúng các file này.
-   Chuẩn gốc là source công ty: `~/Desktop/controlplane` (API), `~/Desktop/console` (web), chỉ đọc.
-   Web nằm ở repo riêng `0Hoag/agent-ops-client` (sau đợt WS-a), checkout tại `~/agent-ops-client`.
+   Chuẩn gốc là source công ty: `~/Desktop/controlplane` (API), `~/Desktop/console` (client), chỉ đọc.
+   Client nằm ở repo riêng `0Hoag/agent-ops-client`, checkout cạnh repo này tại `~/agent-ops-client`.
 4. `ROLES.md`, `FIVE-MINUTES.md`.
 
 ## Git
@@ -30,8 +30,8 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
 ```bash
 # api/
 cd api && go vet ./... && golangci-lint run && go test ./... && go build ./...
-# web/
-cd web && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+# client repository (sibling checkout)
+cd ~/agent-ops-client && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 Chưa có thư mục nào thì gate của nó chưa áp dụng (đợt W0 tạo ra chúng). Không skip test, không tắt lint để cho xanh.
 

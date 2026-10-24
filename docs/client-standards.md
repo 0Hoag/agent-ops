@@ -1,7 +1,7 @@
 # Client code standards (React)
 
-The client app lives in **`0Hoag/agent-ops-client`** (separate repo, ROADMAP 24/10/2026). This page moves there in
-wave WS-a; until then it applies to `web/`.
+The client app lives in **`0Hoag/agent-ops-client`**, normally checked out as `../agent-ops-client` (ROADMAP 24/10/2026).
+This standards reference remains here for cross-repository context.
 
 **Source of truth: `~/Desktop/console`** (company React console). Copy its files and conventions; adapt names
 only. Do **not** copy its `packages/*` workspace, host contract or coupling gates: they exist to split a
