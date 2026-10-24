@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_ "github.com/0Hoag/agent-ops/api/docs"
+	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
@@ -79,4 +80,5 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
 	}
 	webhook.NewRoutes(webhook.NewController(webhook.NewService(gormDB, builder.Default()), configs)).Register(router.Group("/api/v1"))
+	board.NewRoutes(board.NewController(board.NewRepository(gormDB))).Register(router.Group("/api/v1"))
 }
