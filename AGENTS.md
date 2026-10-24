@@ -101,8 +101,12 @@ One pass:
    `git status` in its worktree and the log tail: commits already on the branch, issues done, issues left
    (with files), last failing gate. Always a fresh worker session: the old one's cache has expired, so
    resuming it would resend its whole context.
-5. **Record** in `STATUS.md`: per wave harness, model, token totals printed by the script, PR, send-backs;
-   new agent mistakes go to `FIVE-MINUTES.md`. Commit and push `STATUS.md`.
+5. **Record, briefly.** `STATUS.md` is a **current-state page, not a log**: the wave table, the cost table
+   and a 3-line "Now" section; keep it under 80 lines (if longer, compact it this pass). Pass details belong
+   in the pass report (`.agent-runs/coordinator/`) and in PR/issue comments, never in `STATUS.md`.
+   **Commit `STATUS.md` only when a wave changes state** (merged, dispatched, returned, blocked), at most once
+   per pass, message `docs(status): <what changed> [skip ci]`. Nothing changed → no commit.
+   New agent mistakes go to `FIVE-MINUTES.md` (same commit).
 6. **End the pass** with a report of at most 10 lines. **First line** is one of:
    `AUTOPILOT: CONTINUE` (normal) · `AUTOPILOT: STOP roadmap done` · `AUTOPILOT: STOP owner decision: <question>`
    (only for ROADMAP "Câu hỏi mở" or the "ask the owner" list above). Never sleep or wait inside a pass.
