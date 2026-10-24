@@ -73,3 +73,48 @@ status=0
 out=$(cd "$valid_fixture" && EXTRA_FAILURE=1 bash scripts/agent-run-acceptance-control.sh auth 2>&1) || status=$?
 [[ $status -eq 1 && "$out" == *'cleanup FAILED: injected additional cleanup failure'* ]] || { printf '%s\n' "$out" >&2; exit 1; }
 printf '%s\n' 'regression extra-cleanup-failure passed: ordinary wrapper rejected additional failure'
+
+disable_guard() {
+  local fixture=$1 guard=$2
+  python3 - "$fixture/scripts/agent-run-acceptance-control.sh" "$guard" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); guard = sys.argv[2]; s = p.read_text()
+if guard == 'mutation':
+    old = "if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate || $mutation == noop ]]; then"
+    new = 'if false; then # mutation guard disabled for negative control'
+elif guard == 'cleanup':
+    old = "if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate ]]; then"
+    new = 'if false; then # cleanup-evidence guard disabled for negative control'
+else:
+    raise SystemExit(f'unknown guard: {guard}')
+if s.count(old) != 1:
+    raise SystemExit(f'expected one {guard} guard')
+p.write_text(s.replace(old, new, 1))
+PY
+}
+
+for control in auth validation pricing repository-list repository-aggregate wave-list wave-aggregate issue-list issue-aggregate; do
+  fixture=$(make_fixture "disabled-mutation-$control")
+  mutate_baseline "$fixture" "$control"
+  disable_guard "$fixture" mutation
+  status=0
+  out=$(cd "$fixture" && bash scripts/agent-run-acceptance-control.sh "$control" 2>&1) || status=$?
+  [[ $status -eq 1 && "$out" == *"intended diagnostic 'fixture no-op' missing"* && "$out" == *'fixture invoked'* ]] || {
+    printf '%s\n' "$out" >&2
+    exit 1
+  }
+  printf 'regression disabled-mutation-%s passed: missing mutation guard failed named assertion\n' "$control"
+done
+
+for spec in 'OMIT_PID=1:API PID absent' 'OMIT_LISTENER=1:no API listener' 'OMIT_FIXTURES=1:no owned containers or volumes'; do
+  assignment=${spec%%:*}; expected=${spec#*:}
+  fixture=$(make_fixture "disabled-cleanup-${expected// /-}")
+  disable_guard "$fixture" cleanup
+  status=0
+  out=$(cd "$fixture" && env "$assignment" bash scripts/agent-run-acceptance-control.sh auth 2>&1) || status=$?
+  [[ $status -eq 0 && "$out" == *'control auth passed:'* && "$out" == *'fixture invoked'* ]] || {
+    printf '%s\n' "$out" >&2
+    exit 1
+  }
+  printf 'regression disabled-cleanup (%s) passed: missing cleanup guard produced a false pass\n' "$expected"
+done
