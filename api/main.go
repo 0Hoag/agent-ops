@@ -6,11 +6,16 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/0Hoag/agent-ops/api/modules/store"
+	"github.com/0Hoag/agent-ops/api/modules/webhook"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	"github.com/0Hoag/agent-ops/api/pkg/database"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers"
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
+	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/0Hoag/agent-ops/api/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -28,11 +33,17 @@ func main() {
 	if err := database.RunMigrations(context.Background(), db); err != nil {
 		logger.Fatal(fmt.Errorf("run migrations: %w", err))
 	}
+	configured := store.New(db)
+	for _, repository := range cfg.Repositories {
+		if err := configured.Repositories.Upsert(context.Background(), &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, WebhookSecretEnvRef: repository.WebhookSecretEnv}); err != nil {
+			logger.Fatal(fmt.Errorf("configure repository: %w", err))
+		}
+	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(logger.Request(log))
-	registerRoutes(router, database.AsPinger(db))
+	registerRoutes(router, database.AsPinger(db), db, cfg)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	log.Info("api listening", "addr", cfg.HTTPAddr)
@@ -41,6 +52,11 @@ func main() {
 	}
 }
 
-func registerRoutes(router *gin.Engine, db database.Pinger) {
+func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config) {
 	handlers.NewHealth(db).Register(router)
+	configs := map[string][]webhook.Config{}
+	for _, r := range cfg.Repositories {
+		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
+	}
+	webhook.NewRoutes(webhook.NewController(webhook.NewService(gormDB, builder.Default()), configs)).Register(router.Group("/api/v1"))
 }

@@ -39,6 +39,14 @@ func (repository *RepositoryRepository) Get(ctx context.Context, id UUID) (*Repo
 	return &item, nil
 }
 
+func (repository *RepositoryRepository) GetByName(ctx context.Context, provider, fullName string) (*Repository, error) {
+	var item Repository
+	if err := repository.db.WithContext(ctx).Where("provider = ? AND full_name = ?", provider, fullName).First(&item).Error; err != nil {
+		return nil, fmt.Errorf("get repository %s/%s: %w", provider, fullName, err)
+	}
+	return &item, nil
+}
+
 func (repository *RepositoryRepository) List(ctx context.Context, page, perPage int) ([]Repository, Page, error) {
 	page, perPage = pageArgs(page, perPage)
 	query := repository.db.WithContext(ctx).Model(&Repository{})
