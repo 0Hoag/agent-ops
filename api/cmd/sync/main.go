@@ -34,14 +34,20 @@ func main() {
 		fail(err)
 	}
 	st := store.New(db)
-	if err = forEachConfiguredRepository(cfg.Repositories, func(c config.RepositoryConfig) error {
+	if err = syncConfiguredRepositories(ctx, cfg.Repositories, st); err != nil {
+		fail(err)
+	}
+}
+
+func syncConfiguredRepositories(ctx context.Context, repositories []config.RepositoryConfig, st *store.Store) error {
+	return forEachConfiguredRepository(repositories, func(c config.RepositoryConfig) error {
 		token := os.Getenv(c.TokenEnv)
 		secret := os.Getenv(c.WebhookSecretEnv)
 		p, buildErr := builder.Build(c.Provider, scmConfig(token, secret, os.Getenv(c.BaseURLEnv)))
 		if buildErr != nil {
 			return buildErr
 		}
-		if err = st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
+		if err := st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
 			return err
 		}
 		repo, getErr := st.Repositories.GetByName(ctx, c.Provider, c.FullName)
@@ -52,13 +58,11 @@ func main() {
 		if backfillErr != nil {
 			return backfillErr
 		}
-		if err = persistBackfill(ctx, st, repo.ID, result); err != nil {
+		if err := persistBackfill(ctx, st, repo.ID, result); err != nil {
 			return err
 		}
 		return nil
-	}); err != nil {
-		fail(err)
-	}
+	})
 }
 
 func forEachConfiguredRepository(repositories []config.RepositoryConfig, syncRepository func(config.RepositoryConfig) error) error {
