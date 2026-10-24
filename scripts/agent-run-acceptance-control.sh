@@ -4,6 +4,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 mutation=${1:?usage: $0 auth|validation|pricing|repository-list|repository-aggregate|wave-list|wave-aggregate|issue-list|issue-aggregate|noop}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+export GOMODCACHE="$tmp/go-mod-cache" GOCACHE="$tmp/go-cache"
 git -C "$ROOT" archive HEAD | tar -x -C "$tmp"
 cp "$ROOT/scripts/agent-run-acceptance.sh" "$tmp/scripts/"
 git -C "$tmp" init -q
