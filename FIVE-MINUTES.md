@@ -160,3 +160,13 @@ the smoke script EXIT trap killed only the API, leaving the container and its an
 
 **Check:** inspect both container and mounted volumes after smoke. Install cleanup for every owned
 fixture on every exit; never remove unrelated services. Confirm absence before claiming cleanup.
+
+## 17. Start cross-repository workers inside their implementation worktree
+
+WS-c used an API harness session while editing a separate client worktree. Explicit authorization did
+not change the patch tool's session root; the attempt stopped with only package.json modified.
+
+> Cost: one incomplete attempt and a correct-root retry; reusable dispatch follow-up #151.
+
+**Check:** verify session `--dir`, Git remote, branch and agent/config all belong to the intended client
+worktree before dispatch. Preserve partial work and start the retry there; use relative edit paths.
