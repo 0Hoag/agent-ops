@@ -76,11 +76,18 @@ One pass:
    dozens, not a handful. Labels `status:*`, `priority:*`, `type:*`, `wave:*`, `area:api|client|ci|docs`.
    A wave = several issues in the same area, given to one worker; its PR closes all of them.
    Mark dependencies (`status:blocked` + `Status:` comment).
-   **Work discovered while running becomes a new issue**, never an inline fix: follow-ups, bugs, missing
-   tests, a worker's "Not covered", a review finding. Label it `found-by:agent`, put it in a later wave.
-3. **Finish open PRs.** For each worker PR whose worker has finished: verify (gates on the PR head, CI green,
-   `Closes #n`, no out-of-scope files, smoke when API/client changed), then merge (squash, pinned SHA),
-   confirm the content is on `main`, remove its worktree. Send back with a comment when a check fails.
+   **Real defects discovered while running become a new issue**, never an inline fix: a bug, a test that
+   cannot fail, a security or data-loss risk, an acceptance criterion a merged PR missed. Label it
+   `found-by:agent`, put it in a later wave. "Would be nice to also have" is **not** an issue: skip it.
+3. **Finish open PRs: spot-check, do not redo the work.** For each PR whose worker has finished:
+   - The **PR body must carry the evidence**: gate commands with output, smoke result, the failing-control
+     proof for new tests. Missing evidence = send back (cheap), do not produce it yourself.
+   - CI green on the exact head, `Closes #n`, no out-of-scope files (`gh pr diff --name-only`).
+   - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
+     Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
+   - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
+   - **At most 2 send-backs per PR.** On the 3rd review, if CI and gates are green, merge and file what is
+     still missing as `found-by:agent` follow-up issues.
 4. **Dispatch.** If fewer than **2 workers** are running (`pgrep -f run-worker`), start the next unblocked
    sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
    and commands; every brief says "commit and push after every finished issue". Start **detached** so it survives this pass:
