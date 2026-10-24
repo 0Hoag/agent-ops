@@ -72,6 +72,8 @@ func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]
 					a.CostUSD = &x
 				}
 				*a.CostUSD += v
+			} else {
+				a.CostUSD = nil
 			}
 		}
 	}

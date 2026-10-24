@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ type RunRepository interface {
 	Aggregate(context.Context, Filter, map[string]Price) ([]Aggregate, error)
 }
 
+// Controller exposes agent run persistence and reporting endpoints.
+// @Tags agent-runs
 type Controller struct {
 	repository RunRepository
 	token      string
@@ -28,6 +31,17 @@ type Controller struct {
 func NewController(repository RunRepository, token string, prices map[string]Price) *Controller {
 	return &Controller{repository: repository, token: token, prices: prices}
 }
+
+// Create persists a validated normalized usage record.
+// @Summary Create an agent run
+// @Accept json
+// @Produce json
+// @Param X-Agent-Run-Token header string true "Static agent run token"
+// @Param request body CreateInput true "Agent run"
+// @Success 201 {object} AgentRun
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Router /api/v1/agent-runs [post]
 func (c *Controller) Create(ctx *gin.Context) {
 	if c.token == "" || !strings.EqualFold(ctx.GetHeader("X-Agent-Run-Token"), c.token) {
 		response.Error(ctx, http.StatusUnauthorized, "unauthorized")
@@ -62,16 +76,44 @@ func (c *Controller) Create(ctx *gin.Context) {
 	}
 	response.Created(ctx, run)
 }
+
+// List returns runs filtered by repository, wave, and issue number.
+// @Summary List agent runs
+// @Produce json
+// @Param repository_id query string false "Repository UUID"
+// @Param wave query string false "Wave"
+// @Param issue_number query int false "Issue number"
+// @Success 200 {array} AgentRun
+// @Router /api/v1/agent-runs [get]
 func (c *Controller) List(ctx *gin.Context) {
-	items, err := c.repository.List(ctx.Request.Context(), requestFilter(ctx))
+	filter, err := requestFilter(ctx)
+	if err != nil {
+		response.BadRequest(ctx, "invalid issue_number")
+		return
+	}
+	items, err := c.repository.List(ctx.Request.Context(), filter)
 	if err != nil {
 		response.Error(ctx, 500, "failed to list agent runs")
 		return
 	}
 	response.OK(ctx, items)
 }
+
+// Aggregate returns usage and cost grouped by wave, worker, and issue.
+// @Summary Aggregate agent runs
+// @Produce json
+// @Param repository_id query string false "Repository UUID"
+// @Param wave query string false "Wave"
+// @Param issue_number query int false "Issue number"
+// @Success 200 {array} Aggregate
+// @Router /api/v1/agent-runs/aggregate [get]
 func (c *Controller) Aggregate(ctx *gin.Context) {
-	items, err := c.repository.Aggregate(ctx.Request.Context(), requestFilter(ctx), c.prices)
+	filter, err := requestFilter(ctx)
+	if err != nil {
+		response.BadRequest(ctx, "invalid issue_number")
+		return
+	}
+	items, err := c.repository.Aggregate(ctx.Request.Context(), filter, c.prices)
 	if err != nil {
 		response.Error(ctx, 500, "failed to aggregate agent runs")
 		return
@@ -79,7 +121,14 @@ func (c *Controller) Aggregate(ctx *gin.Context) {
 	response.OK(ctx, items)
 }
 
-func requestFilter(ctx *gin.Context) Filter {
-	issue, _ := strconv.ParseInt(ctx.Query("issue_number"), 10, 64)
-	return Filter{RepositoryID: ctx.Query("repository_id"), Wave: ctx.Query("wave"), IssueNumber: issue}
+func requestFilter(ctx *gin.Context) (Filter, error) {
+	filter := Filter{RepositoryID: ctx.Query("repository_id"), Wave: ctx.Query("wave")}
+	if raw := ctx.Query("issue_number"); raw != "" {
+		issue, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || issue < 1 {
+			return Filter{}, fmt.Errorf("invalid issue number")
+		}
+		filter.IssueNumber = issue
+	}
+	return filter, nil
 }
