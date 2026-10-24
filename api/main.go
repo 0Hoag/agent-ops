@@ -17,6 +17,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/pkg/handlers"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
+	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 	"github.com/0Hoag/agent-ops/api/pkg/logger"
 	"github.com/0Hoag/agent-ops/api/pkg/middleware"
 	"github.com/gin-contrib/cors"
