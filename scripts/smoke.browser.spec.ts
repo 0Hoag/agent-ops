@@ -5,8 +5,16 @@ test('renders seeded issue and linked PR/CI from the real API', async ({ page })
   page.on('response', (response) => {
     if (response.url().includes('/api/v1/')) apiResponses.push(`${response.status()} ${response.url()}`);
   });
+  page.on('requestfailed', (request) => {
+    if (request.url().includes('/api/v1/')) console.error(`API request failed: ${request.method()} ${request.url()} ${request.failure()?.errorText}`);
+  });
+  page.on('response', (response) => {
+    if (response.url().includes('/api/v1/') && response.status() >= 400) console.error(`API response failed: ${response.status()} ${response.url()}`);
+  });
   await page.goto('/board');
-  await page.getByRole('combobox', { name: 'Repository' }).selectOption({ label: 'smoke/agent-ops' });
+  const repositories = page.getByRole('combobox', { name: 'Repository' });
+  await expect(repositories).toBeEnabled({ timeout: 15000 });
+  await repositories.selectOption({ label: 'smoke/agent-ops' });
   await expect(page.getByText('Smoke fixture: board serves real API data')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Smoke fixture: linked pull request')).toBeVisible();
   await expect(page.getByText('CI smoke-ci-99002: Passed')).toBeVisible();
