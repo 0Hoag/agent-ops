@@ -74,17 +74,17 @@ out=$(cd "$valid_fixture" && EXTRA_FAILURE=1 bash scripts/agent-run-acceptance-c
 [[ $status -eq 1 && "$out" == *'cleanup FAILED: injected additional cleanup failure'* ]] || { printf '%s\n' "$out" >&2; exit 1; }
 printf '%s\n' 'regression extra-cleanup-failure passed: ordinary wrapper rejected additional failure'
 
-disable_guard() {
+remove_guard() {
   local fixture=$1 guard=$2
   python3 - "$fixture/scripts/agent-run-acceptance-control.sh" "$guard" <<'PY'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1]); guard = sys.argv[2]; s = p.read_text()
 if guard == 'mutation':
     old = "if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate || $mutation == noop ]]; then"
-    new = 'if false; then # mutation guard disabled for negative control'
+    new = 'if false; then # mutation guard removed for negative control'
 elif guard == 'cleanup':
     old = "if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate ]]; then"
-    new = 'if false; then # cleanup-evidence guard disabled for negative control'
+    new = 'if false; then # cleanup-evidence guard removed for negative control'
 else:
     raise SystemExit(f'unknown guard: {guard}')
 if s.count(old) != 1:
@@ -93,28 +93,47 @@ p.write_text(s.replace(old, new, 1))
 PY
 }
 
-for control in auth validation pricing repository-list repository-aggregate wave-list wave-aggregate issue-list issue-aggregate; do
-  fixture=$(make_fixture "disabled-mutation-$control")
-  mutate_baseline "$fixture" "$control"
-  disable_guard "$fixture" mutation
-  status=0
-  out=$(cd "$fixture" && bash scripts/agent-run-acceptance-control.sh "$control" 2>&1) || status=$?
-  [[ $status -eq 1 && "$out" == *"intended diagnostic 'fixture no-op' missing"* && "$out" == *'fixture invoked'* ]] || {
+run_unchanged_baseline() {
+  local fixture=$1 mutation=$2 expected=$3 status=0 out
+  out=$(cd "$fixture" && bash scripts/agent-run-acceptance-control.sh "$mutation" 2>&1) || status=$?
+  local diagnostic="control $mutation FAIL: actual wrapper did not prove all cleanup evidence classes"
+  [[ $expected == 'mutation guard' ]] && diagnostic="control $mutation FAIL: intended diagnostic 'authenticated POST: expected HTTP 201' missing"
+  [[ $expected == 'cleanup-evidence guard' ]] && diagnostic="control $mutation FAIL: intended diagnostic 'fixture no-op' missing"
+  [[ $status -eq 1 && "$out" == *"$diagnostic"* ]] || {
     printf '%s\n' "$out" >&2
+    printf 'expected unchanged baseline diagnostic: %s (exit 1), got exit %s\n' "$expected" "$status" >&2
     exit 1
   }
-  printf 'regression disabled-mutation-%s passed: missing mutation guard failed named assertion\n' "$control"
-done
+  printf '%s\n' "$out"
+  printf 'regression guard-removal %s passed: unchanged baseline failed with named assertion (exit=%s)\n' "$expected" "$status"
+}
 
-for spec in 'OMIT_PID=1:API PID absent' 'OMIT_LISTENER=1:no API listener' 'OMIT_FIXTURES=1:no owned containers or volumes'; do
-  assignment=${spec%%:*}; expected=${spec#*:}
-  fixture=$(make_fixture "disabled-cleanup-${expected// /-}")
-  disable_guard "$fixture" cleanup
-  status=0
-  out=$(cd "$fixture" && env "$assignment" bash scripts/agent-run-acceptance-control.sh auth 2>&1) || status=$?
-  [[ $status -eq 0 && "$out" == *'control auth passed:'* && "$out" == *'fixture invoked'* ]] || {
-    printf '%s\n' "$out" >&2
-    exit 1
-  }
-  printf 'regression disabled-cleanup (%s) passed: missing cleanup guard produced a false pass\n' "$expected"
-done
+mutation_fixture=$(make_fixture removed-mutation-guard)
+mutate_baseline "$mutation_fixture" auth
+remove_guard "$mutation_fixture" mutation
+python3 - "$mutation_fixture/scripts/agent-run-acceptance-control.sh" "$mutation_fixture/scripts/agent-run-acceptance.sh" <<'PY'
+import pathlib, sys
+wrapper, acceptance = map(pathlib.Path, sys.argv[1:])
+s = wrapper.read_text(); old = "pattern='fixture no-op'"; new = "pattern='authenticated POST: expected HTTP 201'"
+if s.count(old) != 1: raise SystemExit('expected baseline assertion diagnostic')
+wrapper.write_text(s.replace(old, new, 1))
+s = acceptance.read_text(); old = "printf 'acceptance: FAIL: authenticated POST: expected HTTP 201\\n'"
+new = "printf 'acceptance: FAIL: authenticated POST: unexpected HTTP 400\\n'"
+if s.count(old) != 1: raise SystemExit('expected POST fixture diagnostic')
+acceptance.write_text(s.replace(old, new, 1))
+PY
+run_unchanged_baseline "$mutation_fixture" auth 'mutation guard'
+
+cleanup_fixture=$(make_fixture removed-cleanup-evidence-guard)
+python3 - "$cleanup_fixture/scripts/agent-run-acceptance-control.sh" "$cleanup_fixture/api/modules/agentrun/controller.go" <<'PY'
+import pathlib, sys
+wrapper, target = map(pathlib.Path, sys.argv[1:])
+s = wrapper.read_text(); old = "pattern='authenticated POST: expected HTTP 201'"; new = "pattern='fixture no-op'"
+if s.count(old) != 1: raise SystemExit('expected unchanged baseline diagnostic')
+wrapper.write_text(s.replace(old, new, 1))
+target.write_text(target.read_text() + '\n// changed target to satisfy no-op precondition\n')
+PY
+git -C "$cleanup_fixture" add .
+git -C "$cleanup_fixture" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm 'keep baseline assertions with changed target'
+remove_guard "$cleanup_fixture" cleanup
+run_unchanged_baseline "$cleanup_fixture" auth 'cleanup-evidence guard'
