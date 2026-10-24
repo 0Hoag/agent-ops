@@ -8,19 +8,26 @@
 
 ## HTTP acceptance
 
-From the repository root, run `scripts/agent-run-acceptance.sh`. It starts a uniquely named disposable
-PostgreSQL Compose project on a random host port, runs the API from this worktree, authenticates POST,
-asserts the normalized SQL row (including every usage field and timestamps), and verifies exact filtered
-list and aggregate identities, counts, tokens, and price. The EXIT trap removes the owned container and
-volume on success or failure; it never publishes PostgreSQL on host port 5432.
+From the repository root, run `scripts/agent-run-acceptance.sh`. It builds the API into a temporary
+binary, starts that owned process directly, and starts a uniquely named PostgreSQL Compose project on
+an available host port. It asserts authenticated HTTP writes, normalized SQL fields, exact filtered run
+identities and the complete aggregate snapshot. Cleanup verifies API PID/listener and owned container/
+volume absence on every exit. Set `AGENT_RUN_ACCEPTANCE_API_PORT` and
+`AGENT_RUN_ACCEPTANCE_PG_PORT` to choose free ports; PostgreSQL host port 5432 is refused.
 
 The disposable mutation controls prove the acceptance can detect defects without changing production:
 
 ```bash
 scripts/agent-run-acceptance-control.sh auth
 scripts/agent-run-acceptance-control.sh validation
-scripts/agent-run-acceptance-control.sh filters
+scripts/agent-run-acceptance-control.sh repository-list
+scripts/agent-run-acceptance-control.sh repository-aggregate
+scripts/agent-run-acceptance-control.sh wave-list
+scripts/agent-run-acceptance-control.sh wave-aggregate
+scripts/agent-run-acceptance-control.sh issue-list
+scripts/agent-run-acceptance-control.sh issue-aggregate
 scripts/agent-run-acceptance-control.sh pricing
+scripts/agent-run-acceptance-control.sh noop
 ```
 
 The exact-token case-only control is already covered by `TestCreateValidationPrecedesRepositoryAccess`
