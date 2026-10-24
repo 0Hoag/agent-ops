@@ -4,7 +4,7 @@ This small W3d CLI reads a Claude Code JSONL transcript from an explicit `-path`
 `~/.claude/projects` are a normal input) and submits one normalized agent run per transcript session.
 Use synthetic fixtures for tests; the importer never prints transcript content or the agent-run token.
 
-Streaming records are deduplicated by session metadata and message UUID. Input, cache-read,
+Streaming records are deduplicated within each transcript by session metadata and message UUID. Input, cache-read,
 cache-write, output, and reasoning counters remain separate. A caller-selected `-checkpoint` stores
 only successful session identities and is updated after each successful POST. A failed POST leaves the
 session retryable. This is importer-local durable deduplication, not a cross-machine or crash-exactly-once
