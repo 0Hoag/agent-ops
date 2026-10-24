@@ -2,9 +2,10 @@ package store
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPullRequestUpsertClearsClosesAndLooksUpLinkedIssue(t *testing.T) {

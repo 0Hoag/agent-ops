@@ -1,0 +1,13 @@
+basePath: /
+host: localhost:8080
+info:
+  contact: {}
+  description: API for repository synchronization and signed webhooks.
+  title: Agent Ops API
+  version: "1.0"
+paths:
+  /api/v1/webhooks/{provider}:
+    post:
+      responses: {}
+      summary: Ingest provider webhook
+swagger: "2.0"

@@ -18,7 +18,7 @@ func (h *Health) Register(router *gin.Engine) {
 }
 
 // Healthz reports process health and does not depend on the database.
-func (h *Health) Healthz(c *gin.Context) { response.JSON(c, http.StatusOK, gin.H{"status": "ok"}) }
+func (h *Health) Healthz(c *gin.Context) { response.Success(c, http.StatusOK, gin.H{"status": "ok"}) }
 
 // Readyz reports whether the API can reach its database.
 func (h *Health) Readyz(c *gin.Context) {
@@ -26,5 +26,5 @@ func (h *Health) Readyz(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
-	response.JSON(c, http.StatusOK, gin.H{"status": "ok"})
+	response.Success(c, http.StatusOK, gin.H{"status": "ok"})
 }

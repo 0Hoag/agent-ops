@@ -65,5 +65,5 @@ func (controller *Controller) Handle(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "webhook rejected")
 		return
 	}
-	response.JSON(c, http.StatusOK, gin.H{"accepted": created})
+	response.Success(c, http.StatusOK, gin.H{"accepted": created})
 }
