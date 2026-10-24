@@ -86,10 +86,6 @@ if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $m
     if [[ $mutation == noop ]]; then echo 'control noop passed: unchanged mutation rejected before nested acceptance'; exit 0; fi
     echo "control $mutation FAIL: no-op mutation rejected ordinary control before nested acceptance" >&2; exit 1
   fi
-  if [[ $mutation != noop ]]; then
-    guard=$(grep -nF 'no-op mutation: target unchanged' "$ROOT/scripts/agent-run-acceptance-control.sh" | cut -d: -f1)
-    [[ -n "$guard" ]] || { echo "control $mutation FAIL: no-op mutation guard missing" >&2; exit 1; }
-  fi
   if [[ $mutation == noop ]]; then echo 'control noop FAIL: no-op mutation changed target' >&2; exit 1; fi
 elif [[ $mutation == noop ]]; then
   echo 'control noop FAIL: no-op mutation changed target' >&2; exit 1

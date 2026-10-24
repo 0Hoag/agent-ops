@@ -42,6 +42,8 @@ scripts/agent-run-acceptance-control.sh cleanup-missing-injection
 scripts/agent-run-acceptance-control.sh cleanup-extra-failure
 ```
 
+The `noop` control accepts only an unchanged target rejected before nested acceptance. Run
+`scripts/agent-run-acceptance-control-regression.sh` for standalone behavioral wrapper regressions.
 The timestamp control corrupts the persisted row and must fail its exact SQL assertion. The cleanup-failure
 control combines a failing list assertion with an injected cleanup failure; the wrapper must observe both
 diagnostics while verifying real fixture cleanup. The omission controls remove each PID, listener, and
