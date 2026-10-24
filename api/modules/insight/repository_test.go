@@ -47,11 +47,19 @@ func TestBuildDecodesRetainedNestedProviderPayloads(t *testing.T) {
 	repoID := store.UUID("d0000000-0000-4000-8000-000000000001")
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	rows := []store.WebhookEvent{
-		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "issue-1", ReceivedAt: base, Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:in_progress"}]}}`)},
-		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "issue-2", ReceivedAt: base.Add(time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:review"}]}}`)},
-		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "issue-3", ReceivedAt: base.Add(2 * time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:in_progress"}]}}`)},
-		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "issue-4", ReceivedAt: base.Add(3 * time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"closed","labels":[]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "gh-1", ReceivedAt: base, Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:in progress"}]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "gh-2", ReceivedAt: base.Add(time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:review"}]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "gh-3", ReceivedAt: base.Add(2 * time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"open","labels":[{"name":"status:in progress"}]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "issues", DeliveryID: "gh-4", ReceivedAt: base.Add(3 * time.Hour), Payload: store.JSONB(`{"issue":{"number":7,"state":"closed","labels":[]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-1", ReceivedAt: base, Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::Todo"]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-2", ReceivedAt: base.Add(time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::Review"]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-3", ReceivedAt: base.Add(2 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::In Progress"]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-4", ReceivedAt: base.Add(3 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":13,"state":"opened","labels":["Status::Blocked"]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-5", ReceivedAt: base.Add(4 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"closed","labels":[]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Merge Request Hook", DeliveryID: "mr-1", ReceivedAt: base.Add(5 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::Review"]}}`)},
 		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-1", ReceivedAt: base.Add(time.Minute), Payload: store.JSONB(`{"workflow_run":{"id":1,"head_sha":"abc","conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:02:00Z","pull_requests":[{"number":8}]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-no-sha", ReceivedAt: base.Add(2 * time.Minute), Payload: store.JSONB(`{"workflow_run":{"id":2,"conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:03:00Z","pull_requests":[{"number":9}]}}`)},
+		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-no-id", ReceivedAt: base.Add(3 * time.Minute), Payload: store.JSONB(`{"workflow_run":{"head_sha":"def","conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:04:00Z","pull_requests":[{"number":10}]}}`)},
 	}
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "repositories" WHERE id = $1`)).WithArgs(string(repoID)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	result := sqlmock.NewRows([]string{"id", "repository_id", "provider", "event_type", "delivery_id", "payload", "received_at", "created_at", "updated_at"})
@@ -62,13 +70,23 @@ func TestBuildDecodesRetainedNestedProviderPayloads(t *testing.T) {
 	got, err := NewRepository(db).Build(context.Background(), string(repoID))
 	require.NoError(t, err)
 	require.False(t, got.History.Complete)
-	require.Equal(t, 1, got.SendBack.Numerator)
+	require.Equal(t, 2, got.SendBack.Numerator)
 	require.Equal(t, 1, got.SendBack.Denominator)
+	require.Equal(t, 2.0, got.SendBack.Rate)
 	require.Equal(t, 1, got.FirstCI.Eligible)
 	require.Equal(t, 1, got.FirstCI.Successful)
-	require.Equal(t, 1, got.CycleTime.Completed)
+	require.Equal(t, 2, got.CycleTime.Completed)
 	require.Equal(t, "ci-1", got.FirstCI.Evidence[0].DeliveryID)
+	require.Equal(t, []string{"gh-3", "gl-3"}, evidenceDeliveryIDs(got.SendBack.Evidence))
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func evidenceDeliveryIDs(evidence []Evidence) []string {
+	ids := make([]string, len(evidence))
+	for i, item := range evidence {
+		ids[i] = item.DeliveryID
+	}
+	return ids
 }
 
 func TestDecodeRealProviderFixtures(t *testing.T) {
@@ -85,7 +103,7 @@ func TestDecodeRealProviderFixtures(t *testing.T) {
 			require.Equal(t, "success", got.conclusion)
 			require.NotNil(t, got.pr)
 			require.Equal(t, int64(8), *got.pr)
-		} else {
+		} else if tc.provider == "gitlab" {
 			require.NotNil(t, got.issue)
 			require.Equal(t, int64(12), *got.issue)
 			require.Equal(t, "in_progress", got.status)

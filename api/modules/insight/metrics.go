@@ -49,7 +49,7 @@ func sendBack(es []event) SendBackMetric {
 func firstCI(es []event) FirstCIMetric {
 	groups := map[int64]map[string][]event{}
 	for _, e := range dedup(es) {
-		if e.pr != nil && e.pipelineID != "" && e.conclusion != "" && !e.startedAt.IsZero() && !e.sourceAt.IsZero() {
+		if e.pr != nil && e.pipelineID != "" && e.sha != "" && e.conclusion != "" && !e.startedAt.IsZero() && !e.sourceAt.IsZero() {
 			if groups[*e.pr] == nil {
 				groups[*e.pr] = map[string][]event{}
 			}

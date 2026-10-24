@@ -59,9 +59,13 @@ type issuePayload struct {
 		} `json:"labels"`
 	} `json:"issue"`
 }
+type labelPayload struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+}
 type runPayload struct {
 	Run struct {
-		ID         int64     `json:"id"`
+		ID         *int64    `json:"id"`
 		HeadSHA    string    `json:"head_sha"`
 		Conclusion string    `json:"conclusion"`
 		Started    time.Time `json:"run_started_at"`
@@ -74,7 +78,7 @@ type runPayload struct {
 type gitlabPayload struct {
 	Object struct {
 		IID      int64     `json:"iid"`
-		ID       int64     `json:"id"`
+		ID       *int64    `json:"id"`
 		State    string    `json:"state"`
 		SHA      string    `json:"sha"`
 		Status   string    `json:"status"`
@@ -85,8 +89,10 @@ type gitlabPayload struct {
 		MR       *struct {
 			IID int64 `json:"iid"`
 		} `json:"merge_request"`
+		Labels []json.RawMessage `json:"labels"`
 	} `json:"object_attributes"`
-	MR *struct {
+	Labels []json.RawMessage `json:"labels"`
+	MR     *struct {
 		IID int64 `json:"iid"`
 	} `json:"merge_request"`
 }
@@ -106,7 +112,7 @@ func decode(row store.WebhookEvent) event {
 			statusFound := false
 			for _, l := range p.Issue.Labels {
 				if strings.HasPrefix(l.Name, "status:") {
-					e.status = strings.TrimPrefix(l.Name, "status:")
+					e.status = normalizeStatus(strings.TrimPrefix(l.Name, "status:"))
 					statusFound = true
 				}
 			}
@@ -118,7 +124,9 @@ func decode(row store.WebhookEvent) event {
 			var p runPayload
 			_ = json.Unmarshal(row.Payload, &p)
 			e.sha = p.Run.HeadSHA
-			e.pipelineID = fmt.Sprint(p.Run.ID)
+			if p.Run.ID != nil && *p.Run.ID > 0 {
+				e.pipelineID = fmt.Sprint(*p.Run.ID)
+			}
 			e.conclusion = p.Run.Conclusion
 			e.startedAt = p.Run.Started
 			if !p.Run.Updated.IsZero() {
@@ -147,7 +155,9 @@ func decode(row store.WebhookEvent) event {
 		a := p.Object
 		if strings.Contains(strings.ToLower(row.EventType), "pipeline") {
 			e.sha = a.SHA
-			e.pipelineID = fmt.Sprint(a.ID)
+			if a.ID != nil && *a.ID > 0 {
+				e.pipelineID = fmt.Sprint(*a.ID)
+			}
 			e.conclusion = a.Status
 			e.startedAt = a.Started
 			if e.startedAt.IsZero() {
@@ -169,17 +179,63 @@ func decode(row store.WebhookEvent) event {
 			if n != 0 {
 				e.issue = &n
 			}
-			e.status = a.State
-			if e.status == "opened" && strings.Contains(string(row.Payload), "Status::in_progress") {
-				e.status = "in_progress"
+			if !strings.Contains(strings.ToLower(row.EventType), "issue") || strings.Contains(strings.ToLower(row.EventType), "merge request") {
+				break
 			}
-			if e.status == "opened" {
-				e.status = "in_progress"
+			labels := decodeGitLabLabels(a.Labels)
+			if len(labels) == 0 {
+				labels = decodeGitLabLabels(p.Labels)
 			}
-			if e.status == "closed" {
-				e.status = "done"
-			}
+			e.status = gitlabIssueStatus(a.State, labels)
 		}
 	}
 	return e
+}
+
+func normalizeStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "in progress", "in_progress":
+		return "in_progress"
+	case "todo":
+		return "todo"
+	case "review", "blocked", "done":
+		return strings.ToLower(strings.TrimSpace(status))
+	default:
+		return ""
+	}
+}
+
+func gitlabIssueStatus(state string, labels []labelPayload) string {
+	if state == "closed" {
+		return "done"
+	}
+	for _, label := range labels {
+		name := label.Title
+		if name == "" {
+			name = label.Name
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		if strings.HasPrefix(name, "status::") {
+			if status := normalizeStatus(strings.TrimPrefix(name, "status::")); status != "" {
+				return status
+			}
+		}
+	}
+	return ""
+}
+
+func decodeGitLabLabels(rawLabels []json.RawMessage) []labelPayload {
+	labels := make([]labelPayload, 0, len(rawLabels))
+	for _, raw := range rawLabels {
+		var label labelPayload
+		if json.Unmarshal(raw, &label) == nil && (label.Title != "" || label.Name != "") {
+			labels = append(labels, label)
+			continue
+		}
+		var name string
+		if json.Unmarshal(raw, &name) == nil {
+			labels = append(labels, labelPayload{Title: name})
+		}
+	}
+	return labels
 }
