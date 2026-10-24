@@ -79,6 +79,16 @@ func TestParseEventMappers(t *testing.T) {
 	}
 }
 
+func TestParseEventRequiresMatchingEventEntity(t *testing.T) {
+	body, err := os.ReadFile("testdata/issues.json")
+	require.NoError(t, err)
+	headers := http.Header{"X-Hub-Signature-256": []string{signed("secret", body)}, "X-GitHub-Delivery": []string{"delivery-1"}}
+	_, err = New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "workflow_run", headers, body)
+	require.Error(t, err)
+	_, err = New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "issues", headers, []byte(`{"repository":{"full_name":"acme/project"},"issue":{"id":1,"number":0,"title":"bad","state":"open"}}`))
+	require.Error(t, err)
+}
+
 func TestIssueStatusMapping(t *testing.T) {
 	tests := []struct {
 		label  string
