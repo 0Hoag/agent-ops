@@ -42,9 +42,9 @@ Redis, MongoDB and RabbitMQ containers were only inspected and left untouched.
 
 The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at `870c7ca`:
 vet exit 0; lint reported `0 issues`; tests passed for sync, store, webhook, database and SCM packages; build exit 0.
-Exact-head hosted API CI run `40045609378` on `09f2771562dc6267431c72d29c61af52ef7c3813` completed successfully:
+Exact-head hosted API CI run `40045684944` on `12b5d2c74ac57c5dee278cff20f9d2c85a58d271` completed successfully:
 vet, golangci-lint, test, build and job completion all passed.
 
 ## Not covered
 
-- None.
+- None; final evidence commit triggers a subsequent hosted CI run.
