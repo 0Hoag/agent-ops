@@ -40,6 +40,7 @@ func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]
 		return nil, err
 	}
 	groups := map[string]*Aggregate{}
+	unknownCosts := map[string]struct{}{}
 	order := []string{}
 	for _, run := range runs {
 		var issues []int64
@@ -66,14 +67,17 @@ func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]
 			a.OutputTokens += run.OutputTokens
 			a.ReasoningTokens += run.ReasoningTokens
 			if p, ok := prices[run.Model]; ok {
-				v := priceCost(run, p)
-				if a.CostUSD == nil {
-					x := 0.0
-					a.CostUSD = &x
+				if _, unknown := unknownCosts[key]; !unknown {
+					v := priceCost(run, p)
+					if a.CostUSD == nil {
+						x := 0.0
+						a.CostUSD = &x
+					}
+					*a.CostUSD += v
 				}
-				*a.CostUSD += v
 			} else {
 				a.CostUSD = nil
+				unknownCosts[key] = struct{}{}
 			}
 		}
 	}

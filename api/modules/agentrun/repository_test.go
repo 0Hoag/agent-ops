@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/database"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -72,4 +74,48 @@ func TestPostgresAgentRunRepository(t *testing.T) {
 	encoded, err := json.Marshal(groups)
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), "w3a")
+}
+
+func TestAggregateUnknownCostIsOrderIndependent(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
+	require.NoError(t, err)
+	repo := NewRepository(db)
+	knownPrice := map[string]Price{"known": {InputPerMillion: 1}}
+	knownPrice["zero"] = Price{}
+	for _, tc := range []struct {
+		name   string
+		models []string
+		known  bool
+		cost   float64
+	}{
+		{name: "known unknown known", models: []string{"known", "unknown", "known"}},
+		{name: "unknown known", models: []string{"unknown", "known"}},
+		{name: "known only", models: []string{"known", "known"}, known: true, cost: 2e-6},
+		{name: "known zero", models: []string{"zero"}, known: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := sqlmock.NewRows([]string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "cost_usd", "started_at", "ended_at", "created_at", "updated_at"})
+			for i, model := range tc.models {
+				tokens := int64(1)
+				if tc.name == "known zero" {
+					tokens = 0
+				}
+				rows.AddRow(store.NewUUID(), nil, "w", "worker", model, []byte(`[1]`), tokens, 0, 0, 0, 0, nil, time.Date(2026, 1, len(tc.models)-i, 0, 0, 0, 0, time.UTC), nil, nil, nil)
+			}
+			mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "agent_runs" ORDER BY started_at DESC`)).WillReturnRows(rows)
+			groups, err := repo.Aggregate(context.Background(), Filter{}, knownPrice)
+			require.NoError(t, err)
+			require.Len(t, groups, 1)
+			if tc.known {
+				require.NotNil(t, groups[0].CostUSD)
+				require.InDelta(t, tc.cost, *groups[0].CostUSD, 1e-12)
+			} else {
+				require.Nil(t, groups[0].CostUSD)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
