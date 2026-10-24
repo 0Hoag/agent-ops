@@ -11,33 +11,39 @@ Migration `003_add_upstream_updated_at.sql` is append-only and adds the three co
 
 ## Reproduction
 
-From this worktree:
+Measured head: `116b70a89ab50696727e8f2c108ac910557cc6fe` before acceptance additions. The focused test uses
+`database.RunMigrations` and the actual `store.Issues`, `store.PullRequests`, and `store.PipelineRuns.Upsert` repository
+methods against a disposable PostgreSQL 16 container. The test exercises issue/PR/pipeline both arrival orders,
+concurrent writers, normalized state/value plus timestamp, equal/missing timestamp policy and null-timestamp
+duplicate safety. Webhook and sync mapping tests continue asserting timestamp binding.
 
-```text
+```sh
 cd api
-GOCACHE=/tmp/w1d-gocache GOMODCACHE=/tmp/w1d-gomodcache go test ./...
-GOCACHE=/tmp/w1d-gocache GOMODCACHE=/tmp/w1d-gomodcache go vet ./...
-GOCACHE=/tmp/w1d-gocache GOMODCACHE=/tmp/w1d-gomodcache go build ./...
+docker run --detach --rm --name w1d-accept-20261024 -e POSTGRES_USER=w1d -e POSTGRES_PASSWORD=w1d -e POSTGRES_DB=w1d -p 127.0.0.1:55441:5432 postgres:16-alpine
+W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
+W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotPredicateControl$' -count=1 -v
+docker rm -f w1d-accept-20261024
 ```
 
-Measured result: all tests, vet, and build exit 0. Store SQL mocks assert the `WHERE` freshness predicate for all
-three entities; sync and webhook mocks assert the additional upstream timestamp binding; migration tests apply and
-record version 003.
+Result: PASS for `newer-first`, `older-first`, missing-timestamp duplicate safety for all three entities, `concurrent_writers`, and
+`equal_and_missing_timestamps_do_not_overwrite_known_version`. The test applies all embedded production migrations,
+including versions 001–003.
 
-Docker 29.2.0 disposable PostgreSQL 16 container `w1d-accept-$(id -u)` was started on 127.0.0.1:55441.
-The initial direct SQL exercise demonstrated issue newer-then-older rejection and older-then-newer acceptance;
-PR/pipeline SQL fixture attempt failed because duplicate conflict keys were put in one INSERT (PostgreSQL correctly
-rejects affecting the same row twice). The real migration runner invocation only ran the migration mock test and did
-not migrate the container. This is not a completed production-migration acceptance. Concurrent writers and the
-predicate-removal negative control are also not covered.
+Predicate-removal control: `TestPostgresStaleSnapshotPredicateControl` runs a disposable unconditional conflict update
+(the production assignment set, with its `WHERE` freshness predicate omitted) and asserts newer issue state/value.
+Against the disposable PostgreSQL fixture, it failed as intended: `expected: "closed" actual: "open"`, diagnostic
+`predicate removal should expose stale overwrite: expected newer state closed, got "open"`. This distinguishes actual
+state corruption from fixture setup failure.
 
-`golangci-lint run` was attempted, but its typechecking subprocess read the restricted shared Go build cache under
-`/Users/zeross/Library/Caches/go-build`; it reported 0 lint issues after the cache access errors and is not claimed
-as a passing gate.
+Cleanup: the named container ran with `--rm` and was additionally stopped/removed with `docker rm -f` after both test
+runs. Inspected `docker ps` afterward: no `w1d-accept-20261024` container; inspected volume inventory: no volume owned
+by this fixture (anonymous volume count unchanged by disposable run). No API process was started. Existing Postgres,
+Redis, MongoDB and RabbitMQ containers were only inspected and left untouched.
+
+The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at the acceptance head:
+vet exit 0; lint reported `0 issues`; tests passed for sync, store, webhook, database and SCM packages; build exit 0.
+Exact-head hosted CI is pending push.
 
 ## Not covered
 
-- Complete disposable PostgreSQL acceptance against production-applied migrations for all three entities, including
-  concurrent writers and both arrival orders.
-- Disposable negative control proving stale overwrite after removing the predicate.
-- Hosted CI result on the final PR head.
+- Final SHA and exact-head hosted CI (to be updated after commit/push).
