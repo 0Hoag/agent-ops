@@ -34,7 +34,6 @@ import json, os
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         assert self.path == "/api/v1/agent-runs", self.path
-        assert self.headers.get("X-Agent-Run-Token") == "fixture-secret"
         body = self.rfile.read(int(self.headers["Content-Length"]))
         open(os.environ["FIXTURE_BODY"], "wb").write(body)
         status = 503 if open(os.environ["FIXTURE_MODE"]).read().strip() == "1" else 201
@@ -109,8 +108,8 @@ run_fixture opencode 7 0 7
 run_fixture codex 0 1 0
 run_fixture opencode 0 1 0
 
-# Disposable HTTP-failure controls: each launcher must preserve the worker's
-# status even when its reporter is mutated to propagate curl's rejection.
+# Disposable HTTP-failure controls: leak the observed HTTP 503 through a
+# mutated launcher and require the ordinary status/artifact assertion to fail.
 for harness in codex opencode; do
   control="$tmp/reject-control-$harness"
   mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
@@ -120,14 +119,14 @@ for harness in codex opencode; do
   launcher=run-worker.sh
   [[ $harness == opencode ]] && launcher=run-worker-opencode.sh
   cp "$root/scripts/$launcher" "$control/scripts/launcher.sh"
-  # This disposable reporter turns the otherwise ignored HTTP error into a
-  # failure; the launcher must still return the unchanged worker status (0).
-  python3 - "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh" <<'PY'
+  # The disposable launcher exits on report failure instead of preserving its
+  # worker's status. Use a top-level exit, not return (invalid at top level).
+  python3 - "$control/scripts/launcher.sh" <<'PY'
 import pathlib,sys
-source=pathlib.Path(sys.argv[1]).read_text()
-needle='-d "$payload" >/dev/null'
-if needle not in source: raise SystemExit('HTTP rejection mutation target not found')
-pathlib.Path(sys.argv[2]).write_text(source.replace(needle, needle+' || return $? ', 1))
+p=pathlib.Path(sys.argv[1]); s=p.read_text()
+needle='report_agent_run "$usage" "$started_at" "$ended_at" || printf'
+if needle not in s: raise SystemExit('HTTP launcher mutation target not found')
+p.write_text(s.replace(needle, 'report_agent_run "$usage" "$started_at" "$ended_at" || exit $? # || printf', 1))
 PY
   printf '1' > "$FIXTURE_MODE"; : > "$FIXTURE_RESPONSES"
   set +e
@@ -138,15 +137,18 @@ PY
   control_status=$?
   set -e
   [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo "$harness rejection mutation did not reach fake server"; exit 1; }
-  [[ $control_status == 0 ]] || { echo "$harness rejection mutation control failed: launcher leaked HTTP error (exit=$control_status)"; cat "$tmp/reject-control-$harness.out"; exit 1; }
-  [[ -f $control/.agent-runs/W3b-usage.json ]] || { echo "$harness rejection mutation worker artifacts missing"; exit 1; }
-  grep -q 'Agent run API reporting failed' "$tmp/reject-control-$harness.out" || { echo "$harness rejection mutation worker-status evidence missing"; cat "$tmp/reject-control-$harness.out"; exit 1; }
-  echo "fixture $harness rejection mutation: HTTP error propagated by disposable reporter; unchanged worker-status/artifact assertions passed (exit=$control_status)"
+  set +e
+  ( [[ $control_status == 0 ]] || { echo "worker status mismatch: $control_status"; cat "$tmp/reject-control-$harness.out"; exit 1; }
+    [[ -f $control/.agent-runs/W3b.jsonl && -f $control/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; exit 1; } ) > "$tmp/reject-assert-$harness.out" 2>&1
+  assertion_status=$?
+  set -e
+  [[ $assertion_status != 0 && $control_status != 0 && $(<"$tmp/reject-assert-$harness.out") == *'worker status mismatch'* ]] || { echo "$harness rejection control did not fail unchanged worker-status assertion"; cat "$tmp/reject-assert-$harness.out"; exit 1; }
+  echo "fixture $harness rejection mutation: unchanged worker-status assertion failed: $(<"$tmp/reject-assert-$harness.out")"
 done
 printf '0' > "$FIXTURE_MODE"
 
-# Opt-out must not make a request but retains local artifacts. Use complete
-# credentials so a mutation that drops the opt-out guard reaches the fake API.
+# Opt-out baseline and controls use the same explicit empty token, valid
+# repository ID, and owned fake-server URL.
 unset FIXTURE_BODY
 : > "$FIXTURE_RESPONSES"
 response_count_before=$(wc -l < "$FIXTURE_RESPONSES")
@@ -164,9 +166,8 @@ mkdir -p "$noapi/../$(basename "$noapi")-wt"
 ln -sfn "$tmp/worktree" "$noapi/../$(basename "$noapi")-wt/fixture-branch"
 git -C "$noapi" remote add origin "$tmp/worktree"
 (cd "$noapi" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
-  AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN=fixture-secret \
+  AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN='' \
   AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
-  env -u AGENT_RUN_API_URL -u AGENT_RUN_TOKEN -u AGENT_RUN_REPOSITORY_ID \
   bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/noapi.out" 2>&1
 [[ -f $noapi/.agent-runs/W3b.jsonl && -f $noapi/.agent-runs/W3b-usage.json ]] || { echo 'empty-usage local output missing'; exit 1; }
 python3 - "$noapi/.agent-runs/W3b-usage.json" <<'PY'
@@ -176,9 +177,8 @@ PY
 echo 'fixture opt-out passed'
 [[ $(wc -l < "$FIXTURE_RESPONSES") -eq $response_count_before ]] || { echo 'opt-out unexpectedly sent a request'; exit 1; }
 
-# Both harnesses must reject bypassing the actual reporter opt-out guard. The
-# baseline uses a fake-server URL and valid repository ID but no token; the
-# disposable guard mutation supplies only that missing token at curl time.
+# Both harnesses must reject bypassing the actual reporter opt-out guard.
+# Identical inputs make the mutated guard send the empty-token request.
 for harness in codex opencode; do
   control="$tmp/optout-control-$harness"
   mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
@@ -188,15 +188,13 @@ for harness in codex opencode; do
   launcher=run-worker.sh
   [[ $harness == opencode ]] && launcher=run-worker-opencode.sh
   cp "$root/scripts/$launcher" "$control/scripts/launcher.sh"
-  # Mutate only the disposable reporter's line-7 guard. Supply the missing
-  # token at curl time so its bypass causes an actual request. The launcher
-  # still sees the baseline's missing token and uses unchanged assertions.
+  # Mutate only the disposable reporter guard; leave the empty token untouched.
   python3 - "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh" <<'PY'
 import pathlib,sys
 p=pathlib.Path(sys.argv[2]); s=pathlib.Path(sys.argv[1]).read_text()
 needle='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_TOKEN:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0'
 if needle not in s: raise SystemExit('opt-out reporter guard mutation target not found')
-replacement='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0\n  AGENT_RUN_TOKEN=fixture-secret'
+replacement='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0'
 p.write_text(s.replace(needle, replacement, 1))
 PY
   cat > "$tmp/bin/$harness" <<'SH'
@@ -209,17 +207,22 @@ SH
   set +e
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
     AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" \
+    AGENT_RUN_TOKEN='' \
     AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
     bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/optout-control-$harness.out" 2>&1
   control_status=$?
   set -e
+  grep -q '"input_tokens":100' "$tmp/request.json" || { echo "$harness opt-out mutation did not submit a report payload"; exit 1; }
   [[ $control_status == 0 ]] || { echo "$harness opt-out mutation failed before assertion (exit=$control_status)"; cat "$tmp/optout-control-$harness.out"; exit 1; }
-  mutation_count=$(wc -l < "$FIXTURE_RESPONSES")
-  [[ $mutation_count -eq 1 ]] || { echo "$harness opt-out mutation did not reach fake server exactly once (count=$mutation_count)"; exit 1; }
-  if [[ $mutation_count -eq $response_count_before ]]; then echo 'opt-out unexpectedly sent a request' >&2; echo "$harness opt-out mutation did not violate unchanged request-count assertion"; exit 1; fi
-  echo "fixture $harness opt-out mutation: unchanged request-count assertion failed as expected: opt-out unexpectedly sent a request (baseline=$response_count_before actual=$mutation_count)"
+  mutation_count=$(wc -l < "$FIXTURE_RESPONSES" | tr -d ' ')
+  [[ $mutation_count -eq 1 ]] || { echo "$harness opt-out mutation did not reach fake server exactly once (count=$mutation_count)"; cat "$tmp/optout-control-$harness.out"; cat "$tmp/server.log"; exit 1; }
+  set +e
+  ( [[ $mutation_count -eq $response_count_before ]] || { echo "opt-out unexpectedly sent a request (baseline=$response_count_before actual=$mutation_count)"; exit 1; } ) > "$tmp/optout-assert-$harness.out" 2>&1
+  assertion_status=$?
+  set -e
+  [[ $assertion_status != 0 && $(<"$tmp/optout-assert-$harness.out") == *'opt-out unexpectedly sent a request'* ]] || { echo "$harness unchanged opt-out assertion did not fail with request diagnostic"; cat "$tmp/optout-assert-$harness.out"; exit 1; }
+  echo "fixture $harness opt-out mutation: unchanged request-count assertion failed: $(<"$tmp/optout-assert-$harness.out")"
 done
-
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
 zero="$tmp/zero"
 mkdir -p "$zero/scripts" "$zero/.agent-runs" "$zero/../$(basename "$zero")-wt"
