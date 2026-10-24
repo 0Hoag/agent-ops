@@ -110,8 +110,11 @@ assert_response() {
   got=$(python3 - "$WORK/response" "$accepted" <<'PY'
 import json,sys
 body=json.load(open(sys.argv[1])); expected=sys.argv[2]
-if expected != 'none' and body.get('accepted') is not (expected == 'true'):
-    raise SystemExit(f"accepted={body.get('accepted')!r}, expected {expected}")
+if expected != 'none':
+    data=body.get('data')
+    accepted=data.get('accepted') if isinstance(data,dict) else None
+    if accepted is not (expected == 'true'):
+        raise SystemExit(f"accepted={accepted!r}, expected {expected}")
 PY
   ) || fail "unexpected response body for HTTP $status"
   : "$got"
