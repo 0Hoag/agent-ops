@@ -39,11 +39,12 @@ jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' \
   "$root/.agent-runs/$wave.jsonl" > "$root/.agent-runs/$wave.md"
 
 # Token usage summary for STATUS.md.
-usage=$(jq -sc '[.[] | select(.type=="step_finish") | .part.tokens]
-  | {input: (map(.input // 0) | add), cached_input: (map(.cache.read // 0) | add),
-     cache_write: (map(.cache.write // 0) | add), output: (map(.output // 0) | add),
-     reasoning: (map(.reasoning // 0) | add)}' "$root/.agent-runs/$wave.jsonl")
+usage=$(jq -sc '[.[] | select(.type=="step_finish") | .part.tokens] as $t
+  | {input: ([$t[].input // 0] | add), cached_input: ([$t[].cache.read // 0] | add),
+     cache_write: ([$t[].cache.write // 0] | add), output: ([$t[].output // 0] | add),
+     reasoning: ([$t[].reasoning // 0] | add)}' "$root/.agent-runs/$wave.jsonl")
 printf '%s\n' "$usage"
+printf '%s\n' "$usage" > "$root/.agent-runs/$wave-usage.json"
 source "$root/scripts/report-agent-run.sh"
 report_agent_run "$usage" "$started_at" "$ended_at" || printf '%s\n' 'Agent run API reporting failed' >&2
 exit "$worker_status"

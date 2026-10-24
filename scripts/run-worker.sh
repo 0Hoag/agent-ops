@@ -32,14 +32,16 @@ codex exec \
   "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl"
 worker_status=$?
 set -e
+[[ -f "$root/.agent-runs/$wave.md" ]] || : > "$root/.agent-runs/$wave.md"
 ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Token usage summary for STATUS.md.
-usage=$(jq -sc '[.[] | select(.type=="turn.completed") | .usage]
-  | {input: (map(.input_tokens // 0) | add), cached_input: (map(.cached_input_tokens // 0) | add),
-     cache_write: (map(.cache_write_input_tokens // 0) | add), output: (map(.output_tokens // 0) | add),
-     reasoning: (map(.reasoning_output_tokens // 0) | add)}' "$root/.agent-runs/$wave.jsonl")
+usage=$(jq -sc '([.[] | select(.type=="turn.completed") | .usage] as $u
+  | {input: ([$u[].input_tokens // 0] | add), cached_input: ([$u[].cached_input_tokens // 0] | add),
+     cache_write: ([$u[].cache_write_input_tokens // 0] | add), output: ([$u[].output_tokens // 0] | add),
+     reasoning: ([$u[].reasoning_output_tokens // 0] | add)})' "$root/.agent-runs/$wave.jsonl")
 printf '%s\n' "$usage"
+printf '%s\n' "$usage" > "$root/.agent-runs/$wave-usage.json"
 source "$root/scripts/report-agent-run.sh"
 report_agent_run "$usage" "$started_at" "$ended_at" || printf '%s\n' 'Agent run API reporting failed' >&2
 exit "$worker_status"
