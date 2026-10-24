@@ -5,6 +5,7 @@
 #
 #   scripts/autopilot.sh                 # pass every 10 min, or within 30 s after a worker ends
 #   INTERVAL=300 scripts/autopilot.sh    # every 5 min
+#   CAP=2 scripts/autopilot.sh           # with CAP workers running, timer passes are skipped (3 x INTERVAL max)
 #   touch .agent-runs/STOP               # stop after the current pass
 #
 # If the OpenCode web server is up (scripts/opencode.sh web --port 4096), each pass runs on it
@@ -17,6 +18,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
+cap=${CAP:-2}   # keep equal to the worker cap in AGENTS.md → Dispatch
 web=${WEB:-http://127.0.0.1:4096}
 dir=.agent-runs/coordinator
 mkdir -p "$dir"
@@ -28,11 +30,13 @@ worker_pids() { pgrep -f 'scripts/run-worker' | sort | tr '\n' ' '; }
 results_stamp() { stat -f '%N %m' .agent-runs/*.md 2>/dev/null | shasum; }
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
+# While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
 wait_for_event() {
-  local pids stamp waited=0 now
+  local pids stamp waited=0 limit=$interval
   pids=$(worker_pids)
   stamp=$(results_stamp)
-  while [ "$waited" -lt "$interval" ]; do
+  [ "$(echo $pids | wc -w)" -ge "$cap" ] && limit=$((interval * 3))
+  while [ "$waited" -lt "$limit" ]; do
     sleep "$poll"
     waited=$((waited + poll))
     [ -e .agent-runs/STOP ] && return
