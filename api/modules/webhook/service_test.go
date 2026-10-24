@@ -173,26 +173,38 @@ func TestControllerHandleBindsSignedPayloadToConfiguredRepository(t *testing.T) 
 	})
 	t.Run("secret for another repository rejects without writes", func(t *testing.T) {
 		mock, db := newWebhookMockDB(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery("(?!)")
 		payload := payloadFor(repositoryA)
 		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-b", sign(payload, secretB))
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
 		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatalf("unexpected database writes: %v", err)
-		}
+		assertNoDatabaseAccess(t, mock)
 	})
 	t.Run("valid signature for unknown repository rejects without writes", func(t *testing.T) {
 		mock, db := newWebhookMockDB(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery("(?!)")
 		payload := payloadFor("org/unknown")
 		response := postWebhook(t, db, map[string][]Config{"github": {{Repository: repositoryA, SecretEnv: "W1CR7_REPO_A_SECRET"}, {Repository: repositoryB, SecretEnv: "W1CR7_REPO_B_SECRET"}}}, payload, "delivery-unknown", sign(payload, secretA))
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
 		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatalf("unexpected database writes: %v", err)
-		}
+		assertNoDatabaseAccess(t, mock)
 	})
+}
+
+func assertNoDatabaseAccess(t *testing.T, mock sqlmock.Sqlmock) {
+	t.Helper()
+	err := mock.ExpectationsWereMet()
+	if err == nil {
+		t.Fatal("unexpected database access: all database expectations were consumed")
+	}
+	diagnostic := err.Error()
+	if strings.Contains(diagnostic, "ExpectedQuery") || !strings.Contains(diagnostic, "ExpectedBegin") {
+		t.Fatalf("unexpected database access diagnostic missing: %v", err)
+	}
 }
 
 func newWebhookMockDB(t *testing.T) (sqlmock.Sqlmock, *gorm.DB) {
