@@ -66,6 +66,7 @@ func TestCreateValidationPrecedesRepositoryAccess(t *testing.T) {
 	}{
 		{"missing token", "", valid, http.StatusUnauthorized},
 		{"wrong token", "wrong", valid, http.StatusUnauthorized},
+		{"case-only changed token", "Secret", valid, http.StatusUnauthorized},
 		{"negative usage", "secret", func() CreateInput { v := valid; v.InputTokens = -1; return v }(), http.StatusBadRequest},
 		{"reversed timestamps", "secret", func() CreateInput { v := valid; v.EndedAt = now.Add(-time.Second); return v }(), http.StatusBadRequest},
 	}
@@ -102,4 +103,17 @@ func TestCreatePersistsValidRun(t *testing.T) {
 	r.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Equal(t, 1, repo.creates)
+}
+
+func TestCreateRejectsEmptyConfiguredToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRepository{}
+	r := gin.New()
+	r.POST("/", NewController(repo, "", nil).Create)
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{}`))
+	request.Header.Set("X-Agent-Run-Token", "")
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, repo.creates)
 }
