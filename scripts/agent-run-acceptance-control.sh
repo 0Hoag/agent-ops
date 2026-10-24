@@ -6,6 +6,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 git -C "$ROOT" archive HEAD | tar -x -C "$tmp"
 cp "$ROOT/scripts/agent-run-acceptance.sh" "$tmp/scripts/"
+git -C "$tmp" init -q
+git -C "$tmp" add .
+git -C "$tmp" -c user.name=control -c user.email=control@example.invalid commit -qm baseline
 case "$mutation" in
  auth) perl -0pi -e 's/ctx.GetHeader\("X-Agent-Run-Token"\) != c.token/ctx.GetHeader("X-Agent-Run-Token") == c.token/' "$tmp/api/modules/agentrun/controller.go"; target="$tmp/api/modules/agentrun/controller.go"; pattern='authenticated POST: expected HTTP 201' ;;
  validation) perl -0pi -e 's/if in\.InputTokens < 0 \|\| in\.CachedInputTokens < 0 \|\| in\.CacheWriteTokens < 0 \|\| in\.OutputTokens < 0 \|\| in\.ReasoningTokens < 0/if false/' "$tmp/api/modules/agentrun/controller.go"; target="$tmp/api/modules/agentrun/controller.go"; pattern='negative token validation: expected HTTP 400' ;;
