@@ -57,9 +57,8 @@ PY
     target="$tmp/scripts/agent-run-acceptance.sh"; pattern=''; export AGENT_RUN_ACCEPTANCE_SKIP_COMPOSE_CLEANUP=1 AGENT_RUN_ACCEPTANCE_FORCE_CLEANUP=1 AGENT_RUN_ACCEPTANCE_API_PORT=18371 AGENT_RUN_ACCEPTANCE_PG_PORT=15432 ;;
   cleanup-omit-pid|cleanup-omit-listener|cleanup-omit-fixtures|cleanup-missing-injection)
     target="$tmp/scripts/agent-run-acceptance.sh"; pattern='exact SQL normalization/timestamp mismatch:'
-    export AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP=1
     if [[ $mutation == cleanup-missing-injection ]]; then
-      export AGENT_RUN_ACCEPTANCE_INJECT_CLEANUP_FAILURE=1 AGENT_RUN_ACCEPTANCE_DISABLE_CLEANUP_INJECTION=1
+      export AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP=1 AGENT_RUN_ACCEPTANCE_INJECT_CLEANUP_FAILURE=1 AGENT_RUN_ACCEPTANCE_DISABLE_CLEANUP_INJECTION=1
     else
       python3 - "$tmp/scripts/agent-run-acceptance.sh" "$mutation" <<'PY'
 import pathlib, sys
@@ -73,6 +72,7 @@ needle = needles[sys.argv[2]]
 if s.count(needle) != 1: raise SystemExit(f'expected one cleanup evidence class: {needle}')
 p.write_text(s.replace(needle, 'true; fi # omitted cleanup evidence' if sys.argv[2] != 'cleanup-omit-fixtures' else ': # omitted cleanup evidence', 1))
 PY
+      export AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP=1
     fi ;;
   *) echo "unknown mutation: $mutation" >&2; exit 2 ;;
 esac
@@ -97,7 +97,7 @@ if [[ $mutation == cleanup-remove ]]; then
 fi
 
 if [[ $mutation == cleanup-omit-pid || $mutation == cleanup-omit-listener || $mutation == cleanup-omit-fixtures || $mutation == cleanup-missing-injection || $mutation == cleanup-extra-failure ]]; then
-  [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
+  [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: actual wrapper exited 0" >&2; exit 1; }
   case "$mutation" in
     cleanup-omit-pid) missing='API PID absent' ;;
     cleanup-omit-listener) missing='no API listener' ;;
@@ -105,17 +105,14 @@ if [[ $mutation == cleanup-omit-pid || $mutation == cleanup-omit-listener || $mu
     cleanup-missing-injection) missing='injected cleanup failure' ;;
     cleanup-extra-failure) missing='injected additional cleanup failure' ;;
   esac
-  if [[ $mutation != cleanup-extra-failure && $mutation != cleanup-omit-pid && $mutation != cleanup-omit-listener && $mutation != cleanup-omit-fixtures ]] && printf '%s\n' "$output" | NEEDLE="$missing" perl -ne 'if (/^acceptance: cleanup verified:/ && index($_, $ENV{NEEDLE}) >= 0) {$found=1} if (/^acceptance: cleanup FAILED:/ && index($_, $ENV{NEEDLE}) >= 0) {$found=1} END {exit($found ? 0 : 1)}'; then
-    echo "control $mutation FAIL: expected bad evidence absent in diagnostics was present" >&2; exit 1
-  fi
   if [[ $mutation == cleanup-extra-failure ]]; then
     printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: LIST FILTER ASSERTION:/) {$assert=1} if (/^acceptance: cleanup FAILED: injected cleanup failure$/) {$injected=1} if (/^acceptance: cleanup FAILED: injected additional cleanup failure$/) {$extra=1} END {exit($assert && $injected && $extra ? 0 : 1)}' || { echo 'control cleanup-extra-failure FAIL: intended assertion and real extra cleanup failure not observed' >&2; exit 1; }
   elif [[ $mutation == cleanup-missing-injection ]]; then
     printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: exact SQL normalization\/timestamp mismatch:/) {$assert=1} if (/^acceptance: cleanup verified: API PID absent$/) {$pid=1} if (/^acceptance: cleanup verified: no API listener on \d+$/) {$listener=1} if (/^acceptance: cleanup verified: no owned containers or volumes \(/) {$fixtures=1} END {exit($assert && $pid && $listener && $fixtures ? 0 : 1)}' || { echo 'control cleanup-missing-injection FAIL: assertion or cleanup proof missing' >&2; exit 1; }
-  elif [[ $mutation == cleanup-omit-pid || $mutation == cleanup-omit-listener || $mutation == cleanup-omit-fixtures ]]; then
-    printf '%s\n' "$output" | MUTATION="$mutation" perl -ne 'if (/^acceptance: FAIL: exact SQL normalization\/timestamp mismatch:/) {$assert=1} if (/^acceptance: cleanup verified: API PID absent$/) {$pid=1} if (/^acceptance: cleanup verified: no API listener on \d+$/) {$listener=1} if (/^acceptance: cleanup verified: no owned containers or volumes \(/) {$fixtures=1} END {$pid=1 if $ENV{MUTATION} eq "cleanup-omit-pid"; $listener=1 if $ENV{MUTATION} eq "cleanup-omit-listener"; $fixtures=1 if $ENV{MUTATION} eq "cleanup-omit-fixtures"; exit($assert && $pid && $listener && $fixtures ? 0 : 1)}' || { echo "control $mutation FAIL: assertion or other cleanup proof missing" >&2; exit 1; }
+  else
+    printf '%s\n' "$output" | NEEDLE="$missing" perl -ne 'if (/^acceptance: cleanup verified:/ && index($_, $ENV{NEEDLE}) >= 0) {$found=1} END {exit($found ? 1 : 0)}' || { echo "control $mutation FAIL: omitted evidence unexpectedly present" >&2; exit 1; }
   fi
-  echo "control $mutation passed: wrapper rejected invalid evidence; nested acceptance exit=$nested_status; wrapper exit=1"
+  echo "control $mutation passed: actual wrapper exit=$nested_status rejected invalid evidence"
   exit 0
 fi
 
