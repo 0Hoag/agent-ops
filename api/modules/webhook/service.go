@@ -19,6 +19,7 @@ type Service struct {
 	db           *gorm.DB
 	repositories *store.Store
 	registry     ProviderRegistry
+	publisher    Publisher
 }
 
 type ProviderRegistry interface {
@@ -26,7 +27,11 @@ type ProviderRegistry interface {
 }
 
 func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
-	return &Service{db: db, repositories: store.New(db), registry: registry}
+	return NewServiceWithPublisher(db, registry, nil)
+}
+
+func NewServiceWithPublisher(db *gorm.DB, registry ProviderRegistry, publisher Publisher) *Service {
+	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher}
 }
 
 func (service *Service) Ingest(ctx context.Context, provider, configuredRepository, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
@@ -77,6 +82,7 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 		return false, ErrRejected
 	}
 	result := false
+	var repositoryID store.UUID
 	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		st := store.New(tx)
 		repo, lookupErr := st.Repositories.GetByName(ctx, provider, configuredRepository)
@@ -91,6 +97,7 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 		if !created {
 			return nil
 		}
+		repositoryID = repo.ID
 		if event.Issue != nil {
 			if err := st.Issues.Upsert(ctx, issueModel(repo.ID, event.Issue)); err != nil {
 				return err
@@ -111,6 +118,9 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 	})
 	if err != nil {
 		return false, err
+	}
+	if result && service.publisher != nil {
+		service.publisher.Publish(string(repositoryID))
 	}
 	return result, nil
 }

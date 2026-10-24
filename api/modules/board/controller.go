@@ -9,9 +9,17 @@ import (
 	"github.com/google/uuid"
 )
 
-type Controller struct{ repository *Repository }
+type Controller struct {
+	repository *Repository
+	hub        *Hub
+}
 
-func NewController(repository *Repository) *Controller { return &Controller{repository: repository} }
+func NewController(repository *Repository) *Controller {
+	return NewControllerWithHub(repository, NewHub())
+}
+func NewControllerWithHub(repository *Repository, hub *Hub) *Controller {
+	return &Controller{repository: repository, hub: hub}
+}
 
 // ListRepositories returns public repository selector data.
 // @Summary List repositories
