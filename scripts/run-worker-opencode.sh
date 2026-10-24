@@ -11,6 +11,8 @@
 set -euo pipefail
 
 wave=$1 branch=$2 brief=$3
+worker=opencode
+model=${AGENT_RUN_MODEL:-openai/gpt-6-luna}
 root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
 mkdir -p "$root/.agent-runs"
@@ -21,18 +23,28 @@ if [ ! -d "$wt" ]; then
 fi
 
 # Skip ~/.claude and ~/.agents skills: the GitHub/Codex orchestrator-workers skill comes from opencode.json.
+started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+set +e
 OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
   --agent worker \
   --dir "$wt" \
   --format json \
   --title "$wave" \
   "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl"
+worker_status=$?
+set -e
+ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' \
   "$root/.agent-runs/$wave.jsonl" > "$root/.agent-runs/$wave.md"
 
 # Token usage summary for STATUS.md.
-jq -s '[.[] | select(.type=="step_finish") | .part.tokens]
-  | {input: (map(.input) | add), cached_input: (map(.cache.read) | add),
-     cache_write: (map(.cache.write) | add), output: (map(.output) | add),
-     reasoning: (map(.reasoning) | add)}' "$root/.agent-runs/$wave.jsonl"
+usage=$(jq -sc '[.[] | select(.type=="step_finish") | .part.tokens] as $t
+  | {input: ([$t[].input // 0] | add), cached_input: ([$t[].cache.read // 0] | add),
+     cache_write: ([$t[].cache.write // 0] | add), output: ([$t[].output // 0] | add),
+     reasoning: ([$t[].reasoning // 0] | add)}' "$root/.agent-runs/$wave.jsonl")
+printf '%s\n' "$usage"
+printf '%s\n' "$usage" > "$root/.agent-runs/$wave-usage.json"
+source "$root/scripts/report-agent-run.sh"
+report_agent_run "$usage" "$started_at" "$ended_at" || printf '%s\n' 'Agent run API reporting failed' >&2
+exit "$worker_status"
