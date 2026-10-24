@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -195,11 +194,4 @@ func TestPostgresStaleSnapshotAcceptance(t *testing.T) {
 			})
 		}
 	})
-}
-
-func resetAcceptanceRows(t *testing.T, db *gorm.DB, repositoryID UUID) {
-	t.Helper()
-	for _, table := range []string{"issues", "pull_requests", "pipeline_runs"} {
-		require.NoError(t, db.Exec(fmt.Sprintf("DELETE FROM %s WHERE repository_id = ?", table), repositoryID).Error)
-	}
 }

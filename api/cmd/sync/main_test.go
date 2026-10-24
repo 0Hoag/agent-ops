@@ -29,9 +29,9 @@ func TestPersistBackfillTwiceUpsertsStableEntitiesAndNormalizedStates(t *testing
 		Issues:       []scm.Issue{{Number: 31, Title: "closed issue", State: "closed", Status: scm.StatusDone, Labels: []string{"accepted"}, Assignee: "reviewer", UpdatedAt: updatedAt}},
 		PullRequests: []scm.PullRequest{{Number: 32, Title: "merged PR", State: "closed", Merged: true, MergedAt: &mergedAt, HeadSHA: "abc", HeadBranch: "main", UpdatedAt: updatedAt}},
 	}
-	issueInsert := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET .*"title"=EXCLUDED\.title.*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
-	pullInsert := regexp.MustCompile(`INSERT INTO "pull_requests".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET .*"title"=EXCLUDED\.title.*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
-	pipelineInsert := regexp.MustCompile(`INSERT INTO "pipeline_runs".*ON CONFLICT \("repository_id","external_id"\) DO UPDATE SET .*"status"=EXCLUDED\.status.*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
+	issueInsert := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET .*"assignee"=EXCLUDED\.assignee.*"labels"=EXCLUDED\.labels.*"state"=EXCLUDED\.state.*"status"=EXCLUDED\.status.*"title"=EXCLUDED\.title.*"updated_at"=NOW\(\).*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
+	pullInsert := regexp.MustCompile(`INSERT INTO "pull_requests".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET .*"branch"=EXCLUDED\.branch.*"closes"=EXCLUDED\.closes.*"head_sha"=EXCLUDED\.head_sha.*"merged_at"=EXCLUDED\.merged_at.*"state"=EXCLUDED\.state.*"title"=EXCLUDED\.title.*"updated_at"=NOW\(\).*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
+	pipelineInsert := regexp.MustCompile(`INSERT INTO "pipeline_runs".*ON CONFLICT \("repository_id","external_id"\) DO UPDATE SET .*"conclusion"=EXCLUDED\.conclusion.*"finished_at"=EXCLUDED\.finished_at.*"pr_number"=EXCLUDED\.pr_number.*"sha"=EXCLUDED\.sha.*"started_at"=EXCLUDED\.started_at.*"status"=EXCLUDED\.status.*"updated_at"=NOW\(\).*"upstream_updated_at"=EXCLUDED\.upstream_updated_at.*WHERE .*upstream_updated_at`)
 	startedAt := time.Date(2026, 1, 2, 2, 0, 0, 0, time.UTC)
 	finishedAt := time.Date(2026, 1, 2, 4, 0, 0, 0, time.UTC)
 	pipelinePRNumber := 32
