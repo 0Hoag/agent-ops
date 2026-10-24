@@ -35,12 +35,11 @@ TMP=$(mktemp -d); BIN="$TMP/api"
 (cd "$ROOT/api" && go build -o "$BIN" .)
 POSTGRES_HOST_PORT="$PG_PORT" POSTGRES_PUBLISH=127.0.0.1 docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d postgres >/dev/null
 for _ in $(seq 1 60); do docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1 && break; sleep 1; done
-export AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_MODEL_PRICES='{"gpt-accept":{"input_per_million":1,"cached_input_per_million":2,"cache_write_per_million":3,"output_per_million":4,"reasoning_per_million":5}}' DATABASE_URL="$DB" HTTP_ADDR=":$API_PORT" SCM_REPOSITORIES_JSON="[{\"provider\":\"github\",\"full_name\":\"acceptance/one\",\"webhook_secret_env\":\"ACCEPTANCE_SECRET\"},{\"provider\":\"github\",\"full_name\":\"acceptance/two\",\"webhook_secret_env\":\"ACCEPTANCE_SECRET\"}]"
+export AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_MODEL_PRICES='{"gpt-accept":{"input_per_million":1,"cached_input_per_million":2,"cache_write_per_million":3,"output_per_million":4,"reasoning_per_million":5}}' DATABASE_URL="$DB" HTTP_ADDR=":$API_PORT" SCM_REPOSITORIES_JSON='[]'
 "$BIN" >"$TMP/api.log" 2>&1 & API_PID=$!
 for _ in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/readyz" >/dev/null || { cat "$TMP/api.log" >&2; die 'API not ready'; }
-ids=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT id FROM repositories WHERE full_name IN ('acceptance/one','acceptance/two') ORDER BY full_name")
-REPO=$(sed -n '1p' <<<"$ids"); REPO2=$(sed -n '2p' <<<"$ids")
+docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -v ON_ERROR_STOP=1 -U agent_ops -d agent_ops -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref) VALUES ('$REPO','github','acceptance/one','ACCEPTANCE_SECRET'),('$REPO2','github','acceptance/two','ACCEPTANCE_SECRET')" >/dev/null
 post() { curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -H "X-Agent-Run-Token: $TOKEN" "$API/api/v1/agent-runs" -d "$1"; }
 expect_code() { [[ "${1##*$'\n'}" == "$2" ]] || die "$3: expected HTTP $2"; }
 base() { printf '{"repository_id":"%s","wave":"%s","worker":"%s","model":"gpt-accept","issue_numbers":[%s],"pr_number":3191,"input_tokens":100,"cached_input_tokens":20,"cache_write_tokens":30,"output_tokens":40,"reasoning_tokens":50,"started_at":"2026-10-24T09:00:00Z","ended_at":"2026-10-24T09:05:00Z"}' "$1" "$2" "$3" "$4"; }
@@ -53,12 +52,48 @@ negative=$(post "$negative_body"); [[ "${negative##*$'\n'}" == 400 ]] || die 'ne
 unauthorized=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' "$API/api/v1/agent-runs" -d "$(base "$REPO" W3G bad '191')"); expect_code "$unauthorized" 401 'missing authentication'
 row=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT repository_id,wave,worker,model,issue_numbers::text,pr_number,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens FROM agent_runs WHERE id='$id1'")
 [[ "$row" == "$REPO|W3G|wire|gpt-accept|[191, 192]|3191|100|20|30|40|50" ]] || die "exact SQL normalization mismatch: $row"
-list=$(curl -fsS "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G&issue_number=191")
-actual_ids=$(jq -r '[.data[].id]|sort|join(",")' <<<"$list"); expected_ids=$(printf '%s\n' "$id1" | sort | paste -sd, -)
-[[ "$actual_ids" == "$expected_ids" ]] || die "LIST FILTER ASSERTION: expected run ids $expected_ids got $actual_ids"
-agg=$(curl -fsS "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G&issue_number=191")
-expected=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.issue_number)')
-actual=$(jq -c '[.data[]]|sort_by(.issue_number)' <<<"$agg")
-[[ "$actual" == "$expected" ]] || die "AGGREGATE FILTER ASSERTION: expected complete snapshot $expected got $actual"
-log "wire/SQL acceptance passed: ids=$id1; exact aggregate snapshot=$actual"
+expected_exact=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
+expected_repo_wave=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"issue",issue_number:999,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
+expected_repo_issue=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G-distractor",worker:"wave",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
+expected_wave_issue=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"repo",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
+expected_repo=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G-distractor",worker:"wave",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"issue",issue_number:999,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
+expected_all="$expected_repo"
+list_assert() {
+ local url=$1 expected_ids actual_ids list expected_run_ids
+ list=$(curl -fsS "$url")
+ case "$url" in
+  *repository_id=*'&wave='*'&issue_number='*) expected_run_ids="$id1" ;;
+  *repository_id=*'&wave='*) expected_run_ids="$id1,$id4" ;;
+  *repository_id=*'&issue_number='*) expected_run_ids="$id1,$id2" ;;
+  *'&wave='*'&issue_number='*) expected_run_ids="$id1,$id3" ;;
+  *repository_id=*) expected_run_ids="$id1,$id2,$id4" ;;
+  *) expected_run_ids="$id1,$id2,$id3,$id4" ;;
+ esac
+ expected_ids=$(tr ',' '\n' <<<"$expected_run_ids" | sort | paste -sd, -)
+ actual_ids=$(jq -r '[.data[].id]|sort|join(",")' <<<"$list")
+  [[ "$actual_ids" == "$expected_ids" ]] || die "LIST FILTER ASSERTION: expected run ids $expected_ids got $actual_ids"
+}
+agg_assert() {
+ local url=$1 expected actual agg
+ agg=$(curl -fsS "$url")
+ case "$url" in
+  *repository_id=*'&wave='*'&issue_number='*) expected=$expected_exact ;;
+  *repository_id=*'&wave='*) expected=$expected_repo_wave ;;
+  *repository_id=*'&issue_number='*) expected=$expected_repo_issue ;;
+  *'&wave='*'&issue_number='*) expected=$expected_wave_issue ;;
+  *repository_id=*) expected=$expected_repo ;;
+  *) expected=$expected_all ;;
+ esac
+ actual=$(jq -c '[.data[]]|sort_by(.wave,.worker,.issue_number)' <<<"$agg")
+ [[ "$actual" == "$expected" ]] || die "AGGREGATE FILTER ASSERTION: expected complete snapshot $expected got $actual"
+}
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G&issue_number=191"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G&issue_number=191"
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G"
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&issue_number=191"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&issue_number=191"
+list_assert "$API/api/v1/agent-runs?wave=W3G&issue_number=191"
+agg_assert "$API/api/v1/agent-runs/aggregate?wave=W3G&issue_number=191"
+log "wire/SQL acceptance passed: ids=$id1; exact aggregate snapshot=$expected_filtered"
 log 'success path complete'
