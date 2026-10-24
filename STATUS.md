@@ -1,9 +1,9 @@
 # Status
 
 ## Now
-- Measured 2026-10-24T01:42Z: main `8ef65129b3ce905fb2ef49e84514d7ff3c874ef5`; exact-head main CI `40050782605` successful. PR #156 merged after final review; API content verified identical on main.
-- Two detached workers verified: Codex W2a builds board/repository endpoints #19/#113; OpenCode WS-health fixes client #24 response-envelope mismatch in a client-root worktree.
-- Roadmap planned through W17; freshly counted 66 root and 16 client open issues, none missing status labels. No owner decision. WS-d awaits W2a; #159 module audit follows W2a. Pass: `.agent-runs/coordinator/20261024-0142-pass.md`.
+- Measured 2026-10-24T01:44Z: main `84308fee07e3a47c673ca02ed84ec29f0963c1d0`; latest code-main CI `40050782605` successful. Client PR #25 exact-head CI successful; returned 1/2 for missing acceptance evidence.
+- Dispatched detached OpenCode W2a-r2 on preserved board implementation after Codex Git sandbox denial; WS-health-r2 completes control/browser/cleanup evidence in the client-root worktree.
+- Fresh board audit: 66 root and 16 client open issues, none missing status labels, none todo. WS-d/#159 await W2a; no owner decision. Pass: `.agent-runs/coordinator/20261024-0144-pass.md`.
 
 ## Waves
 | Wave | State | PR / issues | Harness; next action |
@@ -22,8 +22,8 @@
 | WS-c client conformity | merged | client #22 | OpenCode; env/browser checks recorded |
 | WS runner dispatch | merged | #154 / #151 closed | OpenCode; one send-back; real detached client-root fixture accepted |
 | WS-b API conformity | merged; module audit follow-up blocked | #156 / #125–#129 closed; #159 | OpenCode WS-b-r5; accepted after 2 send-backs; audit after W2a |
-| W2a board API | running | #19/#113 | Codex W2a; board/repository endpoints and isolated SQL/HTTP acceptance |
-| WS-health client | running | client #24 | OpenCode; unwrap actual API health envelope, fixture/control/browser proof |
+| W2a board API | resumed | #19/#113 | OpenCode W2a-r2; preserved Codex work, complete gates/evidence/publication |
+| WS-health client | returned; resumed | client #25 / #24 | OpenCode WS-health-r2; send-back 1/2, control/browser/cleanup evidence |
 | WS-d real-data smoke | blocked | #133/#134 | W2a precedes real-data cross-repo smoke |
 | W3–W17 | planned; dependency-blocked | GitHub issue board | dispatch in roadmap dependency order |
 
@@ -38,9 +38,11 @@ Raw harness fields; USD unverified. Codex input includes cache; OpenCode input e
 | WS-b-r3 | OpenCode / openai/gpt-6-luna low | 8,230 | 7,552 | 0 | 393 | 0 | stopped; gates only, no implementation |
 | WS-b-r4 | Codex / gpt-reserve low | 2,819,530 | 2,731,904 | 0 | 11,426 | 2,222 | stopped at sandbox Git lock; API work preserved |
 | WS-b-r5 | OpenCode / openai/gpt-6-luna low | 76,651 | 2,891,776 | 0 | 11,165 | 0 | #156 accepted after 2 send-backs; merged |
-| W2a | Codex / gpt-reserve low | pending | pending | pending | pending | pending | dispatched #19/#113 |
-| WS-health | OpenCode / openai/gpt-6-luna low | pending | pending | pending | pending | pending | dispatched client #24 |
+| W2a | Codex / gpt-reserve low | 1,306,432 | 1,244,928 | 0 | 9,890 | 1,493 | stopped at sandbox Git denial; work preserved |
+| WS-health | OpenCode / openai/gpt-6-luna low | 11,579 | 82,432 | 0 | 1,743 | 0 | client #25 returned; send-back 1/2 |
+| W2a-r2 | OpenCode / openai/gpt-6-luna low | pending | pending | pending | pending | pending | resumed #19/#113 |
+| WS-health-r2 | OpenCode / openai/gpt-6-luna low | pending | pending | pending | pending | pending | resumed client #25 acceptance |
 | W1e | OpenCode / openai/gpt-6-luna low | 47,992 | 1,782,656 | 0 | 13,009 | 0 | #157 returned; send-back 1/2 |
 | W1e-r2 | OpenCode / openai/gpt-6-luna low | 29,272 | 537,344 | 0 | 4,539 | 929 | accepted; #157 merged after one send-back |
 
-WS-b-r5 totals freshly read from its log tail; earlier completed totals are historical. Coordinator usage excluded. PR #156 tested head was 3cfe2dbb1fbc45ad3cfb0363363749465d028b07; coordinator make ci and diff check passed. Unrelated dirty worker STATUS.md preserved in Git stash before worktree removal.
+W2a/WS-health totals freshly read from log tails; earlier completed totals are historical. Coordinator usage excluded. Client #25 reviewed head: 2268f37aeb9c4374b892e189ebd81325d5762e1f, CI 40050980986 successful; no local acceptance rerun because required evidence was absent.
