@@ -24,3 +24,15 @@ Số liệu quá trình xây nằm trong `STATUS.md`.
 - Agent: `AGENTS.md` (bắt buộc), rồi `ROLES.md`, `FIVE-MINUTES.md`.
 - Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/client-standards.md`.
 - Kế hoạch và trạng thái: `ROADMAP.md`, `STATUS.md`.
+
+## Run everything locally
+
+Prerequisites: Docker with Compose, Node.js 20.19+ and pnpm 11.21+, and Chromium available to Playwright (run `cd ~/agent-ops-client && pnpm exec playwright install chromium` once if needed). The smoke uses `~/agent-ops-client`, cloning it if absent and only fast-forwarding a clean checkout. No external credentials or shared database are used; the smoke creates an isolated Postgres/API stack and disposable repository, issue, pull request, and CI fixtures.
+
+From a fresh `agent-ops` worktree (the smoke command performs the sibling clone automatically), run:
+
+```sh
+make smoke
+```
+
+The command builds and previews the client against the API, launches Chromium to assert the visible seeded issue and linked PR/CI plus successful API network responses, and saves logs/screenshot under `.agent-runs/smoke/`. It always stops its preview process and removes its uniquely named containers and volume; persistent development Compose data is not touched. If the sibling checkout already exists, it is fetched/fast-forwarded only when clean; user changes are preserved by refusing to update.
