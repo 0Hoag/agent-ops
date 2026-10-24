@@ -37,18 +37,25 @@ class Handler(BaseHTTPRequestHandler):
         assert self.headers.get("X-Agent-Run-Token") == "fixture-secret"
         body = self.rfile.read(int(self.headers["Content-Length"]))
         open(os.environ["FIXTURE_BODY"], "wb").write(body)
-        self.send_response(503 if os.environ.get("FIXTURE_HTTP_REJECT") == "1" else 201)
+        status = 503 if open(os.environ["FIXTURE_MODE"]).read().strip() == "1" else 201
+        with open(os.environ["FIXTURE_RESPONSES"], "a") as responses:
+            responses.write(f"{status}\n")
+        self.send_response(status)
         self.end_headers()
         self.wfile.write(b"fixture-secret transcript")
     def log_message(self, *_): pass
 HTTPServer(("127.0.0.1", int(os.environ["FIXTURE_PORT"])), Handler).serve_forever()
 PY
-export FIXTURE_PORT=$((20000 + $$ % 20000)) FIXTURE_BODY="$tmp/request.json"
+export FIXTURE_PORT=$((20000 + $$ % 20000)) FIXTURE_BODY="$tmp/request.json" FIXTURE_RESPONSES="$tmp/responses.log" FIXTURE_MODE="$tmp/mode"
+touch "$FIXTURE_RESPONSES"
+printf '0' > "$FIXTURE_MODE"
 python3 "$tmp/server.py" > "$tmp/server.log" 2>&1 & server_pid=$!
 for _ in {1..50}; do if python3 -c 'import socket,sys; s=socket.socket(); s.settimeout(.1); r=s.connect_ex(("127.0.0.1",int(sys.argv[1]))); s.close(); sys.exit(r)' "$FIXTURE_PORT"; then break; fi; sleep .05; done
 
 run_fixture() {
   local harness=$1 expected_status=$2 reject=${3:-0} worker_status=${4:-0}
+  printf '%s' "$reject" > "$FIXTURE_MODE"
+  : > "$FIXTURE_RESPONSES"
   local runroot="$tmp/${harness:-codex}-$reject-$worker_status"
   mkdir -p "$runroot/scripts" "$runroot/.agent-runs" "$runroot/../$(basename "$runroot")-wt"
   cp "$root/scripts/report-agent-run.sh" "$runroot/scripts/report-agent-run.sh"
@@ -85,6 +92,7 @@ PY
     fi
   else
     grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'HTTP rejection fixture request missing'; return 1; }
+    [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 && $(<"$FIXTURE_RESPONSES") == 503 ]] || { echo 'HTTP rejection server did not return 503'; return 1; }
   fi
   [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; return 1; }
   [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode final report missing'; return 1; }
@@ -103,6 +111,7 @@ run_fixture opencode 0 1 0
 
 # Opt-out must not make a request but retains local artifacts.
 unset FIXTURE_BODY
+response_count_before=$(wc -l < "$FIXTURE_RESPONSES")
 cat > "$tmp/bin/codex" <<'SH'
 #!/usr/bin/env bash
 exit 0
@@ -119,13 +128,12 @@ git -C "$noapi" remote add origin "$tmp/worktree"
 (cd "$noapi" && PATH="$tmp/bin:$PATH" FIXTURE_WORKER_STATUS=0 env -u AGENT_RUN_API_URL -u AGENT_RUN_TOKEN -u AGENT_RUN_REPOSITORY_ID \
   bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/noapi.out" 2>&1
 [[ -f $noapi/.agent-runs/W3b.jsonl && -f $noapi/.agent-runs/W3b-usage.json ]] || { echo 'empty-usage local output missing'; exit 1; }
-rm -f "$tmp/request.json"
 python3 - "$noapi/.agent-runs/W3b-usage.json" <<'PY'
 import json,sys
 u=json.load(open(sys.argv[1])); assert all(u.get(k)==0 for k in ("input","cached_input","cache_write","output","reasoning")),u
 PY
 echo 'fixture opt-out passed'
-[[ ! -e $tmp/request.json ]] || { echo 'opt-out unexpectedly sent a request'; exit 1; }
+[[ $(wc -l < "$FIXTURE_RESPONSES") -eq $response_count_before ]] || { echo 'opt-out unexpectedly sent a request'; exit 1; }
 
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
 zero="$tmp/zero"
