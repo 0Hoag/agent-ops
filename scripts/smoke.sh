@@ -54,7 +54,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build
+POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build
 for _ in $(seq 1 90); do
   if curl --fail --silent "$API_URL/readyz" >/dev/null; then break; fi
   sleep 1

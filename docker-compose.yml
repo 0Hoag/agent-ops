@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: agent_ops
     volumes:
       - agent_ops_postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PUBLISH-127.0.0.1}:${POSTGRES_HOST_PORT-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agent_ops -d agent_ops"]
       interval: 2s

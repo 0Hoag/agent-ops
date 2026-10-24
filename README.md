@@ -25,6 +25,19 @@ Số liệu quá trình xây nằm trong issue ghim **Status board** (label `sta
 - Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/client-standards.md`.
 - Kế hoạch: `ROADMAP.md`; trạng thái hiện tại: issue ghim Status board.
 
+## Local API development
+
+Prerequisites: Docker with Compose and Go. The default host API connection is
+`postgres://agent_ops:agent_ops_dev@localhost:5432/agent_ops?sslmode=disable`.
+Start the development database with `docker compose up -d postgres`. Set the
+variables from `api/.env.example` in your shell, then run the host API from
+`api/` with `go run .`. The database is stored in the persistent
+`agent_ops_postgres` volume. To avoid a host port collision, choose an unused
+port with `POSTGRES_HOST_PORT=15432 docker compose up -d postgres` and set
+`DATABASE_URL=postgres://agent_ops:agent_ops_dev@localhost:15432/agent_ops?sslmode=disable`
+for the host API. Do not use the Compose-internal hostname `postgres` from a
+host process.
+
 ## Run everything locally
 
 Prerequisites: Docker with Compose, Node.js 20.19+ and pnpm 11.21+, and Chromium available to Playwright (`pnpm exec playwright install chromium` once in the client checkout if needed). The smoke uses `~/agent-ops-client` by default, cloning it if absent and only fast-forwarding a clean checkout. To avoid modifying a canonical checkout with user changes, use a clean disposable client clone and set `CLIENT_DIR` as shown below. No external credentials or shared database are used; the smoke creates an isolated Postgres/API stack and disposable repository, issue, pull request, and CI fixtures.
