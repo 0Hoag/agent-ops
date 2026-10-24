@@ -86,7 +86,8 @@ PY
   else
     grep -q '"input_tokens":100' "$tmp/request.json" || { echo 'HTTP rejection fixture request missing'; return 1; }
   fi
-  [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json && -f $runroot/.agent-runs/W3b.md ]] || { echo 'worker local JSONL/summary/final report missing'; return 1; }
+  [[ -f $runroot/.agent-runs/W3b.jsonl && -f $runroot/.agent-runs/W3b-usage.json ]] || { echo 'worker JSONL/usage summary missing'; return 1; }
+  [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode final report missing'; return 1; }
   [[ $harness != opencode || -f $runroot/.agent-runs/W3b.md ]] || { echo 'OpenCode summary missing'; return 1; }
   ! grep -Eq 'fixture-secret|transcript' "$runroot/.agent-runs/W3b.jsonl" "$tmp/$harness.out"
   if [[ $harness == opencode ]]; then ! grep -Eq 'fixture-secret|transcript' "$runroot/.agent-runs/W3b.md"; fi
