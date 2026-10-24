@@ -201,3 +201,13 @@ always returns one line; coordinator reproduced `raw|2` and `issue|2` passing th
 
 **Check:** compare the exact expected snapshot or parsed numeric counts; inject an extra persisted row
 and require the real count assertion to fail, rather than relying on a generic forced-failure hook.
+
+## 21. Create shared-repository worktrees sequentially before parallel dispatch
+
+WS-d and WS-audit launched together; their worktree setup raced on .git/config.lock. Audit setup left a
+branch without a worktree and exited before starting its worker.
+
+> Cost: one failed dispatch and a sequential worktree repair before the audit could start.
+
+**Check:** prepare worktrees one at a time, then launch detached workers. After setup failure, inspect
+both branch refs and registered worktrees; reuse the preserved branch instead of blindly creating it again.
