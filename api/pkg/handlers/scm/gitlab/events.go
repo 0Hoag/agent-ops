@@ -18,13 +18,13 @@ type project struct {
 	PathWithNamespace string `json:"path_with_namespace"`
 }
 type issueJSON struct {
-	ID          int64     `json:"id"`
-	IID         int       `json:"iid"`
-	Title       string    `json:"title"`
-	State       string    `json:"state"`
-	Description string    `json:"description"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Labels      []string  `json:"labels"`
+	ID          int64             `json:"id"`
+	IID         int               `json:"iid"`
+	Title       string            `json:"title"`
+	State       string            `json:"state"`
+	Description string            `json:"description"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+	Labels      []json.RawMessage `json:"labels"`
 	Assignee    *struct {
 		Username string `json:"username"`
 	} `json:"assignee"`
@@ -62,6 +62,9 @@ type eventEnvelope struct {
 	User             struct {
 		Username string `json:"username"`
 	} `json:"user"`
+	MergeRequest *struct {
+		IID int `json:"iid"`
+	} `json:"merge_request"`
 }
 
 func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers http.Header, payload []byte) (scm.Event, error) {
@@ -91,6 +94,15 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 		if err := json.Unmarshal(env.ObjectAttributes, &raw); err != nil {
 			return scm.Event{}, err
 		}
+		if raw.SHA == "" {
+			var details struct {
+				LastCommit struct {
+					ID string `json:"id"`
+				} `json:"last_commit"`
+			}
+			_ = json.Unmarshal(env.ObjectAttributes, &details)
+			raw.SHA = details.LastCommit.ID
+		}
 		if raw.ID <= 0 || raw.IID <= 0 || raw.Title == "" || raw.SHA == "" {
 			return scm.Event{}, fmt.Errorf("incomplete merge request event")
 		}
@@ -104,6 +116,9 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 			return scm.Event{}, fmt.Errorf("incomplete pipeline event")
 		}
 		e.PipelineRun = ptrPipeline(raw, e.Repository)
+		if e.PipelineRun.PRNumber == nil && env.MergeRequest != nil && env.MergeRequest.IID > 0 {
+			e.PipelineRun.PRNumber = &env.MergeRequest.IID
+		}
 	default:
 		return scm.Event{}, fmt.Errorf("unsupported GitLab event %q", eventType)
 	}
@@ -112,7 +127,20 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 
 func ptrIssue(r issueJSON, repo string) *scm.Issue {
 	status := scm.StatusTodo
-	for _, l := range r.Labels {
+	labels := make([]string, 0, len(r.Labels))
+	for _, raw := range r.Labels {
+		var l string
+		if json.Unmarshal(raw, &l) != nil {
+			var object struct {
+				Title string `json:"title"`
+			}
+			_ = json.Unmarshal(raw, &object)
+			l = object.Title
+		}
+		if l == "" {
+			continue
+		}
+		labels = append(labels, l)
 		if s, ok := mapStatus(l); ok {
 			status = s
 		}
@@ -124,7 +152,7 @@ func ptrIssue(r issueJSON, repo string) *scm.Issue {
 	if r.Assignee != nil {
 		a = r.Assignee.Username
 	}
-	return &scm.Issue{ExternalID: strconv.FormatInt(r.ID, 10), Number: r.IID, Repository: repo, Title: r.Title, State: r.State, Status: status, Labels: r.Labels, Assignee: a, UpdatedAt: r.UpdatedAt}
+	return &scm.Issue{ExternalID: strconv.FormatInt(r.ID, 10), Number: r.IID, Repository: repo, Title: r.Title, State: r.State, Status: status, Labels: labels, Assignee: a, UpdatedAt: r.UpdatedAt}
 }
 func mapStatus(label string) (scm.IssueStatus, bool) {
 	switch strings.ToLower(strings.TrimSpace(label)) {

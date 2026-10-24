@@ -37,12 +37,12 @@ func TestParseEventsAndStatuses(t *testing.T) {
 		label string
 		want  scm.IssueStatus
 	}{{"Status::Todo", scm.StatusTodo}, {"Status::In Progress", scm.StatusInProgress}, {"Status::In_Progress", scm.StatusInProgress}, {"Status::Review", scm.StatusReview}, {"Status::Blocked", scm.StatusBlocked}, {"Status::Done", scm.StatusDone}} {
-		body := `{"object_attributes":{"id":1,"iid":2,"title":"issue","state":"opened","updated_at":"2026-01-01T00:00:00Z","labels":["` + test.label + `"]},"project":{"path_with_namespace":"group/project"}}`
+		body := `{"object_attributes":{"id":1,"iid":2,"title":"issue","state":"opened","updated_at":"2026-01-01T00:00:00Z","labels":[{"title":"` + test.label + `"}]},"project":{"path_with_namespace":"group/project"}}`
 		e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Issue Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(body))
 		require.NoError(t, err)
 		require.Equal(t, test.want, e.Issue.Status, test.label)
 	}
-	mr := `{"object_attributes":{"id":4,"iid":7,"title":"mr","state":"opened","sha":"abc","source_branch":"feature","description":"closes #9 and fixes group/project#10","updated_at":"2026-01-01T00:00:00Z"},"project":{"path_with_namespace":"group/project"}}`
+	mr := `{"object_attributes":{"id":4,"iid":7,"title":"mr","state":"opened","last_commit":{"id":"abc"},"source_branch":"feature","description":"closes #9 and fixes group/project#10","updated_at":"2026-01-01T00:00:00Z"},"project":{"path_with_namespace":"group/project"}}`
 	e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Merge Request Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(mr))
 	require.NoError(t, err)
 	require.Equal(t, "abc", e.PullRequest.HeadSHA)
@@ -53,7 +53,7 @@ func TestParseEventsAndStatuses(t *testing.T) {
 		require.NoError(t, err)
 	}
 	for _, status := range []string{"running", "success", "failed", "canceled"} {
-		payload := `{"object_attributes":{"id":5,"sha":"def","status":"` + status + `","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T01:00:00Z","merge_request":{"iid":7}},"project":{"path_with_namespace":"group/project"}}`
+		payload := `{"object_attributes":{"id":5,"sha":"def","status":"` + status + `","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T01:00:00Z"},"merge_request":{"iid":7},"project":{"path_with_namespace":"group/project"}}`
 		e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Pipeline Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(payload))
 		require.NoError(t, err)
 		require.Equal(t, status, e.PipelineRun.Status)
