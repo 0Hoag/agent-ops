@@ -16,7 +16,7 @@ case "$mutation" in
  noop) perl -0pi -e 's/THIS_PATTERN_DOES_NOT_EXIST/changed/' "$tmp/api/modules/agentrun/repository.go"; target="$tmp/api/modules/agentrun/repository.go"; pattern='';;
  *) echo "unknown mutation: $mutation" >&2; exit 2;;
 esac
-if ! git -C "$tmp" diff --quiet -- api/modules/agentrun; then :; else echo "control $mutation FAIL: mutation did not change target" >&2; exit 1; fi
+if [[ $(shasum "$target" | awk '{print $1}') == $(git -C "$tmp" show "HEAD:${target#"$tmp"/}" | shasum | awk '{print $1}') ]]; then echo "control $mutation FAIL: mutation did not change target" >&2; exit 1; fi
 if [[ $mutation == noop ]]; then echo 'control noop passed: unchanged target rejected before execution'; exit 0; fi
 set +e
 output=$(cd "$tmp" && bash scripts/agent-run-acceptance.sh 2>&1)
@@ -24,5 +24,4 @@ nested_status=$?
 set -e
 printf '%s\n' "$output"
 [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
-if ! printf '%s\n' "$output" | perl -ne 'exit 1 unless /^acceptance: FAIL: .*LIST FILTER ASSERTION:|^acceptance: FAIL: .*AGGREGATE FILTER ASSERTION:|^acceptance: FAIL: .*authenticated POST: expected HTTP 201|^acceptance: FAIL: .*negative token validation: expected HTTP 400/' 2>/dev/null; then :; fi
-if ! printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0) { exit 0 } END { exit 1 }' NEEDLE="$pattern"; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
+if ! NEEDLE="$pattern" perl -ne 'exit 0 if /^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0; END { exit 1 }' <<<"$output"; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
