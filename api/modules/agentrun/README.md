@@ -31,11 +31,23 @@ scripts/agent-run-acceptance-control.sh pricing
 scripts/agent-run-acceptance-control.sh noop
 scripts/agent-run-acceptance-control.sh timestamp
 scripts/agent-run-acceptance-control.sh cleanup-failure
+scripts/agent-run-acceptance-control.sh cleanup-remove
+scripts/agent-run-acceptance-control.sh cleanup-omit-pid
+scripts/agent-run-acceptance-control.sh cleanup-omit-listener
+scripts/agent-run-acceptance-control.sh cleanup-omit-fixtures
+scripts/agent-run-acceptance-control.sh cleanup-missing-injection
+scripts/agent-run-acceptance-control.sh cleanup-extra-failure
 ```
 
 The timestamp control corrupts the persisted row and must fail its exact SQL assertion. The cleanup-failure
 control combines a failing list assertion with an injected cleanup failure; the wrapper must observe both
-diagnostics while verifying real fixture cleanup.
+diagnostics while verifying real fixture cleanup. The omission controls remove each PID, listener, and
+container/volume success diagnostic in turn. The missing-injection control causes a real timestamp assertion
+failure while disabling the requested synthetic cleanup injection. The cleanup-extra-failure control combines
+the intended list assertion and expected synthetic cleanup failure with an additional cleanup failure; each
+invalid-evidence control must make the actual wrapper exit nonzero. `cleanup-remove` skips Compose removal
+only in a disposable run, proves the actual fixture is detected as retained, then runs outer Compose removal
+and verifies container and volume absence. It also checks process and listener evidence from that same cleanup.
 
 The exact-token case-only control is already covered by `TestCreateValidationPrecedesRepositoryAccess`
 from #192 and is intentionally not duplicated here.
