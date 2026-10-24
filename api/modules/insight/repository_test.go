@@ -56,7 +56,8 @@ func TestBuildDecodesRetainedNestedProviderPayloads(t *testing.T) {
 		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-3", ReceivedAt: base.Add(2 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::In Progress"]}}`)},
 		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-4", ReceivedAt: base.Add(3 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":13,"state":"opened","labels":["Status::Blocked"]}}`)},
 		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-5", ReceivedAt: base.Add(4 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"closed","labels":[]}}`)},
-		{RepositoryID: repoID, Provider: "gitlab", EventType: "Merge Request Hook", DeliveryID: "mr-1", ReceivedAt: base.Add(5 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":12,"state":"opened","labels":["Status::Review"]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Issue Hook", DeliveryID: "gl-6", ReceivedAt: base.Add(5 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":14,"state":"opened","labels":[{"title":"Status::Todo"}]}}`)},
+		{RepositoryID: repoID, Provider: "gitlab", EventType: "Merge Request Hook", DeliveryID: "mr-1", ReceivedAt: base.Add(5 * time.Hour), Payload: store.JSONB(`{"object_attributes":{"iid":15,"state":"opened","labels":["Status::Review"]}}`)},
 		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-1", ReceivedAt: base.Add(time.Minute), Payload: store.JSONB(`{"workflow_run":{"id":1,"head_sha":"abc","conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:02:00Z","pull_requests":[{"number":8}]}}`)},
 		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-no-sha", ReceivedAt: base.Add(2 * time.Minute), Payload: store.JSONB(`{"workflow_run":{"id":2,"conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:03:00Z","pull_requests":[{"number":9}]}}`)},
 		{RepositoryID: repoID, Provider: "github", EventType: "workflow_run", DeliveryID: "ci-no-id", ReceivedAt: base.Add(3 * time.Minute), Payload: store.JSONB(`{"workflow_run":{"head_sha":"def","conclusion":"success","run_started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:04:00Z","pull_requests":[{"number":10}]}}`)},
@@ -76,6 +77,8 @@ func TestBuildDecodesRetainedNestedProviderPayloads(t *testing.T) {
 	require.Equal(t, 1, got.FirstCI.Eligible)
 	require.Equal(t, 1, got.FirstCI.Successful)
 	require.Equal(t, 2, got.CycleTime.Completed)
+	require.Equal(t, []int64{7, 12}, evidenceIssueNumbers(got.CycleTime.Evidence))
+	require.Equal(t, []string{"gh-4", "gl-5"}, evidenceDeliveryIDs(got.CycleTime.Evidence))
 	require.Equal(t, "ci-1", got.FirstCI.Evidence[0].DeliveryID)
 	require.Equal(t, []string{"gh-3", "gl-3"}, evidenceDeliveryIDs(got.SendBack.Evidence))
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -87,6 +90,14 @@ func evidenceDeliveryIDs(evidence []Evidence) []string {
 		ids[i] = item.DeliveryID
 	}
 	return ids
+}
+
+func evidenceIssueNumbers(evidence []Evidence) []int64 {
+	numbers := make([]int64, len(evidence))
+	for i, item := range evidence {
+		numbers[i] = *item.IssueNumber
+	}
+	return numbers
 }
 
 func TestDecodeRealProviderFixtures(t *testing.T) {
