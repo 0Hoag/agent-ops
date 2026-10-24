@@ -125,10 +125,14 @@ initial=$(snapshot)
 
 status=$(send w1e/a delivery-a-910 "$SECRET_A"); [[ "$status" == 200 ]] || fail "A/A HTTP $status"
 assert_response "$status" true
+if [[ ${W1E_EXTRA_ROW_CONTROL:-0} == 1 ]]; then
+  docker exec "$CONTAINER_ID" psql -U w1e -d w1e -v ON_ERROR_STOP=1 -c \
+    "INSERT INTO webhook_events (id,repository_id,provider,event_type,delivery_id,payload) SELECT gen_random_uuid(),id,'github','issues','control-extra-raw','{}'::jsonb FROM repositories WHERE full_name='w1e/a'; INSERT INTO issues (id,repository_id,number,title,state,status) SELECT gen_random_uuid(),id,911,'control extra row','closed','done' FROM repositories WHERE full_name='w1e/a';" \
+    >/dev/null
+fi
 after_a=$(snapshot)
-[[ $(printf '%s\n' "$after_a" | grep -c '^raw|') == 1 ]] || fail 'expected exactly one raw event'
-[[ $(printf '%s\n' "$after_a" | grep -c '^issue|') == 1 ]] || fail 'expected exactly one normalized issue'
-[[ "$after_a" == *'identity|w1e/a:910:closed:done'* ]] || fail "normalized identity/state mismatch: $after_a"
+expected_after_a=$'identity|w1e/a:910:closed:done\nissue|1\nraw|1'
+[[ "$after_a" == "$expected_after_a" ]] || fail "A/A persisted snapshot mismatch: expected [$expected_after_a], got [$after_a]"
 printf 'A_A=200 accepted:true; SQL raw=1 issue=1 identity=w1e/a:910:closed:done\n'
 
 status=$(send w1e/a delivery-b-a-910 "$SECRET_B"); [[ "$status" == 400 ]] || fail "B/A HTTP $status"

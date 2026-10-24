@@ -14,12 +14,11 @@ The script used two configured repositories (`0Hoag/agent-ops` and
 Command:
 
 ```sh
-bash scripts/ingestion-smoke.sh
+zsh .agent-runs/w1cr10-smoke.sh
 ```
 
-The command above records the historical invocation only; `.agent-runs/w1cr10-smoke.sh`
-was ignored and is not available from a clean checkout. For a reproducible current
-run, use the committed command documented in [W1e signed ingestion smoke](w1e-ingestion-smoke.md).
+That ignored historical script is not available from a clean checkout. For a reproducible
+current run, use the committed command documented in [W1e signed ingestion smoke](w1e-ingestion-smoke.md).
 
 The script's HMAC extraction uses the portable `openssl dgst -hex` output. The
 prior attempt used field 2 of OpenSSL output, which is empty on this host and
