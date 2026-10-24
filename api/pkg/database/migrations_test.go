@@ -55,6 +55,11 @@ func expectMigrationApplied(mock sqlmock.Sqlmock) {
 	mock.ExpectExec(`ALTER TABLE issues ADD COLUMN IF NOT EXISTS upstream_updated_at`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`)).WithArgs(3, "add_upstream_updated_at").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(4).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE agent_runs (")).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`)).WithArgs(4, "create_agent_runs").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 }
 
 func TestRunMigrationsAppliesEmbeddedSQLAndRecordsVersion(t *testing.T) {
@@ -78,6 +83,7 @@ func TestRunMigrationsSkipsAppliedVersion(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).
 		WithArgs(3).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(4).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	require.NoError(t, RunMigrations(context.Background(), db))
 	require.NoError(t, mock.ExpectationsWereMet())
