@@ -14,14 +14,45 @@ import (
 )
 
 type fakeRepository struct {
-	creates int
-	list    []AgentRun
+	creates         int
+	list            []AgentRun
+	listFilter      Filter
+	aggregates      []Aggregate
+	aggregateFilter Filter
+	aggregatePrices map[string]Price
 }
 
-func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error      { f.creates++; return nil }
-func (f *fakeRepository) List(context.Context, Filter) ([]AgentRun, error) { return f.list, nil }
-func (f *fakeRepository) Aggregate(context.Context, Filter, map[string]Price) ([]Aggregate, error) {
-	return nil, nil
+func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return nil }
+func (f *fakeRepository) List(_ context.Context, filter Filter) ([]AgentRun, error) {
+	f.listFilter = filter
+	return f.list, nil
+}
+func (f *fakeRepository) Aggregate(_ context.Context, filter Filter, prices map[string]Price) ([]Aggregate, error) {
+	f.aggregateFilter = filter
+	f.aggregatePrices = prices
+	return f.aggregates, nil
+}
+
+func TestAggregateReturnsResultsAndForwardsFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	issue := int64(24)
+	cost := 0.0125
+	want := []Aggregate{{Wave: "w3a", Worker: "worker-1", IssueNumber: &issue, Runs: 2, InputTokens: 100, CachedInputTokens: 40, OutputTokens: 20, CostUSD: &cost}}
+	prices := map[string]Price{"model": {InputPerMillion: 1}}
+	repo := &fakeRepository{aggregates: want}
+	r := gin.New()
+	r.GET("/", NewController(repo, "", prices).Aggregate)
+	recorder := httptest.NewRecorder()
+	r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/?repository_id=repo-id&wave=w3a&issue_number=24", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, Filter{RepositoryID: "repo-id", Wave: "w3a", IssueNumber: 24}, repo.aggregateFilter)
+	require.Equal(t, prices, repo.aggregatePrices)
+	var envelope struct {
+		Data []Aggregate `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	got := envelope.Data
+	require.Equal(t, want, got)
 }
 
 func TestCreateValidationPrecedesRepositoryAccess(t *testing.T) {
