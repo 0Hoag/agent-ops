@@ -53,7 +53,7 @@ INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,con
 SQL
 
 pnpm --dir "$CLIENT" install --frozen-lockfile
-(cd "$CLIENT" && APP_API_URL="$API_URL" pnpm build)
+(cd "$CLIENT" && APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" pnpm build)
 (cd "$CLIENT" && APP_API_URL="$API_URL" pnpm preview --host 0.0.0.0 --port "$CLIENT_PORT") >"$ARTIFACT_DIR/preview.log" 2>&1 &
 PREVIEW_PID=$!
 for _ in $(seq 1 60); do curl --fail --silent "$CLIENT_URL/board" >/dev/null && break; sleep 1; done
