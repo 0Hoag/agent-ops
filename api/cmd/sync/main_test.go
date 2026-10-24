@@ -113,18 +113,27 @@ func TestConfiguredRepositoriesSelectProvidersCredentialsAndIsolatedPersistence(
 	ids := []store.UUID{store.NewUUID(), store.NewUUID()}
 	query := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET`)
 	for pass := 0; pass < 2; pass++ {
-		for idx, repository := range cfg.Repositories {
+		err = forEachConfiguredRepository(cfg.Repositories, func(repository config.RepositoryConfig) error {
+			idx := 0
+			if repository.Provider == "gitlab" {
+				idx = 1
+			}
 			provider, buildErr := builder.Build(repository.Provider, scm.Config{Token: os.Getenv(repository.TokenEnv), WebhookSecret: os.Getenv(repository.WebhookSecretEnv), APIBaseURL: os.Getenv(repository.BaseURLEnv)})
-			require.NoError(t, buildErr)
+			if buildErr != nil {
+				return buildErr
+			}
 			result, backfillErr := provider.Backfill(context.Background(), repository.FullName)
-			require.NoError(t, backfillErr)
+			if backfillErr != nil {
+				return backfillErr
+			}
 			require.Len(t, result.Issues, 1)
 			require.Equal(t, repository.FullName, result.Issues[0].Repository)
 			mock.ExpectBegin()
 			mock.ExpectExec(query.String()).WithArgs(sqlmock.AnyArg(), ids[idx], int64(7), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`[]`), "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectCommit()
-			require.NoError(t, persistBackfill(context.Background(), st, ids[idx], result))
-		}
+			return persistBackfill(context.Background(), st, ids[idx], result)
+		})
+		require.NoError(t, err)
 	}
 	require.Len(t, requests, 12)
 	require.Contains(t, requests[0].uri, "/gh/repos/acme/one/issues?per_page=100&page=1&state=all")

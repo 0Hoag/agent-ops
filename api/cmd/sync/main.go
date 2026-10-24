@@ -34,28 +34,40 @@ func main() {
 		fail(err)
 	}
 	st := store.New(db)
-	for _, c := range cfg.Repositories {
+	if err = forEachConfiguredRepository(cfg.Repositories, func(c config.RepositoryConfig) error {
 		token := os.Getenv(c.TokenEnv)
 		secret := os.Getenv(c.WebhookSecretEnv)
 		p, buildErr := builder.Build(c.Provider, scmConfig(token, secret, os.Getenv(c.BaseURLEnv)))
 		if buildErr != nil {
-			fail(buildErr)
+			return buildErr
 		}
 		if err = st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
-			fail(err)
+			return err
 		}
 		repo, getErr := st.Repositories.GetByName(ctx, c.Provider, c.FullName)
 		if getErr != nil {
-			fail(getErr)
+			return getErr
 		}
 		result, backfillErr := p.Backfill(ctx, c.FullName)
 		if backfillErr != nil {
-			fail(backfillErr)
+			return backfillErr
 		}
 		if err = persistBackfill(ctx, st, repo.ID, result); err != nil {
-			fail(err)
+			return err
+		}
+		return nil
+	}); err != nil {
+		fail(err)
+	}
+}
+
+func forEachConfiguredRepository(repositories []config.RepositoryConfig, syncRepository func(config.RepositoryConfig) error) error {
+	for _, repository := range repositories {
+		if err := syncRepository(repository); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func persistBackfill(ctx context.Context, st *store.Store, repositoryID store.UUID, result scm.BackfillResult) error {
