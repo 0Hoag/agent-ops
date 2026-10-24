@@ -148,6 +148,7 @@ printf '0' > "$FIXTURE_MODE"
 # Opt-out must not make a request but retains local artifacts. Use complete
 # credentials so a mutation that drops the opt-out guard reaches the fake API.
 unset FIXTURE_BODY
+: > "$FIXTURE_RESPONSES"
 response_count_before=$(wc -l < "$FIXTURE_RESPONSES")
 cat > "$tmp/bin/codex" <<'SH'
 #!/usr/bin/env bash
@@ -212,8 +213,9 @@ SH
   set -e
   [[ $control_status == 0 ]] || { echo "$harness opt-out mutation failed before assertion (exit=$control_status)"; cat "$tmp/optout-control-$harness.out"; exit 1; }
   [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 ]] || { echo "$harness opt-out mutation did not send exactly one request"; exit 1; }
-  [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 ]] || { echo "$harness opt-out request-count control failed to observe POST"; exit 1; }
-  echo "fixture $harness opt-out mutation: fake server observed unexpected POST; unchanged request-count assertion would reject it"
+  mutation_count=$(wc -l < "$FIXTURE_RESPONSES")
+  [[ $mutation_count != $response_count_before ]] || { echo "$harness opt-out mutation control did not violate unchanged request-count assertion"; exit 1; }
+  echo "fixture $harness opt-out mutation: unchanged request-count assertion rejected ${mutation_count} unexpected POST (baseline=${response_count_before})"
 done
 
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
