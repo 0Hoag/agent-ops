@@ -1,50 +1,46 @@
-# W1d stale snapshot evidence
+# W1d stale snapshot acceptance evidence
 
-## Implementation
+## Coverage
 
-Issues, pull requests, and pipeline runs now persist nullable `upstream_updated_at` separately from local `updated_at`.
-Their PostgreSQL `ON CONFLICT` updates use an atomic freshness predicate: a strictly newer non-null upstream timestamp
-updates the row; an equal or older timestamp does not; a missing timestamp cannot replace a known timestamp. Two
-missing timestamps remain duplicate-safe. Webhook and backfill mappers bind the provider-normalized timestamp.
+The acceptance tests exercise the actual sync and webhook persistence paths for issue, pull request, and pipeline revisions. Sync tests bind a non-zero provider `UpdatedAt` and assert the exact conflict key and freshness update SQL for every entity. Signed webhook ingestion tests assert the same non-zero revision binding for every entity. PostgreSQL acceptance uses production migrations and repository `Upsert` methods for both arrival orders, concurrent writers, missing timestamps, and equal/missing candidates against a known version.
 
-Migration `003_add_upstream_updated_at.sql` is append-only and adds the three columns and indexes.
+The policy is: a strictly newer non-null upstream revision may update; equal or older revisions do not; a missing revision cannot replace a known revision; two missing revisions remain duplicate-safe. `upstream_updated_at` is separate from local `updated_at`.
 
-## Reproduction
+## Measured commands and results
 
-Measured acceptance head: `870c7ca4fd6f342189ef13c4acf6afd16b75d04f`. The focused test uses
-`database.RunMigrations` and the actual `store.Issues`, `store.PullRequests`, and `store.PipelineRuns.Upsert` repository
-methods against a disposable PostgreSQL 16 container. The test exercises issue/PR/pipeline both arrival orders,
-concurrent writers, normalized state/value plus timestamp, equal/missing timestamp policy and null-timestamp
-duplicate safety. Webhook and sync mapping tests continue asserting timestamp binding.
+Acceptance-test commit before this evidence update: `b5a9d838e06d59218efb0f3fa8dd935bc4b37d9e`.
 
 ```sh
 cd api
-docker run --detach --rm --name w1d-accept-20261024 -e POSTGRES_USER=w1d -e POSTGRES_PASSWORD=w1d -e POSTGRES_DB=w1d -p 127.0.0.1:55441:5432 postgres:16-alpine
-W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
-W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55441 user=w1d password=w1d dbname=w1d sslmode=disable' go test ./modules/store -run '^TestPostgresStaleSnapshotPredicateControl$' -count=1 -v
-docker rm -f w1d-accept-20261024
+GOCACHE=/tmp/w1d-gocache go test ./cmd/sync ./modules/webhook ./modules/store
 ```
 
-Result: PASS for `newer-first`, `older-first`, missing-timestamp duplicate safety for all three entities, `concurrent_writers`, and
-`equal_and_missing_timestamps_do_not_overwrite_known_version`. The test applies all embedded production migrations,
-including versions 001–003.
+Result: PASS for all three packages.
 
-Predicate-removal control: `TestPostgresStaleSnapshotPredicateControl` runs a disposable unconditional conflict update
-(the production assignment set, with its `WHERE` freshness predicate omitted) and asserts newer issue state/value.
-Against the disposable PostgreSQL fixture, it failed as intended: `expected: "closed" actual: "open"`, diagnostic
-`predicate removal should expose stale overwrite: expected newer state closed, got "open"`. This distinguishes actual
-state corruption from fixture setup failure.
+Production acceptance baseline, using an owned PostgreSQL 16 Alpine container and `W1D_ACCEPTANCE_DSN`:
 
-Cleanup: the named container ran with `--rm` and was additionally stopped/removed with `docker rm -f` after both test
-runs. Inspected `docker ps` afterward: no `w1d-accept-20261024` container; inspected volume inventory: no volume owned
-by this fixture (anonymous volume count unchanged by disposable run). No API process was started. Existing Postgres,
-Redis, MongoDB and RabbitMQ containers were only inspected and left untouched.
+```sh
+W1D_ACCEPTANCE_DSN='host=127.0.0.1 port=55442 user=w1d password=w1d dbname=w1d sslmode=disable' GOCACHE=/tmp/w1d-gocache go test ./modules/store -run '^TestPostgresStaleSnapshotAcceptance$' -count=1 -v
+```
 
-The full sequential gate `go vet ./... && golangci-lint run && go test ./... && go build ./...` passed at `870c7ca`:
-vet exit 0; lint reported `0 issues`; tests passed for sync, store, webhook, database and SCM packages; build exit 0.
-Exact-head hosted API CI run `40045744857` on `4236d77edd45490db053ef997d6aa64b9defee4d` completed successfully:
-vet, golangci-lint, test, build and job completion all passed.
+Result: PASS for `newer-first`, `older-first`, missing-timestamp duplicate safety, `concurrent_writers`, and equal/missing protection for issue, pull request, and pipeline. Container: `w1d-accept-20261024-r4`.
+
+Negative control: in a separate disposable worktree, the actual `Where` freshness predicates were removed from the three production repository files and the same acceptance command was run on port `55443`. It failed at intended state/value assertions: `newer-first` expected `closed`, got `open`; concurrent writers expected `closed`, got `open`; equal/missing issue and pull expected `closed`, got `open`; equal/missing pipeline expected `completed`, got `running`. This proves stale state/value corruption rather than fixture setup failure. The control worktree was never committed or pushed.
+
+Cleanup used an EXIT trap with `docker rm -f` for both named containers. After success/failure, `docker ps -a` returned no `w1d-accept-20261024-r4` or `w1d-control-20261024-r4` container. No API process was started and no unrelated service was modified.
+
+## Full API gate
+
+Run sequentially from `api`:
+
+```sh
+go vet ./...                 # PASS (exit 0)
+golangci-lint run           # PASS (0 issues)
+go test ./...               # PASS
+go build ./...              # PASS (exit 0)
+git diff --check            # PASS (exit 0)
+```
 
 ## Not covered
 
-- None; final evidence commit triggers a subsequent hosted CI run.
+Hosted CI and exact-head PR checks are pending the pushed evidence commit. Client, coordinator records, runner, workflow, and unrelated services are not covered by this PR.
