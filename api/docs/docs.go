@@ -15,6 +15,131 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/agent-runs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List agent runs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Wave",
+                        "name": "wave",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Issue number",
+                        "name": "issue_number",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/agentrun.AgentRun"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create an agent run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Static agent run token",
+                        "name": "X-Agent-Run-Token",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Agent run",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.CreateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.AgentRun"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/agent-runs/aggregate": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Aggregate agent runs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Wave",
+                        "name": "wave",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Issue number",
+                        "name": "issue_number",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/agentrun.Aggregate"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/board": {
             "get": {
                 "produces": [
@@ -108,6 +233,155 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "agentrun.AgentRun": {
+            "type": "object",
+            "properties": {
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "cost_usd": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "issue_numbers": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "wave": {
+                    "type": "string"
+                },
+                "worker": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.Aggregate": {
+            "type": "object",
+            "properties": {
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "cost_usd": {
+                    "type": "number"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "issue_number": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "wave": {
+                    "type": "string"
+                },
+                "worker": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.CreateInput": {
+            "type": "object",
+            "required": [
+                "ended_at",
+                "model",
+                "repository_id",
+                "started_at",
+                "wave",
+                "worker"
+            ],
+            "properties": {
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "issue_numbers": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "wave": {
+                    "type": "string"
+                },
+                "worker": {
+                    "type": "string"
+                }
+            }
+        },
         "board.ListMeta": {
             "type": "object",
             "properties": {
