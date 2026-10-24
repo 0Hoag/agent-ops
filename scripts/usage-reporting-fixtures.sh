@@ -176,9 +176,9 @@ PY
 echo 'fixture opt-out passed'
 [[ $(wc -l < "$FIXTURE_RESPONSES") -eq $response_count_before ]] || { echo 'opt-out unexpectedly sent a request'; exit 1; }
 
-# Both harnesses must reject a disposable guard bypass. Supply all reporter
-# values, but omit only the required repository ID in the baseline invocation;
-# the mutation supplies it and removes the opt-out guard, producing a real POST.
+# Both harnesses must reject bypassing the actual reporter opt-out guard. The
+# baseline uses a fake-server URL and valid repository ID but no token; the
+# disposable guard mutation supplies only that missing token at curl time.
 for harness in codex opencode; do
   control="$tmp/optout-control-$harness"
   mkdir -p "$control/scripts" "$control/.agent-runs" "$control/../$(basename "$control")-wt"
@@ -188,15 +188,16 @@ for harness in codex opencode; do
   launcher=run-worker.sh
   [[ $harness == opencode ]] && launcher=run-worker-opencode.sh
   cp "$root/scripts/$launcher" "$control/scripts/launcher.sh"
-  # Replace only the disposable launcher's guard with the reporter invocation
-  # and complete credentials, leaving fixture assertions unchanged.
-  python3 - "$control/scripts/launcher.sh" <<'PY'
+  # Mutate only the disposable reporter's line-7 guard. Supply the missing
+  # token at curl time so its bypass causes an actual request. The launcher
+  # still sees the baseline's missing token and uses unchanged assertions.
+  python3 - "$root/scripts/report-agent-run.sh" "$control/scripts/report-agent-run.sh" <<'PY'
 import pathlib,sys
-p=pathlib.Path(sys.argv[1]); s=p.read_text()
-needle='report_agent_run "$usage" "$started_at" "$ended_at" || printf'
-replacement='AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 report_agent_run "$usage" "$started_at" "$ended_at" || printf'
+p=pathlib.Path(sys.argv[2]); s=pathlib.Path(sys.argv[1]).read_text()
+needle='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_TOKEN:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0'
 if needle not in s: raise SystemExit('opt-out reporter guard mutation target not found')
-p.write_text(s.replace(needle,replacement,1))
+replacement='[[ -n ${AGENT_RUN_API_URL:-} && -n ${AGENT_RUN_REPOSITORY_ID:-} ]] || return 0\n  AGENT_RUN_TOKEN=fixture-secret'
+p.write_text(s.replace(needle, replacement, 1))
 PY
   cat > "$tmp/bin/$harness" <<'SH'
 #!/usr/bin/env bash
@@ -207,15 +208,16 @@ SH
   : > "$FIXTURE_RESPONSES"; printf '0' > "$FIXTURE_MODE"
   set +e
   (cd "$control" && PATH="$tmp/bin:$PATH" FIXTURE_BODY="$tmp/request.json" FIXTURE_WORKER_STATUS=0 \
-    AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" AGENT_RUN_TOKEN=fixture-secret \
+    AGENT_RUN_API_URL="http://127.0.0.1:$FIXTURE_PORT" \
+    AGENT_RUN_REPOSITORY_ID=00000000-0000-0000-0000-000000000001 \
     bash scripts/launcher.sh W3b fixture-branch "$tmp/brief.md") > "$tmp/optout-control-$harness.out" 2>&1
   control_status=$?
   set -e
   [[ $control_status == 0 ]] || { echo "$harness opt-out mutation failed before assertion (exit=$control_status)"; cat "$tmp/optout-control-$harness.out"; exit 1; }
-  [[ $(wc -l < "$FIXTURE_RESPONSES") -eq 1 ]] || { echo "$harness opt-out mutation did not send exactly one request"; exit 1; }
   mutation_count=$(wc -l < "$FIXTURE_RESPONSES")
-  [[ $mutation_count != $response_count_before ]] || { echo "$harness opt-out mutation control did not violate unchanged request-count assertion"; exit 1; }
-  echo "fixture $harness opt-out mutation: unchanged request-count assertion rejected ${mutation_count} unexpected POST (baseline=${response_count_before})"
+  [[ $mutation_count -eq 1 ]] || { echo "$harness opt-out mutation did not reach fake server exactly once (count=$mutation_count)"; exit 1; }
+  if [[ $mutation_count -eq $response_count_before ]]; then echo 'opt-out unexpectedly sent a request' >&2; echo "$harness opt-out mutation did not violate unchanged request-count assertion"; exit 1; fi
+  echo "fixture $harness opt-out mutation: unchanged request-count assertion failed as expected: opt-out unexpectedly sent a request (baseline=$response_count_before actual=$mutation_count)"
 done
 
 # No-usage run still reports a zero-valued API record and keeps local artifacts.
