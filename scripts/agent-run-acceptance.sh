@@ -59,41 +59,25 @@ expected_wave_issue=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1
 expected_repo=$(jq -cn '[{wave:"W3G",worker:"wire",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"wire",issue_number:192,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G-distractor",worker:"wave",issue_number:191,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064},{wave:"W3G",worker:"issue",issue_number:999,runs:1,input_tokens:100,cached_input_tokens:20,cache_write_tokens:30,output_tokens:40,reasoning_tokens:50,cost_usd:0.00064}]|sort_by(.wave,.worker,.issue_number)')
 expected_all="$expected_repo"
 list_assert() {
- local url=$1 expected_ids actual_ids list expected_run_ids
+ local url=$1 expected_run_ids=$2 expected_ids actual_ids list
  list=$(curl -fsS "$url")
- case "$url" in
-  *repository_id=*'&wave='*'&issue_number='*) expected_run_ids="$id1" ;;
-  *repository_id=*'&wave='*) expected_run_ids="$id1,$id4" ;;
-  *repository_id=*'&issue_number='*) expected_run_ids="$id1,$id2" ;;
-  *'&wave='*'&issue_number='*) expected_run_ids="$id1,$id3" ;;
-  *repository_id=*) expected_run_ids="$id1,$id2,$id4" ;;
-  *) expected_run_ids="$id1,$id2,$id3,$id4" ;;
- esac
  expected_ids=$(tr ',' '\n' <<<"$expected_run_ids" | sort | paste -sd, -)
  actual_ids=$(jq -r '[.data[].id]|sort|join(",")' <<<"$list")
   [[ "$actual_ids" == "$expected_ids" ]] || die "LIST FILTER ASSERTION: expected run ids $expected_ids got $actual_ids"
 }
 agg_assert() {
- local url=$1 expected actual agg
+ local url=$1 expected=$2 actual agg
  agg=$(curl -fsS "$url")
- case "$url" in
-  *repository_id=*'&wave='*'&issue_number='*) expected=$expected_exact ;;
-  *repository_id=*'&wave='*) expected=$expected_repo_wave ;;
-  *repository_id=*'&issue_number='*) expected=$expected_repo_issue ;;
-  *'&wave='*'&issue_number='*) expected=$expected_wave_issue ;;
-  *repository_id=*) expected=$expected_repo ;;
-  *) expected=$expected_all ;;
- esac
  actual=$(jq -c '[.data[]]|sort_by(.wave,.worker,.issue_number)' <<<"$agg")
  [[ "$actual" == "$expected" ]] || die "AGGREGATE FILTER ASSERTION: expected complete snapshot $expected got $actual"
 }
-list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G&issue_number=191"
-agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G&issue_number=191"
-list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G"
-agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G"
-list_assert "$API/api/v1/agent-runs?repository_id=$REPO&issue_number=191"
-agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&issue_number=191"
-list_assert "$API/api/v1/agent-runs?wave=W3G&issue_number=191"
-agg_assert "$API/api/v1/agent-runs/aggregate?wave=W3G&issue_number=191"
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G&issue_number=191" "$id1"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G&issue_number=191" "$expected_exact"
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&wave=W3G" "$id1,$id4"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&wave=W3G" "$expected_repo_wave"
+list_assert "$API/api/v1/agent-runs?repository_id=$REPO&issue_number=191" "$id1,$id2"
+agg_assert "$API/api/v1/agent-runs/aggregate?repository_id=$REPO&issue_number=191" "$expected_repo_issue"
+list_assert "$API/api/v1/agent-runs?wave=W3G&issue_number=191" "$id1,$id3"
+agg_assert "$API/api/v1/agent-runs/aggregate?wave=W3G&issue_number=191" "$expected_wave_issue"
 log "wire/SQL acceptance passed: ids=$id1; exact aggregate snapshot=$expected_filtered"
 log 'success path complete'
