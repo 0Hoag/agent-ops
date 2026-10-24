@@ -39,7 +39,7 @@ if s.count(old)!=1: raise SystemExit('issue predicate mutation target missing')
 p.write_text(s.replace(old,'_ = f.IssueNumber // mutated issue predicate',1))
 PY
     target="$tmp/api/modules/agentrun/repository.go"; [[ $mutation == issue-list ]] && pattern='LIST FILTER ASSERTION:' || pattern='AGGREGATE FILTER ASSERTION:' ;;
-  noop) perl -0pi -e 's/THIS_PATTERN_DOES_NOT_EXIST/changed/' "$tmp/api/modules/agentrun/repository.go"; target="$tmp/api/modules/agentrun/repository.go"; pattern='' ;;
+  noop) perl -0pi -e 's/THIS_PATTERN_DOES_NOT_EXIST/changed/' "$tmp/api/modules/agentrun/repository.go"; target="$tmp/api/modules/agentrun/repository.go"; pattern='no-op mutation: target unchanged' ;;
   timestamp) target="$tmp/scripts/agent-run-acceptance.sh"; pattern='exact SQL normalization/timestamp mismatch:'; export AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP=1 ;;
   cleanup-failure|cleanup-extra-failure)
     python3 - "$tmp/scripts/agent-run-acceptance.sh" <<'PY'
@@ -78,9 +78,17 @@ PY
 esac
 [[ $mutation == *-aggregate ]] && export AGENT_RUN_ACCEPTANCE_SKIP_LIST=1
 
-if [[ $mutation == noop ]]; then
-  echo 'control noop passed: no-op mutation was unchanged; nested acceptance not invoked'
-  exit 0
+if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate || $mutation == noop ]]; then
+  before=$(git -C "$tmp" rev-parse HEAD:"${target#"$tmp"/}")
+  after=$(git -C "$tmp" hash-object "$target")
+  if [[ "$before" == "$after" ]]; then
+    echo 'acceptance: FAIL: no-op mutation: target unchanged' >&2
+    if [[ $mutation == noop ]]; then echo 'control noop passed: unchanged mutation rejected before nested acceptance'; exit 0; fi
+    echo "control $mutation FAIL: no-op mutation rejected ordinary control before nested acceptance" >&2; exit 1
+  fi
+  if [[ $mutation == noop ]]; then echo 'control noop FAIL: no-op mutation changed target' >&2; exit 1; fi
+elif [[ $mutation == noop ]]; then
+  echo 'control noop FAIL: no-op mutation changed target' >&2; exit 1
 fi
 set +e
 output=$(cd "$tmp" && bash scripts/agent-run-acceptance.sh 2>&1)
@@ -119,6 +127,9 @@ fi
 [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
 if [[ -n $pattern ]] && ! printf '%s\n' "$output" | NEEDLE="$pattern" perl -ne 'if (/^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0) {$found=1} END {exit($found ? 0 : 1)}'; then
   echo "control $mutation FAIL: intended diagnostic '$pattern' missing" >&2; exit 1
+fi
+if [[ $mutation == auth || $mutation == validation || $mutation == pricing || $mutation == *-list || $mutation == *-aggregate ]]; then
+  printf '%s\n' "$output" | perl -ne 'if (/^acceptance: cleanup verified: API PID absent$/) {$pid=1} if (/^acceptance: cleanup verified: no API listener on \d+$/) {$listener=1} if (/^acceptance: cleanup verified: no owned containers or volumes \([^)]+\)$/) {$fixtures=1} if (/^acceptance: cleanup FAILED:/) {$failure=1} END {exit($pid && $listener && $fixtures && !$failure ? 0 : 1)}' || { echo "control $mutation FAIL: actual wrapper did not prove all cleanup evidence classes" >&2; exit 1; }
 fi
 if [[ $mutation == cleanup-failure ]]; then
   printf '%s\n' "$output" | perl -ne 'if (/^acceptance: FAIL: LIST FILTER ASSERTION:/) {$assert=1} if (/^acceptance: cleanup FAILED: injected cleanup failure$/) {$inject++} if (/^acceptance: cleanup FAILED:/ && $_ !~ /^acceptance: cleanup FAILED: injected cleanup failure\n$/) {$real=1} if (/^acceptance: cleanup verified: API PID absent$/) {$pid=1} if (/^acceptance: cleanup verified: no API listener on \d+$/) {$listener=1} if (/^acceptance: cleanup verified: no owned containers or volumes \(/) {$fixtures=1} END {exit($assert && $inject == 1 && !$real && $pid && $listener && $fixtures ? 0 : 1)}' || { echo 'control cleanup-failure FAIL: intended assertion, single injection or cleanup evidence mismatch' >&2; exit 1; }

@@ -16,7 +16,10 @@ volume absence on every exit; UTC `started_at` and `ended_at` are compared again
 row. Set `AGENT_RUN_ACCEPTANCE_API_PORT` and
 `AGENT_RUN_ACCEPTANCE_PG_PORT` to choose free ports; PostgreSQL host port 5432 is refused.
 
-The disposable mutation controls prove the acceptance can detect defects without changing production:
+The disposable mutation controls prove the acceptance can detect defects without changing production.
+Ordinary controls compare the intended target against its baseline before running nested acceptance, so
+an unchanged mutation is rejected immediately. They also require distinct API PID, listener, and owned
+container/volume cleanup evidence and reject any cleanup failure:
 
 ```bash
 scripts/agent-run-acceptance-control.sh auth
@@ -39,6 +42,8 @@ scripts/agent-run-acceptance-control.sh cleanup-missing-injection
 scripts/agent-run-acceptance-control.sh cleanup-extra-failure
 ```
 
+The `noop` control accepts only an unchanged target rejected before nested acceptance. Run
+`scripts/agent-run-acceptance-control-regression.sh` for standalone behavioral wrapper regressions.
 The timestamp control corrupts the persisted row and must fail its exact SQL assertion. The cleanup-failure
 control combines a failing list assertion with an injected cleanup failure; the wrapper must observe both
 diagnostics while verifying real fixture cleanup. The omission controls remove each PID, listener, and
