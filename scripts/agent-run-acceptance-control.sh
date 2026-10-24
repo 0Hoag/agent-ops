@@ -27,4 +27,4 @@ nested_status=$?
 set -e
 printf '%s\n' "$output"
 [[ $nested_status -ne 0 ]] || { echo "control $mutation FAIL: nested acceptance exited 0" >&2; exit 1; }
-if ! NEEDLE="$pattern" perl -ne 'exit 0 if /^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0; END { exit 1 }' <<<"$output"; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
+if ! printf '%s\n' "$output" | NEEDLE="$pattern" perl -ne 'if (/^acceptance: FAIL: / && index($_, $ENV{NEEDLE}) >= 0) { $found=1 } END { exit($found ? 0 : 1) }'; then echo "control $mutation FAIL: missing anchored assertion diagnostic '$pattern' (nested exit=$nested_status)" >&2; exit 1; fi
