@@ -14,6 +14,14 @@ var ErrAccountNotFound = errors.New("account not found")
 
 type Repository struct{ db *gorm.DB }
 
+var dummyPasswordHash = func() string {
+	hash, err := HashPassword("account credential timing sentinel")
+	if err != nil {
+		panic(fmt.Errorf("create dummy account password hash: %w", err))
+	}
+	return hash
+}()
+
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 func (repository *Repository) Create(ctx context.Context, email, password string) (*Account, error) {
@@ -40,9 +48,13 @@ func (repository *Repository) ValidateCredentials(ctx context.Context, email, pa
 	var item Account
 	if err := repository.db.WithContext(ctx).Where("email = ?", email).First(&item).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			_ = bcryptCompare(password, dummyPasswordHash)
 			return ErrInvalidCredentials
 		}
 		return fmt.Errorf("get account credentials: %w", err)
 	}
-	return ValidatePassword(password, item.PasswordHash)
+	if bcryptCompare(password, item.PasswordHash) != nil {
+		return ErrInvalidCredentials
+	}
+	return nil
 }

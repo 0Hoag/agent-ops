@@ -25,8 +25,12 @@ func ValidatePassword(password, passwordHash string) error {
 	if password == "" || passwordHash == "" {
 		return ErrInvalidCredentials
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
+	if bcryptCompare(password, passwordHash) != nil {
 		return ErrInvalidCredentials
 	}
 	return nil
+}
+
+var bcryptCompare = func(password, passwordHash string) error {
+	return bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
 }

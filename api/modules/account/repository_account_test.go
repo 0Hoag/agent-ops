@@ -84,6 +84,39 @@ func TestValidateCredentialsRejectsUnknownAccountAndWrongPassword(t *testing.T) 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestValidateCredentialsComparesUnknownAndWrongPassword(t *testing.T) {
+	repository, mock := accountRepository(t)
+	hash, err := bcrypt.GenerateFromPassword([]byte("right"), bcryptCost)
+	require.NoError(t, err)
+	hashCost, err := bcrypt.Cost(hash)
+	require.NoError(t, err)
+	require.Equal(t, bcryptCost, hashCost, "existing-account hash must use configured bcrypt cost")
+	columns := []string{"id", "email", "password_hash", "created_at", "updated_at"}
+	mock.ExpectQuery(`SELECT \* FROM "accounts" WHERE email = \$1 ORDER BY "accounts"\."id" LIMIT \$2`).
+		WithArgs("missing@example.com", 1).
+		WillReturnRows(sqlmock.NewRows(columns))
+	mock.ExpectQuery(`SELECT \* FROM "accounts" WHERE email = \$1 ORDER BY "accounts"\."id" LIMIT \$2`).
+		WithArgs("person@example.com", 1).
+		WillReturnRows(sqlmock.NewRows(columns).AddRow("11111111-1111-1111-1111-111111111111", "person@example.com", string(hash), time.Now(), time.Now()))
+
+	originalCompare := bcryptCompare
+	defer func() { bcryptCompare = originalCompare }()
+	comparisons := 0
+	bcryptCompare = func(password, passwordHash string) error {
+		comparisons++
+		comparisonErr := originalCompare(password, passwordHash)
+		cost, costErr := bcrypt.Cost([]byte(passwordHash))
+		require.NoError(t, costErr)
+		require.Equal(t, bcryptCost, cost, "every credential path must compare at configured bcrypt cost")
+		return comparisonErr
+	}
+	require.ErrorIs(t, repository.ValidateCredentials(context.Background(), "missing@example.com", "wrong"), ErrInvalidCredentials)
+	require.Equal(t, 1, comparisons, "unknown account must perform a bcrypt comparison")
+	require.ErrorIs(t, repository.ValidateCredentials(context.Background(), "person@example.com", "wrong"), ErrInvalidCredentials)
+	require.Equal(t, 2, comparisons, "existing account with wrong password must perform a bcrypt comparison")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestValidateCredentialsRejectsMalformedRequiredInputBeforeSQL(t *testing.T) {
 	repository, mock := accountRepository(t)
 	require.ErrorIs(t, repository.ValidateCredentials(context.Background(), " ", "password"), ErrInvalidCredentials)
