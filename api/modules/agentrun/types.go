@@ -34,3 +34,18 @@ type Aggregate struct {
 	ReasoningTokens   int64    `json:"reasoning_tokens"`
 	CostUSD           *float64 `json:"cost_usd,omitempty"`
 }
+
+type CreatedResponse struct {
+	Status int      `json:"status"`
+	Data   AgentRun `json:"data"`
+}
+
+type ListResponse struct {
+	Status int        `json:"status"`
+	Data   []AgentRun `json:"data"`
+}
+
+type AggregateResponse struct {
+	Status int         `json:"status"`
+	Data   []Aggregate `json:"data"`
+}

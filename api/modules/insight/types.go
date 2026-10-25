@@ -11,6 +11,10 @@ type Response struct {
 	Suggestions  []Suggestion   `json:"suggestions"`
 }
 
+type Envelope struct {
+	Data Response `json:"data"`
+}
+
 type History struct {
 	Complete bool   `json:"complete"`
 	Reason   string `json:"reason,omitempty"`

@@ -13,6 +13,16 @@ import (
 type Controller struct{ repository *Repository }
 
 func NewController(repository *Repository) *Controller { return &Controller{repository: repository} }
+
+// Get returns computed repository delivery insights.
+// @Summary Get repository insights
+// @Produce json
+// @Param repository_id query string true "Repository UUID" format(uuid)
+// @Success 200 {object} Envelope
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/insights [get]
 func (c *Controller) Get(ctx *gin.Context) {
 	id := ctx.Query("repository_id")
 	if _, err := uuid.Parse(id); err != nil {
