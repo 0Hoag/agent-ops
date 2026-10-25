@@ -463,7 +463,8 @@ paths:
         name: body
         required: true
         schema:
-          type: string
+          additionalProperties: true
+          type: object
       produces:
       - application/json
       responses:

@@ -25,7 +25,8 @@ func TestOpenAPI(t *testing.T) {
 	}
 
 	var document struct {
-		Paths map[string]map[string]json.RawMessage `json:"paths"`
+		Paths       map[string]map[string]json.RawMessage `json:"paths"`
+		Definitions map[string]json.RawMessage            `json:"definitions"`
 	}
 	doc, err := swag.ReadDoc()
 	require.NoError(t, err)
@@ -38,20 +39,50 @@ func TestOpenAPI(t *testing.T) {
 		path := route.Path
 		method := route.Method
 		operationPath := ginToOpenAPIPath(path)
-		_, ok := document.Paths[operationPath][strings.ToLower(method)]
+		op, ok := document.Paths[operationPath][strings.ToLower(method)]
 		require.Truef(t, ok, "missing OpenAPI operation for registered route %s %s (generated path %s)", method, path, operationPath)
+		if method == http.MethodGet && path == "/api/v1/ws" {
+			continue // 101 is an upgrade handshake, not a JSON response.
+		}
+		var operation map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(op, &operation))
+		for _, field := range []string{"parameters", "responses"} {
+			raw, exists := operation[field]
+			if field == "parameters" && !exists {
+				continue
+			}
+			require.Truef(t, exists, "missing %s schema coverage for registered route %s %s", field, method, path)
+			var encoded any
+			require.NoError(t, json.Unmarshal(raw, &encoded))
+			refs := make([]string, 0)
+			collectSchemaRefs(encoded, &refs)
+			if field == "responses" {
+				require.NotEmptyf(t, refs, "missing response schema for registered route %s %s", method, path)
+			}
+			for _, ref := range refs {
+				const prefix = "#/definitions/"
+				if strings.HasPrefix(ref, prefix) {
+					name := strings.TrimPrefix(ref, prefix)
+					require.Containsf(t, document.Definitions, name, "unresolved schema reference %s for registered route %s %s", ref, method, path)
+				}
+			}
+		}
 	}
+}
 
-	for _, check := range []struct {
-		path, method, parameter, schema string
-	}{
-		{"/api/v1/webhooks/:provider", http.MethodPost, "provider", "response.SuccessResponse"},
-		{"/api/v1/board", http.MethodGet, "repository_id", "board.ListResponse"},
-		{"/api/v1/agent-runs", http.MethodPost, "X-Agent-Run-Token", "agentrun.CreateInput"},
-	} {
-		op := document.Paths[ginToOpenAPIPath(check.path)][strings.ToLower(check.method)]
-		require.Contains(t, string(op), `"name": "`+check.parameter+`"`, "important route parameter missing from generated operation")
-		require.Contains(t, string(op), check.schema, "important request/response schema missing from generated operation")
+func collectSchemaRefs(value any, refs *[]string) {
+	switch v := value.(type) {
+	case map[string]any:
+		if ref, ok := v["$ref"].(string); ok {
+			*refs = append(*refs, ref)
+		}
+		for _, child := range v {
+			collectSchemaRefs(child, refs)
+		}
+	case []any:
+		for _, child := range v {
+			collectSchemaRefs(child, refs)
+		}
 	}
 }
 

@@ -30,7 +30,7 @@ func NewController(service *Service, configs map[string][]Config) *Controller {
 // @Param provider path string true "SCM provider"
 // @Param X-Hub-Signature-256 header string false "GitHub HMAC signature"
 // @Param X-Gitlab-Token header string false "GitLab webhook token"
-// @Param body body string true "Provider webhook payload"
+// @Param body body map[string]interface{} true "Provider webhook payload"
 // @Success 200 {object} response.SuccessResponse
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 404 {object} response.ErrorResponse
