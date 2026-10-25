@@ -8,8 +8,9 @@ CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 cd "$ROOT/api"
 API_DOCS=(docs/docs.go docs/swagger.json docs/swagger.yaml)
 api_before=$(mktemp -d)
-client_before=$(mktemp -d)
-trap 'rm -rf "$api_before" "$client_before"' EXIT
+client_before=""
+cleanup_snapshots() { rm -rf "$api_before"; [[ -z "$client_before" ]] || rm -rf "$client_before"; }
+trap cleanup_snapshots EXIT
 for path in "${API_DOCS[@]}"; do
   if [[ -e "$path" ]]; then
     mkdir -p "$api_before/$(dirname "$path")"
@@ -55,6 +56,7 @@ if [[ "${CLIENT_CHECKOUT:-pinned}" == pinned && -n "$(git status --porcelain)" ]
   exit 1
 fi
 CLIENT_ARTIFACTS=(src/shared/api/swagger.json src/shared/api/generated)
+client_before=$(mktemp -d)
 for path in "${CLIENT_ARTIFACTS[@]}"; do
   if [[ -e "$path" ]]; then
     mkdir -p "$client_before/$(dirname "$path")"
