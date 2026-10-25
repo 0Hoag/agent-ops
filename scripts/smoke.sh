@@ -24,7 +24,13 @@ while stack:
  out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
 print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PREVIEW_PID")
     for child in $preview_tree; do kill "$child" 2>/dev/null || true; done
+    # The preview wrapper can exit before its descendants have released the
+    # listening socket. Wait for the owned port to disappear, not just root.
     wait "$PREVIEW_PID" 2>/dev/null || true
+    for _ in $(seq 1 50); do
+      if ! lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then break; fi
+      sleep 0.1
+    done
   fi
   if [[ -n "$PREVIEW_PID" ]] && lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then log "cleanup failed: preview listener remains on $CLIENT_PORT"; status=1; fi
   docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -54,7 +60,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build
+POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
 for _ in $(seq 1 90); do
   if curl --fail --silent "$API_URL/readyz" >/dev/null; then break; fi
   sleep 1
