@@ -16,15 +16,21 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if [[ -n "$PREVIEW_PID" ]]; then
-  preview_tree=$(python3 -c 'import subprocess,sys,time; root=int(sys.argv[1]); seen=set(); stack=[root];
+    preview_tree=$(python3 -c 'import subprocess,sys,time; root=int(sys.argv[1]); seen=set(); stack=[root];
 while stack:
  p=stack.pop();
  if p in seen: continue
  seen.add(p)
  out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
-time.sleep(0.3)
+time.sleep(1)
 print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PREVIEW_PID")
-    for child in $preview_tree; do kill "$child" 2>/dev/null || true; done
+    for child in $preview_tree; do kill -TERM "$child" 2>/dev/null || true; done
+    for _ in $(seq 1 30); do
+      alive=0
+      for child in $preview_tree; do kill -0 "$child" 2>/dev/null && alive=1; done
+      [[ $alive -eq 0 ]] && break
+      sleep 0.1
+    done
     # The preview wrapper can exit before its descendants have released the
     # listening socket. Wait for the captured process tree, not just root.
     wait "$PREVIEW_PID" 2>/dev/null || true
