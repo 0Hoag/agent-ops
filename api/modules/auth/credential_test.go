@@ -33,8 +33,6 @@ func TestLoginCredentialResponsesAreIndistinguishable(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"id", "email", "password_hash"})
 		if email == "known@example.com" {
 			rows.AddRow("account-id", email, knownHash)
-		} else {
-			rows.AddRow("different-id", email, knownHash)
 		}
 		mock.ExpectQuery(`SELECT \* FROM "accounts"`).WithArgs(email, 1).WillReturnRows(rows)
 		recorder := httptest.NewRecorder()
