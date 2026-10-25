@@ -16,23 +16,26 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if [[ -n "$PREVIEW_PID" ]]; then
-    preview_tree=$(python3 -c 'import subprocess,sys; root=int(sys.argv[1]); seen=set(); stack=[root];
+    preview_tree=$(python3 -c 'import subprocess,sys,time; root=int(sys.argv[1]); seen=set(); stack=[root];
 while stack:
  p=stack.pop();
  if p in seen: continue
  seen.add(p)
- out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
+  out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
+time.sleep(0.3)
 print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PREVIEW_PID")
     for child in $preview_tree; do kill "$child" 2>/dev/null || true; done
     # The preview wrapper can exit before its descendants have released the
-    # listening socket. Wait for the owned port to disappear, not just root.
+    # listening socket. Wait for the captured process tree, not just root.
     wait "$PREVIEW_PID" 2>/dev/null || true
-    for _ in $(seq 1 50); do
-      if ! lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then break; fi
+    listener=
+    for _ in $(seq 1 100); do
+      listener=$(lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null || true)
+      [[ -n "$listener" ]] || break
       sleep 0.1
     done
   fi
-  if [[ -n "$PREVIEW_PID" ]] && lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then log "cleanup failed: preview listener remains on $CLIENT_PORT"; status=1; fi
+  if [[ -n "$PREVIEW_PID" ]] && [[ -n "${listener:-}" ]]; then log "cleanup failed: preview listener remains on $CLIENT_PORT"; status=1; fi
   docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null 2>&1 || true
   if [[ $status -ne 0 ]]; then docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs --no-color >"$ARTIFACT_DIR/compose.log" 2>/dev/null || true; fi
   if docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.ID}}' | grep -q .; then log "cleanup failed: containers remain for $PROJECT"; status=1; fi
@@ -60,7 +63,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
+POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build
 for _ in $(seq 1 90); do
   if curl --fail --silent "$API_URL/readyz" >/dev/null; then break; fi
   sleep 1
