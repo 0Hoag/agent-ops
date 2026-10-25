@@ -15,6 +15,8 @@ worker=codex
 model=${AGENT_RUN_MODEL:-gpt-reserve}
 root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
+git_common_dir=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
+git_common_parent=$(dirname "$git_common_dir")
 mkdir -p "$root/.agent-runs"
 
 git -C "$root" fetch origin main
@@ -28,6 +30,7 @@ codex exec \
   --profile worker \
   --json \
   -C "$wt" \
+  --add-dir "$git_common_parent" \
   -o "$root/.agent-runs/$wave.md" \
   "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl"
 worker_status=$?
