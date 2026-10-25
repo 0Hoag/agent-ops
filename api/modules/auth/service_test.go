@@ -40,6 +40,15 @@ func TestSessionRejectsInvalidAndExpiredTokens(t *testing.T) {
 	}
 }
 
+func TestSessionRejectsTokenWithoutExpiration(t *testing.T) {
+	service := NewService(nil, "secret", time.Hour)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "account-id", "email": "person@example.com"})
+	value, err := token.SignedString([]byte("secret"))
+	require.NoError(t, err)
+	_, err = service.Session(value)
+	require.ErrorIs(t, err, ErrInvalidToken)
+}
+
 func TestSessionIdentityComesFromValidatedClaims(t *testing.T) {
 	service := NewService(nil, "secret", time.Hour)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "account-id", "email": "person@example.com", "exp": time.Now().Add(time.Hour).Unix()})

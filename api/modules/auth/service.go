@@ -46,7 +46,7 @@ func (service *Service) Session(value string) (*SessionResponse, error) {
 			return nil, ErrInvalidToken
 		}
 		return service.secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}))
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
 	if err != nil || !token.Valid {
 		return nil, ErrInvalidToken
 	}
