@@ -10,6 +10,7 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/docs"
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
 	"github.com/0Hoag/agent-ops/api/modules/board"
+	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
@@ -85,6 +86,7 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 	hub := board.NewHub()
 	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisher(gormDB, builder.Default(), hub), configs)).Register(router.Group("/api/v1"))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(router.Group("/api/v1"))
+	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(router.Group("/api/v1"))
 	prices := map[string]agentrun.Price{}
 	for model, raw := range cfg.AgentRunModelPrices {
 		var p agentrun.Price
