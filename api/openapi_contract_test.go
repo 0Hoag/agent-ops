@@ -55,6 +55,7 @@ func TestOpenAPI(t *testing.T) {
 			if field == "responses" {
 				var responses map[string]json.RawMessage
 				require.NoError(t, json.Unmarshal(raw, &responses))
+				require.NotEmptyf(t, responses, "empty responses map for registered route %s %s", method, path)
 				for code, response := range responses {
 					if method == http.MethodGet && (path == "/api/v1/ws" || path == "/api/v1/board/ws") && code == "101" {
 						continue
