@@ -6,6 +6,7 @@ CLIENT_SHA=3bedee0cff61b9f10a4fd591d8666460eba3f337
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
 
+mkdir -p "$ROOT/.agent-runs"
 cd "$ROOT/api"
 API_DOCS=(docs/docs.go docs/swagger.json docs/swagger.yaml)
 tmp=$(mktemp -d "$ROOT/.agent-runs/contract.XXXXXX")
