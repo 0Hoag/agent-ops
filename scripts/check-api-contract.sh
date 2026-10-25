@@ -7,9 +7,11 @@ CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 
 cd "$ROOT/api"
 API_DOCS=(docs/docs.go docs/swagger.json docs/swagger.yaml)
+API_HANDLERS=(modules/agentrun/controller.go)
 api_before=$(mktemp -d)
 client_before=""
-cleanup_snapshots() { rm -rf "$api_before"; [[ -z "$client_before" ]] || rm -rf "$client_before"; }
+handler_before=$(mktemp -d)
+cleanup_snapshots() { rm -rf "$api_before" "$handler_before"; [[ -z "$client_before" ]] || rm -rf "$client_before"; }
 trap cleanup_snapshots EXIT
 for path in "${API_DOCS[@]}"; do
   if [[ -e "$path" ]]; then
@@ -18,6 +20,7 @@ for path in "${API_DOCS[@]}"; do
     : > "$api_before/$path.present"
   fi
 done
+for path in "${API_HANDLERS[@]}"; do cp -p "$path" "$handler_before/$(basename "$path")"; done
 make swagger
 api_drift=0
 for path in "${API_DOCS[@]}"; do
@@ -37,6 +40,7 @@ if (( api_drift )); then
   done
   exit 1
 fi
+for path in "${API_HANDLERS[@]}"; do cp -p "$handler_before/$(basename "$path")" "$path"; done
 
 # Preserve the caller's API docs through the client step as well; the client input
 # is the generated contract, not any unstaged edits present when this check began.
