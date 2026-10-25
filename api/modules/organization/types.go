@@ -12,5 +12,5 @@ type UpdateRoleRequest struct {
 }
 type OrganizationDetail struct {
 	Organization
-	Membership Membership `json:"membership"`
+	Membership Membership `json:"membership" gorm:"embedded;embeddedPrefix:membership_"`
 }

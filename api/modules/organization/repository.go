@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var ErrNotMember = errors.New("not a member")
@@ -81,6 +82,11 @@ func (r *Repository) Members(ctx context.Context, orgID, accountID string) ([]Me
 	return out, err
 }
 func (r *Repository) Add(ctx context.Context, orgID, actor, target, role string) error {
+	return r.locked(ctx, orgID, func(locked *Repository) error {
+		return locked.add(ctx, orgID, actor, target, role)
+	})
+}
+func (r *Repository) add(ctx context.Context, orgID, actor, target, role string) error {
 	if !validRole(role) || role == RoleOwner {
 		return ErrForbidden
 	}
@@ -94,6 +100,11 @@ func (r *Repository) Add(ctx context.Context, orgID, actor, target, role string)
 	return r.db.WithContext(ctx).Create(&Membership{ID: uuid.NewString(), OrganizationID: orgID, AccountID: target, Role: role}).Error
 }
 func (r *Repository) UpdateRole(ctx context.Context, orgID, actor, target, role string) error {
+	return r.locked(ctx, orgID, func(locked *Repository) error {
+		return locked.updateRole(ctx, orgID, actor, target, role)
+	})
+}
+func (r *Repository) updateRole(ctx context.Context, orgID, actor, target, role string) error {
 	if !validRole(role) || role == RoleOwner {
 		return ErrForbidden
 	}
@@ -108,12 +119,22 @@ func (r *Repository) UpdateRole(ctx context.Context, orgID, actor, target, role 
 	if err := r.db.WithContext(ctx).Where("organization_id=? AND account_id=?", orgID, target).First(&current).Error; err != nil {
 		return err
 	}
+	if !canManage(a.Role, current.Role) {
+		return ErrForbidden
+	}
 	if current.Role == RoleOwner && role != RoleOwner {
-		return r.ensureNotLastOwner(ctx, orgID)
+		if err := r.ensureNotLastOwner(ctx, orgID); err != nil {
+			return err
+		}
 	}
 	return r.db.WithContext(ctx).Model(&current).Update("role", role).Error
 }
 func (r *Repository) Remove(ctx context.Context, orgID, actor, target string) error {
+	return r.locked(ctx, orgID, func(locked *Repository) error {
+		return locked.remove(ctx, orgID, actor, target)
+	})
+}
+func (r *Repository) remove(ctx context.Context, orgID, actor, target string) error {
 	a, err := r.Membership(ctx, orgID, actor)
 	if err != nil {
 		return err
@@ -141,4 +162,15 @@ func (r *Repository) ensureNotLastOwner(ctx context.Context, orgID string) error
 		return ErrLastOwner
 	}
 	return nil
+}
+
+// Serialize membership mutations so simultaneous owner changes cannot remove all owners.
+func (r *Repository) locked(ctx context.Context, orgID string, change func(*Repository) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var org Organization
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&org, "id = ?", orgID).Error; err != nil {
+			return err
+		}
+		return change(NewRepository(tx))
+	})
 }

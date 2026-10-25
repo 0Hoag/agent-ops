@@ -18,13 +18,6 @@ func NewController(repository *Repository, sessions *auth.Service) *Controller {
 	return &Controller{repository: repository, sessions: sessions}
 }
 
-// @Summary Create organization
-// @Accept json
-// @Produce json
-// @Param request body CreateRequest true "Organization"
-// @Success 201 {object} response.SuccessResponse
-// @Failure 400,401 {object} response.ErrorResponse
-// @Router /api/v1/organizations [post]
 func (c *Controller) accountID(ctx *gin.Context) (string, bool) {
 	p := strings.Fields(ctx.GetHeader("Authorization"))
 	if len(p) != 2 || !strings.EqualFold(p[0], "Bearer") {
@@ -38,13 +31,21 @@ func (c *Controller) accountID(ctx *gin.Context) (string, bool) {
 	}
 	return s.AccountID, true
 }
+
+// @Summary Create organization
+// @Accept json
+// @Produce json
+// @Param request body CreateRequest true "Organization"
+// @Success 201 {object} response.SuccessResponse
+// @Failure 400,401 {object} response.ErrorResponse
+// @Router /api/v1/organizations [post]
 func (c *Controller) Create(ctx *gin.Context) {
 	id, ok := c.accountID(ctx)
 	if !ok {
 		return
 	}
 	var req CreateRequest
-	if ctx.ShouldBindJSON(&req) != nil {
+	if ctx.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Name) == "" {
 		response.BadRequest(ctx, "invalid request")
 		return
 	}
