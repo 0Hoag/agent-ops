@@ -38,6 +38,16 @@ if (( api_drift )); then
   exit 1
 fi
 
+# Preserve the caller's API docs through the client step as well; the client input
+# is the generated contract, not any unstaged edits present when this check began.
+for path in "${API_DOCS[@]}"; do
+  if [[ -e "$api_before/$path.present" ]]; then
+    cp -p "$api_before/$path" "$path"
+  else
+    rm -f "$path"
+  fi
+done
+
 if [[ ! -d "$CLIENT_DIR/.git" ]]; then
   mkdir -p "$(dirname "$CLIENT_DIR")"
   git clone https://github.com/0Hoag/agent-ops-client.git "$CLIENT_DIR"
