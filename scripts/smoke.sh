@@ -16,12 +16,12 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if [[ -n "$PREVIEW_PID" ]]; then
-    preview_tree=$(python3 -c 'import subprocess,sys,time; root=int(sys.argv[1]); seen=set(); stack=[root];
+  preview_tree=$(python3 -c 'import subprocess,sys,time; root=int(sys.argv[1]); seen=set(); stack=[root];
 while stack:
  p=stack.pop();
  if p in seen: continue
  seen.add(p)
-  out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
+ out=subprocess.run(["pgrep","-P",str(p)],capture_output=True,text=True); stack.extend(int(x) for x in out.stdout.split())
 time.sleep(0.3)
 print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PREVIEW_PID")
     for child in $preview_tree; do kill "$child" 2>/dev/null || true; done
@@ -63,7 +63,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build
+POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
 for _ in $(seq 1 90); do
   if curl --fail --silent "$API_URL/readyz" >/dev/null; then break; fi
   sleep 1
