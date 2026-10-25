@@ -62,6 +62,15 @@ definitions:
       worker:
         type: string
     type: object
+  agentrun.AggregateResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/agentrun.Aggregate'
+        type: array
+      status:
+        type: integer
+    type: object
   agentrun.CreateInput:
     properties:
       cache_write_tokens:
@@ -100,6 +109,22 @@ definitions:
     - wave
     - worker
     type: object
+  agentrun.CreatedResponse:
+    properties:
+      data:
+        $ref: '#/definitions/agentrun.AgentRun'
+      status:
+        type: integer
+    type: object
+  agentrun.ListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/agentrun.AgentRun'
+        type: array
+      status:
+        type: integer
+    type: object
   board.ListMeta:
     properties:
       page:
@@ -115,10 +140,112 @@ definitions:
       meta:
         $ref: '#/definitions/board.ListMeta'
     type: object
+  insight.CycleMetric:
+    properties:
+      completed:
+        type: integer
+      evidence:
+        items:
+          $ref: '#/definitions/insight.Evidence'
+        type: array
+      median_seconds:
+        type: number
+    type: object
+  insight.Envelope:
+    properties:
+      data:
+        $ref: '#/definitions/insight.Response'
+    type: object
+  insight.Evidence:
+    properties:
+      delivery_id:
+        type: string
+      event_type:
+        type: string
+      issue_number:
+        type: integer
+      pr_number:
+        type: integer
+      received_at:
+        type: string
+      source_at:
+        type: string
+    type: object
+  insight.FirstCIMetric:
+    properties:
+      eligible:
+        type: integer
+      evidence:
+        items:
+          $ref: '#/definitions/insight.Evidence'
+        type: array
+      rate:
+        type: number
+      successful:
+        type: integer
+    type: object
+  insight.History:
+    properties:
+      complete:
+        type: boolean
+      reason:
+        type: string
+    type: object
+  insight.Response:
+    properties:
+      cycle_time:
+        $ref: '#/definitions/insight.CycleMetric'
+      first_ci_success:
+        $ref: '#/definitions/insight.FirstCIMetric'
+      history:
+        $ref: '#/definitions/insight.History'
+      repository_id:
+        type: string
+      send_back:
+        $ref: '#/definitions/insight.SendBackMetric'
+      suggestions:
+        items:
+          $ref: '#/definitions/insight.Suggestion'
+        type: array
+    type: object
+  insight.SendBackMetric:
+    properties:
+      count:
+        type: integer
+      denominator:
+        type: integer
+      evidence:
+        items:
+          $ref: '#/definitions/insight.Evidence'
+        type: array
+      numerator:
+        type: integer
+      rate:
+        type: number
+    type: object
+  insight.Suggestion:
+    properties:
+      evidence:
+        items:
+          $ref: '#/definitions/insight.Evidence'
+        type: array
+      key:
+        type: string
+      message:
+        type: string
+      occurrences:
+        type: integer
+    type: object
   response.ErrorResponse:
     properties:
       message:
         type: string
+      status:
+        type: integer
+    type: object
+  response.SuccessResponse:
+    properties:
+      data: {}
       status:
         type: integer
     type: object
@@ -150,9 +277,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/agentrun.AgentRun'
-            type: array
+            $ref: '#/definitions/agentrun.ListResponse'
       summary: List agent runs
     post:
       consumes:
@@ -175,7 +300,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/agentrun.AgentRun'
+            $ref: '#/definitions/agentrun.CreatedResponse'
         "400":
           description: Bad Request
           schema:
@@ -184,6 +309,8 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - AgentRunToken: []
       summary: Create an agent run
   /api/v1/agent-runs/aggregate:
     get:
@@ -206,9 +333,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/agentrun.Aggregate'
-            type: array
+            $ref: '#/definitions/agentrun.AggregateResponse'
       summary: Aggregate agent runs
   /api/v1/board:
     get:
@@ -242,6 +367,56 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: List board issues
+  /api/v1/board/ws:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Board invalidation websocket handshake
+  /api/v1/insights:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get repository insights
   /api/v1/repositories:
     get:
       parameters:
@@ -267,6 +442,75 @@ paths:
       summary: List repositories
   /api/v1/webhooks/{provider}:
     post:
-      responses: {}
+      consumes:
+      - application/json
+      parameters:
+      - description: SCM provider
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: GitHub HMAC signature
+        in: header
+        name: X-Hub-Signature-256
+        type: string
+      - description: GitLab webhook token
+        in: header
+        name: X-Gitlab-Token
+        type: string
+      - description: Provider webhook payload
+        in: body
+        name: body
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Ingest provider webhook
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: Process health
+  /readyz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Database readiness
+securityDefinitions:
+  AgentRunToken:
+    in: header
+    name: X-Agent-Run-Token
+    type: apiKey
 swagger: "2.0"

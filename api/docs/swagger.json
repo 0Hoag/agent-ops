@@ -39,15 +39,17 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/agentrun.AgentRun"
-                            }
+                            "$ref": "#/definitions/agentrun.ListResponse"
                         }
                     }
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "AgentRunToken": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -77,7 +79,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/agentrun.AgentRun"
+                            "$ref": "#/definitions/agentrun.CreatedResponse"
                         }
                     },
                     "400": {
@@ -125,10 +127,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/agentrun.Aggregate"
-                            }
+                            "$ref": "#/definitions/agentrun.AggregateResponse"
                         }
                     }
                 }
@@ -183,6 +182,82 @@
                 }
             }
         },
+        "/api/v1/board/ws": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Board invalidation websocket handshake",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/insights": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get repository insights",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.Envelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/repositories": {
             "get": {
                 "produces": [
@@ -221,8 +296,107 @@
         },
         "/api/v1/webhooks/{provider}": {
             "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
                 "summary": "Ingest provider webhook",
-                "responses": {}
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "SCM provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "GitHub HMAC signature",
+                        "name": "X-Hub-Signature-256",
+                        "in": "header"
+                    },
+                    {
+                        "type": "string",
+                        "description": "GitLab webhook token",
+                        "name": "X-Gitlab-Token",
+                        "in": "header"
+                    },
+                    {
+                        "description": "Provider webhook payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Process health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Database readiness",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
             }
         }
     },
@@ -321,6 +495,20 @@
                 }
             }
         },
+        "agentrun.AggregateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.Aggregate"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
         "agentrun.CreateInput": {
             "type": "object",
             "required": [
@@ -376,6 +564,31 @@
                 }
             }
         },
+        "agentrun.CreatedResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/agentrun.AgentRun"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "agentrun.ListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.AgentRun"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
         "board.ListMeta": {
             "type": "object",
             "properties": {
@@ -399,6 +612,154 @@
                 }
             }
         },
+        "insight.CycleMetric": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "integer"
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.Evidence"
+                    }
+                },
+                "median_seconds": {
+                    "type": "number"
+                }
+            }
+        },
+        "insight.Envelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/insight.Response"
+                }
+            }
+        },
+        "insight.Evidence": {
+            "type": "object",
+            "properties": {
+                "delivery_id": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "issue_number": {
+                    "type": "integer"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "source_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.FirstCIMetric": {
+            "type": "object",
+            "properties": {
+                "eligible": {
+                    "type": "integer"
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.Evidence"
+                    }
+                },
+                "rate": {
+                    "type": "number"
+                },
+                "successful": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.History": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.Response": {
+            "type": "object",
+            "properties": {
+                "cycle_time": {
+                    "$ref": "#/definitions/insight.CycleMetric"
+                },
+                "first_ci_success": {
+                    "$ref": "#/definitions/insight.FirstCIMetric"
+                },
+                "history": {
+                    "$ref": "#/definitions/insight.History"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "send_back": {
+                    "$ref": "#/definitions/insight.SendBackMetric"
+                },
+                "suggestions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.Suggestion"
+                    }
+                }
+            }
+        },
+        "insight.SendBackMetric": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "denominator": {
+                    "type": "integer"
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.Evidence"
+                    }
+                },
+                "numerator": {
+                    "type": "integer"
+                },
+                "rate": {
+                    "type": "number"
+                }
+            }
+        },
+        "insight.Suggestion": {
+            "type": "object",
+            "properties": {
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.Evidence"
+                    }
+                },
+                "key": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "occurrences": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -409,6 +770,22 @@
                     "type": "integer"
                 }
             }
+        },
+        "response.SuccessResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "status": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "AgentRunToken": {
+            "type": "apiKey",
+            "name": "X-Agent-Run-Token",
+            "in": "header"
         }
     }
 }

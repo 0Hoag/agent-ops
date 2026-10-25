@@ -9,6 +9,7 @@ BINARY_NAME := $(APP_NAME)
 DOCKER_IMAGE := $(APP_NAME)
 GOCMD := go
 GOTEST := $(GOCMD) test
+SWAG_VERSION := v1.16.6
 .PHONY: build run dev install fmt vet lint test test-coverage ci swagger docker-build
 build:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY_DIR)/$(BINARY_NAME) .
@@ -44,6 +45,6 @@ ci:
 	@CGO_ENABLED=0 $(GOCMD) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY_DIR)/$(BINARY_NAME) .
 	@echo "✓ ci pipeline passed locally"
 swagger:
-	swag init --parseDependency --parseInternal
+	go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) init --parseDependency --parseInternal
 docker-build:
 	docker build --platform linux/amd64 --build-arg VERSION=$(VERSION) --build-arg BUILD_TIME="$(BUILD_TIME)" --build-arg GIT_COMMIT=$(GIT_COMMIT) -t $(DOCKER_IMAGE):$(VERSION) -t $(DOCKER_IMAGE):latest .

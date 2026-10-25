@@ -37,9 +37,10 @@ func NewController(repository RunRepository, token string, prices map[string]Pri
 // @Produce json
 // @Param X-Agent-Run-Token header string true "Static agent run token"
 // @Param request body CreateInput true "Agent run"
-// @Success 201 {object} AgentRun
+// @Success 201 {object} CreatedResponse
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 401 {object} response.ErrorResponse
+// @Security AgentRunToken
 // @Router /api/v1/agent-runs [post]
 func (c *Controller) Create(ctx *gin.Context) {
 	if c.token == "" || ctx.GetHeader("X-Agent-Run-Token") != c.token {
@@ -82,7 +83,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 // @Param repository_id query string false "Repository UUID"
 // @Param wave query string false "Wave"
 // @Param issue_number query int false "Issue number"
-// @Success 200 {array} AgentRun
+// @Success 200 {object} ListResponse
 // @Router /api/v1/agent-runs [get]
 func (c *Controller) List(ctx *gin.Context) {
 	filter, err := requestFilter(ctx)
@@ -104,7 +105,7 @@ func (c *Controller) List(ctx *gin.Context) {
 // @Param repository_id query string false "Repository UUID"
 // @Param wave query string false "Wave"
 // @Param issue_number query int false "Issue number"
-// @Success 200 {array} Aggregate
+// @Success 200 {object} AggregateResponse
 // @Router /api/v1/agent-runs/aggregate [get]
 func (c *Controller) Aggregate(ctx *gin.Context) {
 	filter, err := requestFilter(ctx)

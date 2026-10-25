@@ -39,6 +39,9 @@ var (
 // @description API for repository synchronization and signed webhooks.
 // @host localhost:8080
 // @BasePath /
+// @securityDefinitions.apikey AgentRunToken
+// @in header
+// @name X-Agent-Run-Token
 
 func main() {
 	cfg, err := config.Load()

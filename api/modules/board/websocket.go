@@ -46,6 +46,14 @@ func (h *Hub) Publish(repositoryID string) {
 		}
 	}
 }
+
+// Handle upgrades the request to a board invalidation websocket.
+// @Summary Board invalidation websocket handshake
+// @Produce json
+// @Param repository_id query string true "Repository UUID" format(uuid)
+// @Success 101 {string} string "Switching Protocols"
+// @Failure 400 {object} response.ErrorResponse
+// @Router /api/v1/board/ws [get]
 func (h *Hub) Handle(ctx *gin.Context) {
 	repositoryID := ctx.Query("repository_id")
 	if _, err := uuid.Parse(repositoryID); err != nil {

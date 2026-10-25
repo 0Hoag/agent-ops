@@ -25,6 +25,16 @@ func NewController(service *Service, configs map[string][]Config) *Controller {
 
 // Handle receives a signed provider webhook.
 // @Summary Ingest provider webhook
+// @Accept json
+// @Produce json
+// @Param provider path string true "SCM provider"
+// @Param X-Hub-Signature-256 header string false "GitHub HMAC signature"
+// @Param X-Gitlab-Token header string false "GitLab webhook token"
+// @Param body body string true "Provider webhook payload"
+// @Success 200 {object} response.SuccessResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 413 {object} response.ErrorResponse
 // @Router /api/v1/webhooks/{provider} [post]
 func (controller *Controller) Handle(c *gin.Context) {
 	if c.Request.ContentLength > 2<<20 {
