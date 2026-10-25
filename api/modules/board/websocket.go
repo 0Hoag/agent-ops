@@ -23,6 +23,16 @@ type Hub struct {
 }
 
 func NewHub() *Hub { return &Hub{subs: make(map[string]map[*subscriber]struct{})} }
+
+// SubscriberCount reports the currently registered subscribers for a repository.
+// It lets callers coordinate with the asynchronous websocket handshake without
+// sending an application-level readiness message.
+func (h *Hub) SubscriberCount(repositoryID string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs[repositoryID])
+}
+
 func (h *Hub) Publish(repositoryID string) {
 	event := Invalidation{Type: "board.invalidate", RepositoryID: repositoryID}
 	h.mu.Lock()
