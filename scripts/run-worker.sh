@@ -16,13 +16,15 @@ model=${AGENT_RUN_MODEL:-gpt-reserve}
 root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
 git_common_dir=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
-git_common_parent=$(dirname "$git_common_dir")
 mkdir -p "$root/.agent-runs"
 
 git -C "$root" fetch origin main
 if [ ! -d "$wt" ]; then
   git -C "$root" worktree add "$wt" -b "$branch" origin/main
 fi
+# Common objects/refs and this worktree's index/HEAD live outside the worktree.
+# Codex protects the linked Git directory separately, so grant both explicitly.
+git_worktree_dir=$(git -C "$wt" rev-parse --absolute-git-dir)
 
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
@@ -30,7 +32,8 @@ codex exec \
   --profile worker \
   --json \
   -C "$wt" \
-  --add-dir "$git_common_parent" \
+  --add-dir "$git_common_dir" \
+  --add-dir "$git_worktree_dir" \
   -o "$root/.agent-runs/$wave.md" \
   "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl"
 worker_status=$?
