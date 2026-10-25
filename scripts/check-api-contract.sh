@@ -4,98 +4,63 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CLIENT_SHA=3bedee0cff61b9f10a4fd591d8666460eba3f337
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
+CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
 
 cd "$ROOT/api"
 API_DOCS=(docs/docs.go docs/swagger.json docs/swagger.yaml)
-API_HANDLERS=(modules/agentrun/controller.go)
-api_before=$(mktemp -d)
-client_before=""
-handler_before=$(mktemp -d)
-cleanup_snapshots() { rm -rf "$api_before" "$handler_before"; [[ -z "$client_before" ]] || rm -rf "$client_before"; }
-trap cleanup_snapshots EXIT
-for path in "${API_DOCS[@]}"; do
-  if [[ -e "$path" ]]; then
-    mkdir -p "$api_before/$(dirname "$path")"
-    cp -p "$path" "$api_before/$path"
-    : > "$api_before/$path.present"
-  fi
-done
-for path in "${API_HANDLERS[@]}"; do cp -p "$path" "$handler_before/$(basename "$path")"; done
+tmp=$(mktemp -d "$ROOT/.agent-runs/contract.XXXXXX")
+cleanup() { rm -rf "$tmp"; }
+trap cleanup EXIT
+mkdir -p "$tmp/api"
+cp -R "$ROOT/api/." "$tmp/api/"
+for path in "${API_DOCS[@]}"; do rm -rf "$tmp/api/$path"; done
+cd "$tmp/api"
 make swagger
 api_drift=0
-for path in "${API_DOCS[@]}"; do
-  if [[ -e "$api_before/$path.present" ]]; then
-    if [[ ! -f "$path" ]] || ! cmp -s "$api_before/$path" "$path"; then api_drift=1; fi
-  elif [[ -e "$path" ]]; then
-    api_drift=1
-  fi
-done
-if (( api_drift )); then
-  echo "API contract drift: regenerate and commit api/docs/{docs.go,swagger.json,swagger.yaml}" >&2
-  for path in "${API_DOCS[@]}"; do
-    if [[ ! -e "$api_before/$path.present" && -e "$path" ]]; then echo "  new: api/$path" >&2
-    elif [[ -e "$api_before/$path.present" && ! -f "$path" ]]; then echo "  missing: api/$path" >&2
-    elif [[ -e "$api_before/$path.present" ]] && ! cmp -s "$api_before/$path" "$path"; then echo "  changed: api/$path" >&2
+compare_paths() {
+  local baseline=$1 generated=$2 label=$3 drift=0 path expected found
+  shift 3
+  local artifacts=("$@")
+  for path in "${artifacts[@]}"; do
+    expected=0; found=0
+    [[ ! -e "$baseline/$path" ]] || expected=1
+    [[ ! -e "$generated/$path" ]] || found=1
+    if (( expected && ! found )); then
+      echo "  missing: $label/$path" >&2; drift=1
+    elif (( ! expected && found )); then
+      echo "  new: $label/$path" >&2; drift=1
+    elif (( expected && found )) && ! diff -qr "$baseline/$path" "$generated/$path" >/dev/null 2>&1; then
+      echo "  changed: $label/$path" >&2; drift=1
     fi
   done
+  return "$drift"
+}
+if ! compare_paths "$ROOT/api" "$tmp/api" api "${API_DOCS[@]}"; then api_drift=1; fi
+if (( api_drift )); then
+  echo "API contract drift: regenerate and commit api/docs/{docs.go,swagger.json,swagger.yaml}" >&2
   exit 1
 fi
-for path in "${API_HANDLERS[@]}"; do cp -p "$handler_before/$(basename "$path")" "$path"; done
-
-# Preserve the caller's API docs through the client step as well; the client input
-# is the generated contract, not any unstaged edits present when this check began.
-for path in "${API_DOCS[@]}"; do
-  if [[ -e "$api_before/$path.present" ]]; then
-    cp -p "$api_before/$path" "$path"
-  else
-    rm -f "$path"
-  fi
-done
-
 if [[ ! -d "$CLIENT_DIR/.git" ]]; then
   mkdir -p "$(dirname "$CLIENT_DIR")"
-  git clone https://github.com/0Hoag/agent-ops-client.git "$CLIENT_DIR"
+  git clone "$CLIENT_REPO" "$CLIENT_DIR"
 fi
 git -C "$CLIENT_DIR" fetch --quiet origin "$CLIENT_SHA"
-if [[ "${CLIENT_CHECKOUT:-pinned}" == pinned ]]; then
-  git -C "$CLIENT_DIR" checkout --quiet --detach "$CLIENT_SHA"
-elif [[ "${CLIENT_CHECKOUT:-pinned}" != current ]]; then
+if [[ "${CLIENT_CHECKOUT:-pinned}" != pinned ]]; then
   echo "CLIENT_CHECKOUT must be pinned or current" >&2
   exit 2
 fi
 
-cd "$CLIENT_DIR"
-if [[ "${CLIENT_CHECKOUT:-pinned}" == pinned && -n "$(git status --porcelain)" ]]; then
-  echo "Client fixture must start clean: $CLIENT_DIR" >&2
-  exit 1
-fi
+client_work="$tmp/client"
+mkdir -p "$client_work"
+git -C "$CLIENT_DIR" archive "$CLIENT_SHA" | tar -x -C "$client_work"
+cd "$client_work"
 CLIENT_ARTIFACTS=(src/shared/api/swagger.json src/shared/api/generated)
-client_before=$(mktemp -d)
-for path in "${CLIENT_ARTIFACTS[@]}"; do
-  if [[ -e "$path" ]]; then
-    mkdir -p "$client_before/$(dirname "$path")"
-    cp -Rp "$path" "$client_before/$path"
-    : > "$client_before/$path.present"
-  fi
-done
 cp "$ROOT/api/docs/swagger.json" src/shared/api/swagger.json
 corepack pnpm@11.21.0 install --frozen-lockfile
 corepack pnpm@11.21.0 generate:api
 client_drift=0
-for path in "${CLIENT_ARTIFACTS[@]}"; do
-  if [[ -e "$client_before/$path.present" ]]; then
-    if [[ ! -e "$path" ]] || ! diff -qr "$client_before/$path" "$path" >/dev/null; then client_drift=1; fi
-  elif [[ -e "$path" ]]; then
-    client_drift=1
-  fi
-done
+if ! compare_paths "$CLIENT_DIR" "$client_work" client "${CLIENT_ARTIFACTS[@]}"; then client_drift=1; fi
 if (( client_drift )); then
   echo "Client contract drift: update the committed API snapshot and generated client at $CLIENT_SHA" >&2
-  for path in "${CLIENT_ARTIFACTS[@]}"; do
-    if [[ ! -e "$client_before/$path.present" && -e "$path" ]]; then echo "  new: $path" >&2
-    elif [[ -e "$client_before/$path.present" && ! -e "$path" ]]; then echo "  missing: $path" >&2
-    elif [[ -e "$client_before/$path.present" ]] && ! diff -qr "$client_before/$path" "$path" >/dev/null; then echo "  changed: $path" >&2
-    fi
-  done
   exit 1
 fi
