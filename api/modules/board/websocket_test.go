@@ -3,6 +3,7 @@ package board
 import (
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ func TestWebSocketPublishesOnlyToMatchingRepository(t *testing.T) {
 	b := "22222222-2222-2222-2222-222222222222"
 	connA, connB := connect(a), connect(b)
 	t.Cleanup(func() { _ = connA.Close(); _ = connB.Close() })
+	awaitSubscribers(t, hub, map[string]int{a: 1, b: 1})
 	hub.Publish(a)
 	_, payload, err := connA.ReadMessage()
 	require.NoError(t, err)
@@ -41,9 +43,8 @@ func TestWebSocketDisconnectRemovesSubscription(t *testing.T) {
 	id := "11111111-1111-1111-1111-111111111111"
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):]+"/api/v1/board/ws?repository_id="+id, nil)
 	require.NoError(t, err)
-	hub.mu.Lock()
-	require.Len(t, hub.subs[id], 1)
-	hub.mu.Unlock()
+	t.Cleanup(func() { _ = conn.Close() })
+	awaitSubscribers(t, hub, map[string]int{id: 1})
 	require.NoError(t, conn.Close())
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -56,6 +57,29 @@ func TestWebSocketDisconnectRemovesSubscription(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("disconnected websocket subscription was not removed")
+}
+
+func awaitSubscribers(t *testing.T, hub *Hub, expected map[string]int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		hub.mu.Lock()
+		matched := true
+		for id, count := range expected {
+			if len(hub.subs[id]) != count {
+				matched = false
+				break
+			}
+		}
+		hub.mu.Unlock()
+		if matched {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("websocket subscribers did not become ready: expected %v", expected)
+		}
+		runtime.Gosched()
+	}
 }
 
 func (c *Controller) hubHandler() http.Handler {
