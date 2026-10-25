@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -254,6 +255,7 @@ func TestWebhookRoutePublishesWebSocketInvalidationOnlyAfterCommit(t *testing.T)
 				return conn
 			}
 			connA, connB := connect(repositoryAID), connect(repositoryBID)
+			awaitSubscribers(t, hub, map[string]int{repositoryAID: 1, repositoryBID: 1})
 			if tc.setup != nil {
 				tc.setup(mock)
 			}
@@ -293,6 +295,27 @@ func TestWebhookRoutePublishesWebSocketInvalidationOnlyAfterCommit(t *testing.T)
 			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
+	}
+}
+
+func awaitSubscribers(t *testing.T, hub *board.Hub, expected map[string]int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		ready := true
+		for repositoryID, count := range expected {
+			if hub.SubscriberCount(repositoryID) != count {
+				ready = false
+				break
+			}
+		}
+		if ready {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("websocket subscribers did not become ready: expected %v", expected)
+		}
+		runtime.Gosched()
 	}
 }
 
