@@ -27,12 +27,12 @@ func TestPostgresBoardAcceptance(t *testing.T) {
 	require.NoError(t, database.RunMigrations(context.Background(), db))
 	ctx := context.Background()
 	ids := []store.UUID{"a1000000-0000-0000-0000-000000000001", "a2000000-0000-0000-0000-000000000002"}
-	for i, id := range ids {
-		require.NoError(t, db.Exec("INSERT INTO repositories (id, provider, full_name, webhook_secret_env_ref) VALUES (?, 'github', ?, ?) ON CONFLICT (id) DO NOTHING", id, []string{"fixture/alpha", "fixture/beta"}[i], "MUST_NOT_LEAK").Error)
-	}
 	require.NoError(t, db.Where("repository_id IN ?", ids).Delete(&store.Issue{}).Error)
 	require.NoError(t, db.Where("repository_id IN ?", ids).Delete(&store.PullRequest{}).Error)
 	require.NoError(t, db.Where("repository_id IN ?", ids).Delete(&store.PipelineRun{}).Error)
+	for i, id := range ids {
+		require.NoError(t, db.Exec("INSERT INTO repositories (id, provider, full_name, webhook_secret_env_ref) VALUES (?, 'github', ?, ?) ON CONFLICT (id) DO NOTHING", id, []string{"fixture/alpha", "fixture/beta"}[i], "MUST_NOT_LEAK").Error)
+	}
 	t.Cleanup(func() {
 		_ = db.Where("repository_id IN ?", ids).Delete(&store.Issue{}).Error
 		_ = db.Where("repository_id IN ?", ids).Delete(&store.PullRequest{}).Error
@@ -53,9 +53,14 @@ func TestPostgresBoardAcceptance(t *testing.T) {
 			closedIssue = 5
 		}
 		closes, _ := json.Marshal([]int{closedIssue})
-		pr := store.PullRequest{ID: store.NewUUID(), RepositoryID: id, Number: int64(10 + i), Title: "PR " + string(id[:4]), State: "open", HeadSHA: "shared-sha", Branch: "feature", Closes: store.JSONB(closes)}
+		title := "PR " + string(id[:4])
+		if i == 1 {
+			title = "beta PR"
+		}
+		pr := store.PullRequest{ID: store.NewUUID(), RepositoryID: id, Number: int64(10 + i), Title: title, State: "open", HeadSHA: "shared-sha", Branch: "feature", Closes: store.JSONB(closes)}
 		require.NoError(t, db.Create(&pr).Error)
-		run := store.PipelineRun{ID: store.NewUUID(), RepositoryID: id, ExternalID: "run-" + string(id[:4]), SHA: "shared-sha", Status: "completed", Conclusion: "success"}
+		externalID := "run-" + string(id[:4])
+		run := store.PipelineRun{ID: store.NewUUID(), RepositoryID: id, ExternalID: externalID, SHA: "shared-sha", Status: "completed", Conclusion: "success"}
 		require.NoError(t, db.Create(&run).Error)
 	}
 	repoRows, repoMeta, err := NewRepository(db).ListRepositories(ctx, 1, 1)
@@ -94,6 +99,7 @@ func TestPostgresBoardAcceptance(t *testing.T) {
 	require.Equal(t, "beta same issue", beta[0].Title)
 	require.Len(t, alpha[0].PullRequests, 1)
 	require.EqualValues(t, 10, alpha[0].PullRequests[0].Number)
+	require.Equal(t, "PR "+string(ids[0][:4]), alpha[0].PullRequests[0].Title)
 	require.Equal(t, "run-a100", alpha[0].PullRequests[0].PipelineRuns[0].ExternalID)
 	require.EqualValues(t, 11, beta[0].PullRequests[0].Number)
 	require.Equal(t, "run-a200", beta[0].PullRequests[0].PipelineRuns[0].ExternalID)
