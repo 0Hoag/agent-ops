@@ -11,6 +11,7 @@ SMOKE_API_PORT="${SMOKE_API_PORT:-$(python3 -c 'import socket; s=socket.socket()
 SMOKE_CLIENT_PORT="${SMOKE_CLIENT_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-$ROOT/deploy/local/artifacts/$PROJECT}"
 COMPOSE=(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
+API_OVERRIDE="$ARTIFACT_DIR/api-override.yml"
 
 mkdir -p "$ARTIFACT_DIR"
 cleanup() {
@@ -25,7 +26,11 @@ cleanup() {
       printf 'listener remains on port %s\n' "$port" >>"$ARTIFACT_DIR/cleanup.log"; result=1
     fi
   done
-  printf 'containers=absent volumes=absent listeners=absent project=%s\n' "$PROJECT" >>"$ARTIFACT_DIR/cleanup.log"
+  if [ "$result" -eq 0 ]; then
+    printf 'CLEANUP PASS: containers=absent volumes=absent listeners=absent project=%s\n' "$PROJECT" >>"$ARTIFACT_DIR/cleanup.log"
+  else
+    printf 'CLEANUP FAIL: owned resources remain or cleanup failed project=%s\n' "$PROJECT" >>"$ARTIFACT_DIR/cleanup.log"
+  fi
   exit "$result"
 }
 trap cleanup EXIT INT TERM
@@ -33,14 +38,20 @@ trap cleanup EXIT INT TERM
 cd "$ROOT"
 export CLIENT_DIR POSTGRES_HOST_PORT SMOKE_API_PORT SMOKE_CLIENT_PORT
 export AGENT_RUN_MODEL_PRICES AGENT_RUN_TOKEN
+cat >"$API_OVERRIDE" <<'YAML'
+services:
+  api:
+    environment:
+      AGENT_RUN_TOKEN: ${AGENT_RUN_TOKEN}
+      AGENT_RUN_MODEL_PRICES: ${AGENT_RUN_MODEL_PRICES}
+YAML
+COMPOSE+=( -f "$API_OVERRIDE" )
 "${COMPOSE[@]}" config >"$ARTIFACT_DIR/compose-config.yml"
 "${COMPOSE[@]}" up --build -d
-"${COMPOSE[@]}" stop api
-"${COMPOSE[@]}" rm -f api
-"${COMPOSE[@]}" run --build -d --no-deps --name "$PROJECT-api-fixture" -p "127.0.0.1:$SMOKE_API_PORT:8080" -e "AGENT_RUN_MODEL_PRICES=$AGENT_RUN_MODEL_PRICES" -e "AGENT_RUN_TOKEN=$AGENT_RUN_TOKEN" api
+"${COMPOSE[@]}" up --build -d api
 for attempt in $(seq 1 45); do
   if curl -fsS "http://127.0.0.1:$SMOKE_API_PORT/readyz" >/dev/null; then break; fi
-  if [ "$attempt" = 45 ]; then docker logs "$PROJECT-api-fixture" >"$ARTIFACT_DIR/api-fixture.log"; exit 1; fi
+  if [ "$attempt" = 45 ]; then "${COMPOSE[@]}" logs api >"$ARTIFACT_DIR/api-fixture.log"; exit 1; fi
   sleep 1
 done
 for attempt in $(seq 1 90); do
@@ -49,15 +60,35 @@ for attempt in $(seq 1 90); do
   sleep 2
 done
 
-docker exec "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
+docker exec -i "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
 INSERT INTO repositories (id, provider, full_name, webhook_secret_env_ref) VALUES
 ('123e4567-e89b-42d3-a456-426614174000', 'github', 'compose-acceptance/runs', 'unused');
 SQL
-docker exec "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "SELECT id, full_name FROM repositories WHERE id = '123e4567-e89b-42d3-a456-426614174000'" >"$ARTIFACT_DIR/seed-repository-check.txt"
+docker exec "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -At -c "SELECT count(*) FROM repositories WHERE id = '123e4567-e89b-42d3-a456-426614174000' AND full_name = 'compose-acceptance/runs'" >"$ARTIFACT_DIR/seed-repository-check.txt"
+seed_repository_count=$(tr -d '[:space:]' <"$ARTIFACT_DIR/seed-repository-check.txt")
+if [ "$seed_repository_count" != 1 ]; then
+  printf 'REPOSITORY PRESENCE ASSERTION: expected exactly one seeded repository before run POST; got %s\n' "$seed_repository_count" >&2
+  exit 1
+fi
+printf 'REPOSITORY PRESENCE ASSERTION PASS: count=%s\n' "$seed_repository_count" | tee "$ARTIFACT_DIR/seed-repository-assertion.log"
+
+# Disposable control: Docker exec without -i drops the heredoc. This must trip the same presence check.
+docker exec "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL' >"$ARTIFACT_DIR/missing-stdin-control.txt" 2>&1 || true
+INSERT INTO repositories (id, provider, full_name, webhook_secret_env_ref) VALUES
+('123e4567-e89b-42d3-a456-426614174001', 'github', 'compose-acceptance/missing-stdin-control', 'unused');
+SQL
+missing_stdin_count=$(docker exec "${PROJECT}-postgres-1" psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -At -c "SELECT count(*) FROM repositories WHERE id = '123e4567-e89b-42d3-a456-426614174001'" | tr -d '[:space:]')
+if [ "$missing_stdin_count" = 0 ]; then
+  printf 'REPOSITORY PRESENCE ASSERTION: expected exactly one seeded repository before run POST; got %s\n' "$missing_stdin_count" | tee "$ARTIFACT_DIR/missing-stdin-control-assertion.log"
+  printf 'MISSING-STDIN CONTROL PASS: unchanged repository-presence assertion failed before POST\n' | tee -a "$ARTIFACT_DIR/missing-stdin-control-assertion.log"
+else
+  printf 'MISSING-STDIN CONTROL INVALID: expected absent row, got count=%s\n' "$missing_stdin_count" >&2
+  exit 1
+fi
 seed_status=$(curl -sS -o "$ARTIFACT_DIR/seed-response.json" -w '%{http_code}' -X POST "http://127.0.0.1:$SMOKE_API_PORT/api/v1/agent-runs" -H 'Content-Type: application/json' -H "X-Agent-Run-Token: $AGENT_RUN_TOKEN" \
   -d '{"repository_id":"123e4567-e89b-42d3-a456-426614174000","wave":"W3x-compose-acceptance","worker":"ComposeBrowserFixture","model":"gpt-compose-fixture","issue_numbers":[237],"input_tokens":23456,"cached_input_tokens":12345,"cache_write_tokens":456,"output_tokens":789,"reasoning_tokens":123,"started_at":"2026-10-25T00:00:00Z","ended_at":"2026-10-25T00:01:00Z"}')
 if [ "$seed_status" != 201 ]; then
-  docker logs "$PROJECT-api-fixture" >"$ARTIFACT_DIR/api-fixture.log" 2>&1 || true
+  "${COMPOSE[@]}" logs api >"$ARTIFACT_DIR/api-fixture.log" 2>&1 || true
   printf 'fixture create returned HTTP %s: ' "$seed_status" >&2
   python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).read_text())' "$ARTIFACT_DIR/seed-response.json" >&2
   exit 1
