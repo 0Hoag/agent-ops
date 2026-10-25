@@ -49,7 +49,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 		response.BadRequest(ctx, "invalid request")
 		return
 	}
-	o, err := c.repository.Create(ctx, id, req.Name)
+	o, err := c.repository.Create(ctx.Request.Context(), id, req.Name)
 	if err != nil {
 		response.InternalError(ctx, "failed to create organization")
 		return
@@ -67,7 +67,7 @@ func (c *Controller) List(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	v, err := c.repository.List(ctx, id)
+	v, err := c.repository.List(ctx.Request.Context(), id)
 	if err != nil {
 		response.InternalError(ctx, "failed to list organizations")
 		return
@@ -86,7 +86,7 @@ func (c *Controller) Detail(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	v, err := c.repository.Detail(ctx, ctx.Param("organization_id"), id)
+	v, err := c.repository.Detail(ctx.Request.Context(), ctx.Param("organization_id"), id)
 	if errors.Is(err, ErrNotMember) {
 		response.NotFound(ctx, "organization not found")
 		return
@@ -109,7 +109,7 @@ func (c *Controller) Members(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	v, err := c.repository.Members(ctx, ctx.Param("organization_id"), id)
+	v, err := c.repository.Members(ctx.Request.Context(), ctx.Param("organization_id"), id)
 	if errors.Is(err, ErrNotMember) {
 		response.NotFound(ctx, "organization not found")
 		return
@@ -154,7 +154,7 @@ func (c *Controller) Remove(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	err := c.repository.Remove(ctx, ctx.Param("organization_id"), id, ctx.Param("account_id"))
+	err := c.repository.Remove(ctx.Request.Context(), ctx.Param("organization_id"), id, ctx.Param("account_id"))
 	c.result(ctx, err)
 }
 func (c *Controller) change(ctx *gin.Context, action string) {
@@ -176,9 +176,9 @@ func (c *Controller) change(ctx *gin.Context, action string) {
 	}
 	var err error
 	if action == "add" {
-		err = c.repository.Add(ctx, ctx.Param("organization_id"), id, req.AccountID, req.Role)
+		err = c.repository.Add(ctx.Request.Context(), ctx.Param("organization_id"), id, req.AccountID, req.Role)
 	} else {
-		err = c.repository.UpdateRole(ctx, ctx.Param("organization_id"), id, ctx.Param("account_id"), req.Role)
+		err = c.repository.UpdateRole(ctx.Request.Context(), ctx.Param("organization_id"), id, ctx.Param("account_id"), req.Role)
 	}
 	c.result(ctx, err)
 }
