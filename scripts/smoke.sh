@@ -74,7 +74,7 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-POSTGRES_HOST_PORT= POSTGRES_PUBLISH= docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
+POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5432} POSTGRES_PUBLISH=${POSTGRES_PUBLISH-} JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke} docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
 services=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" ps --services --filter status=running | sort)
 if [[ "$services" != $'api\npostgres' ]]; then
   log "unexpected Compose services: ${services//$'\n'/, }"

@@ -40,6 +40,17 @@ func (repository *Repository) Create(ctx context.Context, email, password string
 	return item, nil
 }
 
+func (repository *Repository) GetByEmail(ctx context.Context, email string) (*Account, error) {
+	var item Account
+	if err := repository.db.WithContext(ctx).Where("email = ?", strings.TrimSpace(email)).First(&item).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAccountNotFound
+		}
+		return nil, fmt.Errorf("get account: %w", err)
+	}
+	return &item, nil
+}
+
 func (repository *Repository) ValidateCredentials(ctx context.Context, email, password string) error {
 	email = strings.TrimSpace(email)
 	if email == "" || password == "" {

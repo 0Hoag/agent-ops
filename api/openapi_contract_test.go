@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	_ "github.com/0Hoag/agent-ops/api/docs"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
@@ -19,7 +20,7 @@ import (
 func TestOpenAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	registerRoutes(router, nil, nil, config.Config{})
+	registerRoutes(router, nil, nil, config.Config{JWTSecret: "openapi-test-key", JWTExpiration: time.Hour})
 	if path := os.Getenv("OPENAPI_TEST_ROUTE"); path != "" {
 		router.GET(path, func(c *gin.Context) {})
 	}
