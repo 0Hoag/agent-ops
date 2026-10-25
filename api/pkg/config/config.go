@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -17,6 +18,8 @@ type Config struct {
 	Repositories        []RepositoryConfig
 	AgentRunToken       string
 	AgentRunModelPrices map[string]json.RawMessage
+	JWTSecret           string
+	JWTExpiration       time.Duration
 }
 
 type RepositoryConfig struct {
@@ -35,6 +38,18 @@ func Load() (Config, error) {
 		LogLevel:      envOr("LOG_LEVEL", "info"),
 		CORSOrigins:   splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
 		AgentRunToken: os.Getenv("AGENT_RUN_TOKEN"),
+		JWTSecret:     os.Getenv("JWT_SECRET"),
+		JWTExpiration: 24 * time.Hour,
+	}
+	if cfg.JWTSecret == "" {
+		return Config{}, fmt.Errorf("JWT_SECRET is required")
+	}
+	if raw := os.Getenv("JWT_EXPIRATION"); raw != "" {
+		duration, err := time.ParseDuration(raw)
+		if err != nil || duration <= 0 {
+			return Config{}, fmt.Errorf("JWT_EXPIRATION is invalid")
+		}
+		cfg.JWTExpiration = duration
 	}
 	if raw := os.Getenv("AGENT_RUN_MODEL_PRICES"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.AgentRunModelPrices); err != nil {

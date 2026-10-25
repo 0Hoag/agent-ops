@@ -8,7 +8,9 @@ import (
 	"time"
 
 	_ "github.com/0Hoag/agent-ops/api/docs"
+	"github.com/0Hoag/agent-ops/api/modules/account"
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
+	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/modules/store"
@@ -98,4 +100,5 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 		}
 	}
 	agentrun.NewRoutes(agentrun.NewController(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices)).Register(router.Group("/api/v1"))
+	auth.NewRoutes(auth.NewController(auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration))).Register(router.Group("/api/v1"))
 }

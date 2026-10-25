@@ -7,8 +7,10 @@ import (
 	"github.com/swaggo/swag"
 )
 
-func TestGeneratedSwaggerIsRegisteredWithWebhookPath(t *testing.T) {
+func TestGeneratedSwaggerContainsRequiredPaths(t *testing.T) {
 	spec, err := swag.ReadDoc("swagger")
 	require.NoError(t, err)
 	require.Contains(t, spec, "/api/v1/webhooks/{provider}")
+	require.Contains(t, spec, "/api/v1/auth/login")
+	require.Contains(t, spec, "/api/v1/auth/session")
 }
