@@ -33,6 +33,11 @@ print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PRE
     done
     # The preview wrapper can exit before its descendants have released the
     # listening socket. Wait for the captured process tree, not just root.
+    for _ in $(seq 1 30); do
+      kill -0 "$PREVIEW_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$PREVIEW_PID" 2>/dev/null; then kill -KILL "$PREVIEW_PID" 2>/dev/null || true; fi
     wait "$PREVIEW_PID" 2>/dev/null || true
     listener=
     for _ in $(seq 1 100); do

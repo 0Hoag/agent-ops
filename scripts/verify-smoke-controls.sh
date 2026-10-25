@@ -18,7 +18,7 @@ mkdir -p "$FIXTURES"
 cleanup() {
   local status=$?
   trap - EXIT INT TERM
-  for pid in "${CHILD_PID:-}" "${PREVIEW_PID:-}"; do
+  for pid in "${CHILD_PID:-}" "${PREVIEW_PID:-}" "${LIFECYCLE_WRAPPER_PID:-}"; do
     [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
   done
   for port in "${CLIENT_PORT:-}" "${API_PORT:-}" "${LIFECYCLE_PORT:-}"; do
@@ -131,7 +131,8 @@ python3 - "$FIXTURES/lifecycle-smoke.sh" "$FIXTURES" <<'PY'
 import pathlib, sys
 p=pathlib.Path(sys.argv[1]); s=p.read_text()
 s=s.replace('ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)', f'ROOT="{sys.argv[2]}"')
-s=s.replace('trap cleanup EXIT', 'trap cleanup EXIT\nexit 0 # lifecycle probe exits with its preview descendant active')
+# Exit after the real preview child has launched and cleanup trap is installed.
+s=s.replace('log "preview pid $PREVIEW_PID on $CLIENT_PORT"', 'log "preview pid $PREVIEW_PID on $CLIENT_PORT"\nif [[ "${LIFECYCLE_PROBE:-}" == 1 ]]; then while ! [[ -s "$SMOKE_ARTIFACT_DIR/descendant.pid" ]]; do sleep 0.05; done; exit 0; fi')
 p.write_text(s)
 PY
 cat >"$FIXTURES/lifecycle-preview.sh" <<'SH'
@@ -155,10 +156,10 @@ s=s.replace('(cd "$CLIENT" && APP_API_URL="$API_URL" exec pnpm preview --host 12
 p.write_text(s)
 PY
 run_lifecycle_probe() {
-  local label=$1 script=$2 out="$FIXTURES/$1.log" wrapper child listeners
+  local label=$1 script=$2 out="$FIXTURES/$1.log" wrapper child listeners probe_status
   mkdir -p "$FIXTURES/artifacts"
   rm -f "$FIXTURES/artifacts/descendant.pid"
-  SMOKE_CLIENT_PORT="$LIFECYCLE_PORT" SMOKE_API_PORT="$API_PORT" SMOKE_ARTIFACT_DIR="$FIXTURES/artifacts" SMOKE_PROJECT="${OWNED_PROJECT}-$label" bash "$script" >"$out" 2>&1 &
+  LIFECYCLE_PROBE=1 SMOKE_CLIENT_PORT="$LIFECYCLE_PORT" SMOKE_API_PORT="$API_PORT" SMOKE_ARTIFACT_DIR="$FIXTURES/artifacts" SMOKE_PROJECT="${OWNED_PROJECT}-$label" bash "$script" >"$out" 2>&1 &
   PREVIEW_PID=$!
   for _ in $(seq 1 100); do
     [[ -s "$FIXTURES/artifacts/descendant.pid" ]] && break
@@ -168,20 +169,27 @@ run_lifecycle_probe() {
   CHILD_PID=$(<"$FIXTURES/artifacts/descendant.pid")
   wrapper=$(pgrep -P "$PREVIEW_PID" | head -1)
   [[ -n "$wrapper" && "$wrapper" != "$CHILD_PID" ]]
+  LIFECYCLE_WRAPPER_PID=$wrapper
   listeners=$(lsof -nP -iTCP:"$LIFECYCLE_PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2}' | sort -u)
   [[ "$listeners" == "$CHILD_PID" ]]
   printf '%s observed wrapper=%s descendant=%s listener_pid=%s port=%s\n' "$label" "$wrapper" "$CHILD_PID" "$listeners" "$LIFECYCLE_PORT"
-  wait "$PREVIEW_PID"; PREVIEW_PID=
-  if [[ "$label" == baseline ]]; then
-    if kill -0 "$CHILD_PID" 2>/dev/null || lsof -nP -iTCP:"$LIFECYCLE_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then
-      printf 'baseline production cleanup left descendant/listener\n' >&2; return 1
+  set +e
+  wait "$PREVIEW_PID"
+  probe_status=$?
+  set -e
+  PREVIEW_PID=
+  LIFECYCLE_WRAPPER_PID=
+  if [[ "$label" == baseline || "$label" == restored ]]; then
+    if [[ $probe_status -ne 0 ]] || kill -0 "$CHILD_PID" 2>/dev/null || lsof -nP -iTCP:"$LIFECYCLE_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then
+      printf '%s production cleanup left descendant/listener\n' "$label" >&2; return 1
     fi
-    printf 'baseline production cleanup: PASS\n'
+    printf '%s production cleanup: PASS\n' "$label"
   else
-    if ! grep -F 'cleanup failed: preview listener remains' "$out" || ! kill -0 "$CHILD_PID" 2>/dev/null; then
+    if [[ $probe_status -eq 0 ]] || ! grep -F 'cleanup failed: preview listener remains' "$out" || ! kill -0 "$CHILD_PID" 2>/dev/null; then
       printf 'descendant-cleanup mutation failed for the wrong reason\n' >&2; return 1
     fi
     printf 'cleanup control: expected listener assertion observed; descendant=%s survived wrapper cleanup\n' "$CHILD_PID"
+    # This is emergency cleanup for the intentionally broken mutation only.
     kill "$CHILD_PID" 2>/dev/null || true
     CHILD_PID=
     for _ in $(seq 1 50); do if ! lsof -nP -iTCP:"$LIFECYCLE_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then break; fi; sleep 0.1; done
