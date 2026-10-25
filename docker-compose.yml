@@ -34,5 +34,24 @@ services:
       timeout: 3s
       retries: 30
 
+  client:
+    build:
+      context: .
+      dockerfile: ${PWD}/deploy/local/Dockerfile
+      additional_contexts:
+        client: ${CLIENT_DIR:-../agent-ops-client}
+      args:
+        APP_API_URL: /api
+    ports:
+      - "127.0.0.1:${SMOKE_CLIENT_PORT:-4173}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   agent_ops_postgres:
