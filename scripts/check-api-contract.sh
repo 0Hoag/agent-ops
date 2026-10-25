@@ -5,6 +5,10 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CLIENT_SHA=3bedee0cff61b9f10a4fd591d8666460eba3f337
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
+case "${CONTRACT_FIXTURE:-}" in
+  ""|api-missing|client-missing) ;;
+  *) echo "Unknown CONTRACT_FIXTURE: $CONTRACT_FIXTURE" >&2; exit 2 ;;
+esac
 
 mkdir -p "$ROOT/.agent-runs"
 cd "$ROOT/api"
@@ -17,6 +21,9 @@ cp -R "$ROOT/api/." "$tmp/api/"
 for path in "${API_DOCS[@]}"; do rm -rf "$tmp/api/$path"; done
 cd "$tmp/api"
 make swagger
+if [[ "${CONTRACT_FIXTURE:-}" == api-missing ]]; then
+  rm "$tmp/api/docs/swagger.yaml"
+fi
 api_drift=0
 compare_paths() {
   local baseline=$1 generated=$2 label=$3 drift=0 path expected found
@@ -59,6 +66,9 @@ CLIENT_ARTIFACTS=(src/shared/api/swagger.json src/shared/api/generated)
 cp "$ROOT/api/docs/swagger.json" src/shared/api/swagger.json
 corepack pnpm@11.21.0 install --frozen-lockfile
 corepack pnpm@11.21.0 generate:api
+if [[ "${CONTRACT_FIXTURE:-}" == client-missing ]]; then
+  rm -rf "$client_work/src/shared/api/generated"
+fi
 client_drift=0
 if ! compare_paths "$CLIENT_DIR" "$client_work" client "${CLIENT_ARTIFACTS[@]}"; then client_drift=1; fi
 if (( client_drift )); then
