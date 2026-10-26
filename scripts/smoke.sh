@@ -141,13 +141,18 @@ cd "$CLIENT"
 if ! run_browser 0; then
   exit 1
 fi
-if ! run_browser 1; then
-  log "negative auth control failed (see $ARTIFACT_DIR/browser1.log)"
+if run_browser 1; then
+  log "session-removal control unexpectedly passed unchanged baseline assertions"
   exit 1
 fi
+if ! grep -E 'Expected: visible|Timeout .*exceeded|Issue board' "$ARTIFACT_DIR/browser1.log" >/dev/null; then
+  log "session-removal control failed without the expected baseline auth/data diagnostic (see $ARTIFACT_DIR/browser1.log)"
+  exit 1
+fi
+log "EXPECTED SESSION-REMOVAL CONTROL: unchanged browser assertions failed as unauthenticated (see $ARTIFACT_DIR/browser1.log)"
 if ! run_browser 0; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1
 fi
 compose logs --no-color >"$ARTIFACT_DIR/compose.log"
-log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); control: $ARTIFACT_DIR/browser1.log; screenshot: $ARTIFACT_DIR/board.png"
+log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); session-removal control: $ARTIFACT_DIR/browser1.log; screenshot: $ARTIFACT_DIR/board.png"

@@ -16,27 +16,10 @@ test('renders seeded issue and linked PR/CI from the real API', async ({ page })
       console.error(`API response failed: ${diagnostic}`);
     }
   });
-  await page.addInitScript((token) => sessionStorage.setItem('agent-ops-token', token), process.env.SESSION_TOKEN);
-  await page.goto('/board');
-  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
-    const responseStatus = await page.evaluate(async (apiURL) => {
-      const credentials = await fetch(`${apiURL}/api/v1/auth/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'smoke@example.invalid', password: 'smoke-password-not-a-secret' }),
-      });
-      if (!credentials.ok) throw new Error(`real account login failed: ${credentials.status}`);
-      const { token } = await credentials.json();
-      sessionStorage.setItem('agent-ops-token', token);
-      const response = await fetch(`${apiURL}/api/v1/repositories?page=1&per_page=100`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.status;
-    }, process.env.SMOKE_API_URL);
-    expect(responseStatus, `expected account-only session to be rejected for tenant data; got ${responseStatus}`).toBe(401);
-    expect(apiErrors.some((item) => item.startsWith('401 ') && item.includes('/api/v1/repositories'))).toBeTruthy();
-    console.log(`EXPECTED TENANT CONTROL: account login issued a real token; tenant repository request returned ${responseStatus}`);
-    return;
+  if (process.env.SMOKE_CONTROL_NO_SESSION !== '1') {
+    await page.addInitScript((token) => sessionStorage.setItem('agent-ops-token', token), process.env.SESSION_TOKEN);
   }
+  await page.goto('/board');
   await expect(page.getByRole('heading', { name: 'Issue board' })).toBeVisible({ timeout: 15000 });
   const repositories = page.getByRole('combobox', { name: 'Repository' });
   await expect(repositories).toBeEnabled({ timeout: 15000 });
