@@ -61,6 +61,9 @@ fi
 client_work="$tmp/client"
 mkdir -p "$client_work"
 git -C "$CLIENT_DIR" archive "$CLIENT_SHA" | tar -x -C "$client_work"
+client_baseline="$tmp/client-baseline"
+mkdir -p "$client_baseline"
+git -C "$CLIENT_DIR" archive "$CLIENT_SHA" | tar -x -C "$client_baseline"
 cd "$client_work"
 CLIENT_ARTIFACTS=(src/shared/api/swagger.json src/shared/api/generated)
 cp "$ROOT/api/docs/swagger.json" src/shared/api/swagger.json
@@ -70,7 +73,7 @@ if [[ "${CONTRACT_FIXTURE:-}" == client-missing ]]; then
   rm -rf "$client_work/src/shared/api/generated"
 fi
 client_drift=0
-if ! compare_paths "$CLIENT_DIR" "$client_work" client "${CLIENT_ARTIFACTS[@]}"; then client_drift=1; fi
+if ! compare_paths "$client_baseline" "$client_work" client "${CLIENT_ARTIFACTS[@]}"; then client_drift=1; fi
 if (( client_drift )); then
   echo "Client contract drift: update the committed API snapshot and generated client at $CLIENT_SHA" >&2
   exit 1
