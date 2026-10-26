@@ -32,6 +32,7 @@ func RequireOrganization(service *auth.Service) gin.HandlerFunc {
 			return
 		}
 		c.Set("organization_id", s.OrganizationID)
+		c.Set("account_id", s.AccountID)
 		c.Request = c.Request.WithContext(board.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Request = c.Request.WithContext(insight.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Request = c.Request.WithContext(agentrun.WithOrganization(c.Request.Context(), s.OrganizationID))

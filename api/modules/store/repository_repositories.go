@@ -47,6 +47,35 @@ func (repository *RepositoryRepository) GetByName(ctx context.Context, provider,
 	return &item, nil
 }
 
+func (repository *RepositoryRepository) GetByOrganization(ctx context.Context, organizationID, id UUID) (*Repository, error) {
+	var item Repository
+	if err := repository.db.WithContext(ctx).Where("id = ? AND organization_id = ?", id, organizationID).First(&item).Error; err != nil {
+		return nil, fmt.Errorf("get organization repository: %w", err)
+	}
+	return &item, nil
+}
+func (repository *RepositoryRepository) ListByOrganization(ctx context.Context, organizationID string) ([]Repository, error) {
+	var items []Repository
+	if err := repository.db.WithContext(ctx).Where("organization_id = ?", organizationID).Order("full_name ASC").Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("list organization repositories: %w", err)
+	}
+	return items, nil
+}
+func (repository *RepositoryRepository) DeleteByOrganization(ctx context.Context, organizationID string, id UUID) error {
+	if result := repository.db.WithContext(ctx).Where("id = ? AND organization_id = ?", id, organizationID).Delete(&Repository{}); result.Error != nil {
+		return fmt.Errorf("delete repository: %w", result.Error)
+	} else if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+func (repository *RepositoryRepository) Update(ctx context.Context, item *Repository) error {
+	if err := repository.db.WithContext(ctx).Save(item).Error; err != nil {
+		return fmt.Errorf("update repository: %w", err)
+	}
+	return nil
+}
+
 func (repository *RepositoryRepository) List(ctx context.Context, page, perPage int) ([]Repository, Page, error) {
 	page, perPage = pageArgs(page, perPage)
 	query := repository.db.WithContext(ctx).Model(&Repository{})
