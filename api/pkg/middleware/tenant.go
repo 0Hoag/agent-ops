@@ -1,13 +1,14 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
-	"strings"
 )
 
 func RequireOrganization(service *auth.Service) gin.HandlerFunc {

@@ -1,10 +1,11 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
-	"strings"
 )
 
 const SessionKey = "auth.session"

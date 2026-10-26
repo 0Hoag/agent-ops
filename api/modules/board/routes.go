@@ -8,5 +8,5 @@ func NewRoutes(controller *Controller) *Routes { return &Routes{controller: cont
 func (r *Routes) Register(group *gin.RouterGroup) {
 	group.GET("/repositories", r.controller.ListRepositories)
 	group.GET("/board", r.controller.ListBoard)
-	group.GET("/board/ws", r.controller.hub.Handle)
+	group.GET("/board/ws", r.controller.HandleWebSocket)
 }

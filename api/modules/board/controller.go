@@ -79,6 +79,28 @@ func (c *Controller) ListBoard(ctx *gin.Context) {
 	response.JSON(ctx, http.StatusOK, ListResponse{Data: items, Meta: meta})
 }
 
+func (c *Controller) HandleWebSocket(ctx *gin.Context) {
+	if c.repository == nil {
+		c.hub.Handle(ctx)
+		return
+	}
+	id := ctx.Query("repository_id")
+	if _, err := uuid.Parse(id); err != nil {
+		response.BadRequest(ctx, "invalid repository_id")
+		return
+	}
+	exists, err := c.repository.RepositoryExists(ctx.Request.Context(), id)
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "failed to find repository")
+		return
+	}
+	if !exists {
+		response.NotFound(ctx, "repository not found")
+		return
+	}
+	c.hub.Handle(ctx)
+}
+
 func parsePage(ctx *gin.Context) (pagination.Params, bool) {
 	p := pagination.ParseWithMax(ctx, 100)
 	if ctx.Query("page") != "" && (p.Page == 1 && ctx.Query("page") != "1") {

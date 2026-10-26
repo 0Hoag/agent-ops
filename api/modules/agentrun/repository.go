@@ -17,6 +17,15 @@ func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
 	}
 	return nil
 }
+
+func (r *Repository) IsConfiguredRepository(ctx context.Context, id string, names []string) (bool, error) {
+	if len(names) == 0 {
+		return false, nil
+	}
+	var count int64
+	err := r.db.WithContext(ctx).Table("repositories").Where("id = ? AND full_name IN ?", id, names).Count(&count).Error
+	return count == 1, err
+}
 func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
 	q := r.db.WithContext(ctx).Model(&AgentRun{})
 	if organization := organizationFromContext(ctx); organization != "" {

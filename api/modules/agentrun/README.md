@@ -1,6 +1,6 @@
 # Agent runs API
 
-`POST /api/v1/agent-runs` accepts normalized token usage and requires `X-Agent-Run-Token`, configured by `AGENT_RUN_TOKEN`. All token fields are non-negative; `ended_at` cannot precede `started_at`.
+`POST /api/v1/agent-runs` accepts normalized token usage and requires `X-Agent-Run-Token`, configured by `AGENT_RUN_TOKEN`. The API binds this machine-authenticated write to the persisted repository whose `full_name` is present in `SCM_REPOSITORIES_JSON`; the request body cannot select an arbitrary tenant repository. All token fields are non-negative; `ended_at` cannot precede `started_at`.
 
 `GET /api/v1/agent-runs` lists runs, optionally filtered by `repository_id`, `wave`, and `issue_number`. `GET /api/v1/agent-runs/aggregate` returns totals grouped by wave, worker, and each issue number (or a null issue for runs without issues). Both endpoints accept repository and wave filters.
 

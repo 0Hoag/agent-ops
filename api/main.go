@@ -106,7 +106,11 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 			prices[model] = p
 		}
 	}
-	agentrun.NewRoutes(agentrun.NewController(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices)).Register(private)
+	configuredRepositories := make([]string, 0, len(cfg.Repositories))
+	for _, repository := range cfg.Repositories {
+		configuredRepositories = append(configuredRepositories, repository.FullName)
+	}
+	agentrun.NewRoutes(agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)).Register(private)
 	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
 	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))
 }

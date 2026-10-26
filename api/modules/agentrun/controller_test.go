@@ -20,9 +20,30 @@ type fakeRepository struct {
 	aggregates      []Aggregate
 	aggregateFilter Filter
 	aggregatePrices map[string]Price
+	configured      bool
 }
 
 func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return nil }
+func (f *fakeRepository) IsConfiguredRepository(_ context.Context, _ string, _ []string) (bool, error) {
+	if !f.configured {
+		return true, nil
+	}
+	return false, nil
+}
+
+func TestCreateRejectsRepositoryOutsideConfiguredMachineSet(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRepository{configured: true}
+	r := gin.New()
+	r.POST("/", NewControllerWithConfiguredRepositories(repo, "secret", nil, []string{"configured/repository"}).Create)
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"repository_id":"7e57d004-2b97-0e7a-b45f-5387367791cd","wave":"w3a","worker":"worker","model":"m","started_at":"2026-01-01T00:00:00Z","ended_at":"2026-01-01T00:00:01Z"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Agent-Run-Token", "secret")
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Zero(t, repo.creates)
+}
 func (f *fakeRepository) List(_ context.Context, filter Filter) ([]AgentRun, error) {
 	f.listFilter = filter
 	return f.list, nil

@@ -15,6 +15,7 @@ import (
 
 type RunRepository interface {
 	Create(context.Context, *AgentRun) error
+	IsConfiguredRepository(context.Context, string, []string) (bool, error)
 	List(context.Context, Filter) ([]AgentRun, error)
 	Aggregate(context.Context, Filter, map[string]Price) ([]Aggregate, error)
 }
@@ -25,10 +26,15 @@ type Controller struct {
 	repository RunRepository
 	token      string
 	prices     map[string]Price
+	configured []string
 }
 
 func NewController(repository RunRepository, token string, prices map[string]Price) *Controller {
 	return &Controller{repository: repository, token: token, prices: prices}
+}
+
+func NewControllerWithConfiguredRepositories(repository RunRepository, token string, prices map[string]Price, configured []string) *Controller {
+	return &Controller{repository: repository, token: token, prices: prices, configured: configured}
 }
 
 // Create persists a validated normalized usage record.
@@ -55,6 +61,17 @@ func (c *Controller) Create(ctx *gin.Context) {
 	if _, err := uuid.Parse(in.RepositoryID); err != nil {
 		response.BadRequest(ctx, "invalid repository_id")
 		return
+	}
+	if c.configured != nil {
+		configured, err := c.repository.IsConfiguredRepository(ctx.Request.Context(), in.RepositoryID, c.configured)
+		if err != nil {
+			response.Error(ctx, http.StatusInternalServerError, "failed to validate repository")
+			return
+		}
+		if !configured {
+			response.Error(ctx, http.StatusUnauthorized, "repository is not configured for agent ingestion")
+			return
+		}
 	}
 	if in.InputTokens < 0 || in.CachedInputTokens < 0 || in.CacheWriteTokens < 0 || in.OutputTokens < 0 || in.ReasoningTokens < 0 {
 		response.BadRequest(ctx, "token usage must be non-negative")
