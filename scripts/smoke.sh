@@ -11,7 +11,8 @@ API_URL="http://127.0.0.1:$API_PORT"
 CLIENT_URL="http://127.0.0.1:$CLIENT_PORT"
 PREVIEW_PID=
 ARTIFACT_DIR=${SMOKE_ARTIFACT_DIR:-"$ROOT/.agent-runs/smoke"}
-COMPOSE_ENV=(env "POSTGRES_PUBLISH=${POSTGRES_PUBLISH-127.0.0.1}" "POSTGRES_HOST_PORT=$POSTGRES_HOST_PORT" "SMOKE_API_PORT=$API_PORT" "SMOKE_CLIENT_PORT=$CLIENT_PORT" "CLIENT_DIR=$CLIENT" "JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke}" "REPOSITORY_ENCRYPTION_KEY=${REPOSITORY_ENCRYPTION_KEY:?set a disposable 32-byte REPOSITORY_ENCRYPTION_KEY for smoke}")
+FIXTURE_PORT=${SMOKE_FIXTURE_PORT:-18081}
+COMPOSE_ENV=(env "POSTGRES_PUBLISH=${POSTGRES_PUBLISH-127.0.0.1}" "POSTGRES_HOST_PORT=$POSTGRES_HOST_PORT" "SMOKE_API_PORT=$API_PORT" "SMOKE_CLIENT_PORT=$CLIENT_PORT" "CLIENT_DIR=$CLIENT" "JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke}" "REPOSITORY_ENCRYPTION_KEY=${REPOSITORY_ENCRYPTION_KEY:?set a disposable 32-byte REPOSITORY_ENCRYPTION_KEY for smoke}" "SMOKE_FIXTURE_PORT=$FIXTURE_PORT" "SMOKE_GITLAB_FIXTURE_URL=http://host.docker.internal:$FIXTURE_PORT/api/v4" "SMOKE_WEBHOOK_SECRET=fixture-webhook-secret" "SMOKE_BACKFILL_TOKEN=fixture-backfill-token" "SCM_REPOSITORIES_JSON=[{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"token_env\":\"SMOKE_BACKFILL_TOKEN\",\"webhook_secret_env\":\"SMOKE_WEBHOOK_SECRET\",\"base_url_env\":\"SMOKE_GITLAB_FIXTURE_URL\"}]")
 export SMOKE_GITLAB_FIXTURE_URL=${SMOKE_GITLAB_FIXTURE_URL:-http://host.docker.internal:${SMOKE_FIXTURE_PORT:-18081}}
 
 compose() { "${COMPOSE_ENV[@]}" docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" "$@"; }
@@ -122,8 +123,6 @@ export SMOKE_API_URL="$API_URL"
 export SMOKE_ORGANIZATION_ID=d0000000-0000-4000-8000-000000000011
 export SMOKE_WEBHOOK_SECRET=fixture-webhook-secret
 export SMOKE_BACKFILL_TOKEN=fixture-backfill-token
-export SCM_REPOSITORIES_JSON='[{"provider":"gitlab","full_name":"smoke/group/project","token_env":"SMOKE_BACKFILL_TOKEN","webhook_secret_env":"SMOKE_WEBHOOK_SECRET","base_url_env":"SMOKE_GITLAB_FIXTURE_URL"}]'
-export SMOKE_BACKFILL_TOKEN=fixture-backfill-token
 
 # Exercise the invitation contract against the same real API/PostgreSQL data.
 invite=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
@@ -146,41 +145,45 @@ membership_count=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -
 [[ "$(tr -d '[:space:]' <<<"$membership_count")" == "1" ]] || { log "invitation membership persistence check failed"; exit 1; }
 log "invitation HTTP creation/acceptance/replay and persisted membership verified"
 
-FIXTURE_PORT=${SMOKE_FIXTURE_PORT:-18081}
 if lsof -nP -iTCP:"$FIXTURE_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then log "fixture port already in use: $FIXTURE_PORT"; exit 1; fi
 FIXTURE_LOG="$ARTIFACT_DIR/gitlab-fixture.jsonl"
 python3 "$ROOT/scripts/smoke.gitlab-fixture.py" "$FIXTURE_PORT" "$FIXTURE_LOG" >"$ARTIFACT_DIR/gitlab-fixture.log" 2>&1 &
 FIXTURE_PID=$!
 for _ in $(seq 1 30); do curl --silent "http://127.0.0.1:$FIXTURE_PORT/health" >/dev/null && break; sleep 0.1; done
 FIXTURE_URL="$SMOKE_GITLAB_FIXTURE_URL"
-# Seed a disposable configured GitLab repository to exercise the actual sync credential consumer.
-FIXTURE_REPO_ID=d0000000-0000-4000-8000-000000000020
-compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id,git_lab_base_url,status_mappings) VALUES ('$FIXTURE_REPO_ID','gitlab','smoke/group/project','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011','$FIXTURE_URL','{}')"
-SCM_REPOSITORIES_JSON=$(python3 -c 'import json,sys; print(json.dumps([{"provider":"gitlab","full_name":"smoke/group/project","token_env":"SMOKE_BACKFILL_TOKEN","webhook_secret_env":"SMOKE_WEBHOOK_SECRET","base_url_env":"SMOKE_GITLAB_FIXTURE_URL"}]))')
-compose exec -T -e SCM_REPOSITORIES_JSON="$SCM_REPOSITORIES_JSON" -e SMOKE_BACKFILL_TOKEN=fixture-backfill-token -e SMOKE_WEBHOOK_SECRET=fixture-webhook-secret -e SMOKE_GITLAB_FIXTURE_URL="$FIXTURE_URL" api /agent-ops-api sync
+FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT/api/v4"
+export SMOKE_GITLAB_FIXTURE_URL=$FIXTURE_URL
+export SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used
+export SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used
+
+# Create a GitLab repository through authenticated settings so both consumers must decrypt it.
+created=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"gitlab_base_url\":\"$FIXTURE_URL\",\"webhook_secret\":\"settings-webhook-secret\",\"backfill_token\":\"settings-backfill-token\",\"status_mappings\":{\"Status::Review\":\"blocked\"}}" \
+  "$API_URL/api/v1/repositories")
+FIXTURE_REPO_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["id"])' <<<"$created")
+persisted=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE id='$FIXTURE_REPO_ID'")
+[[ "$persisted" == *"gitlab|d0000000-0000-4000-8000-000000000011|$FIXTURE_URL|{\"Status::Review\": \"blocked\"}|t|t"* ]] || { log "settings persistence mismatch: $persisted"; exit 1; }
+compose exec -T api /agent-ops-api sync
 
 # Exercise the webhook's decrypted credential consumer and verify the fixture receives the exact token.
-webhook_status=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'X-Gitlab-Token: fixture-webhook-secret' \
-  -H 'X-Gitlab-Event: Issue Hook' -H 'Content-Type: application/json' -H 'X-Gitlab-Event-UUID: smoke-runtime-webhook' \
-  -d '{"object_kind":"issue","project":{"path_with_namespace":"smoke/group/project"},"object_attributes":{"iid":1,"title":"fixture","state":"opened","updated_at":"2026-01-01T00:00:00Z"}}' \
-  "$API_URL/api/v1/webhooks/gitlab")
-printf '%s\n' "$webhook_status" >"$ARTIFACT_DIR/webhook-status.txt"
-[[ "$webhook_status" == 200 ]] || { log "webhook credential consumer returned HTTP $webhook_status"; exit 1; }
+webhook_body=$(curl --silent --show-error -o "$ARTIFACT_DIR/webhook-response.json" --write-out '%{http_code}' -X POST -H 'X-Gitlab-Token: settings-webhook-secret' \
+  -H 'X-Gitlab-Event: Issue Hook' -H 'Content-Type: application/json' -H 'X-Gitlab-Event-UUID: smoke-runtime-webhook-settings' \
+  -d '{"object_kind":"issue","project":{"path_with_namespace":"smoke/group/project"},"object_attributes":{"iid":2,"title":"encrypted fixture","state":"opened","updated_at":"2026-01-01T00:00:00Z"}}' "$API_URL/api/v1/webhooks/gitlab")
+[[ "$webhook_body" == 200 ]] || { log "encrypted webhook credential consumer returned HTTP $webhook_body"; exit 1; }
+printf '%s\n' "$webhook_body" >"$ARTIFACT_DIR/webhook-status.txt"
 
 log "fixture repository created and webhook credential consumer invoked"
 python3 - "$FIXTURE_LOG" <<'PY'
 import json,sys
 events=[json.loads(line) for line in open(sys.argv[1], encoding='utf-8')]
-assert events and all(e['token']=='fixture-backfill-token' for e in events), events
+assert events and all(e['token']=='settings-backfill-token' for e in events), events
 assert {e['path'].split('?')[0].rsplit('/',1)[-1] for e in events} >= {'issues','merge_requests','pipelines'}, events
 print('fixture observed encrypted setting backfill token and all GitLab API consumers')
 PY
 
 run_browser() {
   local control=${1:-0}
-  local filter=()
-  if [[ $control -ne 0 ]]; then filter=(--grep-invert 'creates lists edits and deletes both settings'); fi
-  if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" SMOKE_CONTROL_NO_SESSION="$control" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line "${filter[@]}" 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
+  if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" SMOKE_CONTROL_NO_SESSION="$control" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
     return 1
   fi
 }
@@ -205,14 +208,14 @@ if ! run_browser 0; then
   exit 1
 fi
 if run_browser 1; then
-  log "session-removal control unexpectedly passed unchanged baseline assertions"
+  log "session-removal control unexpectedly passed unchanged baseline/settings assertions"
   exit 1
 fi
 if ! grep -E 'Expected: visible|Timeout .*exceeded|Issue board|Repository settings' "$ARTIFACT_DIR/browser1.log" >/dev/null; then
   log "session-removal control failed without the expected baseline auth/data diagnostic (see $ARTIFACT_DIR/browser1.log)"
   exit 1
 fi
-log "EXPECTED SESSION-REMOVAL CONTROL: unchanged browser assertions failed as unauthenticated (see $ARTIFACT_DIR/browser1.log)"
+log "EXPECTED SESSION-REMOVAL CONTROL: unchanged browser and settings assertions failed as unauthenticated (see $ARTIFACT_DIR/browser1.log)"
 if ! run_browser 0; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1

@@ -101,6 +101,8 @@ test('creates lists edits and deletes both settings through real organization HT
   expect(gitlab.status(), await gitlab.text()).toBe(201);
   const gitlabBody = await gitlab.json();
   ids.gitlab = gitlabBody.data.id;
+  expect(gitlabBody.data.webhook_secret).toBe('smoke-gitlab-webhook');
+  expect(gitlabBody.data.backfill_token).toBe('smoke-gitlab-backfill');
   const listed = await request('GET', '/api/v1/repositories');
   expect(listed.status(), await listed.text()).toBe(200);
   const items = (await listed.json()).data;
@@ -110,6 +112,7 @@ test('creates lists edits and deletes both settings through real organization HT
   expect(update.status(), await update.text()).toBe(200);
   const edited = await request('GET', `/api/v1/repositories/${ids.gitlab}`);
   expect((await edited.json()).data.gitlab_base_url).toBe('http://127.0.0.1:9/gitlab-v2');
+  expect((await edited.json()).data.status_mappings).toEqual({ 'Status::Review': 'review' });
   for (const id of Object.values(ids)) expect((await request('DELETE', `/api/v1/repositories/${id}`)).status()).toBe(204);
   console.log(`Repository settings real API calls: ${calls.join(' | ')}`);
   await page.goto('/repositories');
