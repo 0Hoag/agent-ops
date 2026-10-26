@@ -97,6 +97,7 @@ curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { compose
 # Insert deterministic smoke-owned records into this run's isolated Compose database.
 compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
 INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
 INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000011','Smoke tenant');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000012','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000010','owner');
 INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id) VALUES ('d0000000-0000-4000-8000-000000000001','github','smoke/agent-ops','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011');
@@ -114,6 +115,27 @@ session=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_T
 python3 -c 'import json,sys; x=json.load(sys.stdin); assert x["account_id"] == "d0000000-0000-4000-8000-000000000010" and x["organization_id"] == "d0000000-0000-4000-8000-000000000011"' <<<"$session"
 export SESSION_TOKEN
 export SMOKE_API_URL="$API_URL"
+
+# Exercise the invitation contract against the same real API/PostgreSQL data.
+invite=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"role":"viewer","expires_in_seconds":3600}' "$API_URL/api/v1/organizations/d0000000-0000-4000-8000-000000000011/invitations")
+invite_token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])' <<<"$invite")
+invitee_login=$(curl --fail --silent --show-error -H 'Content-Type: application/json' \
+  -d '{"email":"invitee@example.invalid","password":"smoke-password-not-a-secret"}' "$API_URL/api/v1/auth/login")
+invitee_token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$invitee_login")
+accepted=$(curl --fail --silent --show-error -H "Authorization: Bearer $invitee_token" -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$invite_token\"}" "$API_URL/api/v1/organization-invitations/accept")
+python3 -c 'import json,sys; x=json.load(sys.stdin); assert x["data"]["account_id"] == "d0000000-0000-4000-8000-000000000013" and x["data"]["role"] == "viewer"' <<<"$accepted"
+if curl --silent --show-error -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $invitee_token" -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$invite_token\"}" "$API_URL/api/v1/organization-invitations/accept" | grep -q '^409$'; then
+  log "invitation replay rejected with 409"
+else
+  log "invitation replay was not rejected"; exit 1
+fi
+membership_count=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c \
+  "SELECT count(*) FROM organization_memberships WHERE organization_id='d0000000-0000-4000-8000-000000000011' AND account_id='d0000000-0000-4000-8000-000000000013' AND role='viewer'")
+[[ "$(tr -d '[:space:]' <<<"$membership_count")" == "1" ]] || { log "invitation membership persistence check failed"; exit 1; }
+log "invitation HTTP creation/acceptance/replay and persisted membership verified"
 
 run_browser() {
   local control=${1:-0}

@@ -4,6 +4,14 @@ Routes use the verified JWT `sub` as caller identity. `GET /organizations` and d
 
 All routes are prefixed with `/api/v1/organizations`:
 
+Invitation links use the existing Bearer session identity. An owner may invite admins, members, or viewers;
+an admin may invite members or viewers. Owners cannot be invited. `POST /organizations/{organization_id}/invitations`
+accepts `{"role":"member","expires_in_seconds":86400}` and returns a one-time `token` and local `link`.
+Only the token hash is stored. The authenticated invitee accepts it with
+`POST /organization-invitations/accept` and `{"token":"..."}`. Tokens expire by default after seven days and
+may be set from 1 second through 30 days. Acceptance creates the membership and consumes the invitation atomically;
+expired, reused, malformed, duplicate-membership, and unauthorized invitations are rejected.
+
 | Method | Suffix | Success | Rejections |
 | --- | --- | --- | --- |
 | POST | (none) | 201 organization (creator atomically becomes owner) | 400 invalid/blank name; 401 invalid/missing JWT; 500 persistence failure |
