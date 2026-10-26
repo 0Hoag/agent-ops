@@ -18,6 +18,7 @@ type Config = scm.Config
 type Provider struct {
 	token, secret, baseURL string
 	client                 *http.Client
+	mappings               map[string]string
 }
 
 func New(config Config) *Provider {
@@ -29,7 +30,7 @@ func New(config Config) *Provider {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Provider{token: config.Token, secret: config.WebhookSecret, baseURL: base, client: client}
+	return &Provider{token: config.Token, secret: config.WebhookSecret, baseURL: base, client: client, mappings: config.StatusMappings}
 }
 
 func init() {

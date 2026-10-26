@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
+	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	"gorm.io/gorm"
 )
@@ -20,6 +21,7 @@ type Service struct {
 	repositories *store.Store
 	registry     ProviderRegistry
 	publisher    Publisher
+	sealer       *appcrypto.Sealer
 }
 
 type ProviderRegistry interface {
@@ -32,6 +34,12 @@ func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
 
 func NewServiceWithPublisher(db *gorm.DB, registry ProviderRegistry, publisher Publisher) *Service {
 	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher}
+}
+
+func NewServiceWithPublisherAndSealer(db *gorm.DB, registry ProviderRegistry, publisher Publisher, sealer *appcrypto.Sealer) *Service {
+	service := NewServiceWithPublisher(db, registry, publisher)
+	service.sealer = sealer
+	return service
 }
 
 func (service *Service) Ingest(ctx context.Context, provider, configuredRepository, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
@@ -56,10 +64,34 @@ func (service *Service) VerifyConfigured(ctx context.Context, provider, secret, 
 	return providerClient, nil
 }
 
+func (service *Service) VerifyConfiguredForRepository(ctx context.Context, provider, repository, secret, token, baseURL string, h http.Header, payload []byte) (scm.SCMProvider, error) {
+	if stored, err := service.repositories.Repositories.GetByName(ctx, provider, repository); err == nil {
+		if service.sealer != nil {
+			if value, openErr := service.sealer.Open(stored.WebhookSecretCiphertext); openErr == nil && value != "" {
+				secret = value
+			}
+			if value, openErr := service.sealer.Open(stored.BackfillTokenCiphertext); openErr == nil && value != "" {
+				token = value
+			}
+		}
+		if stored.GitLabBaseURL != "" {
+			baseURL = stored.GitLabBaseURL
+		}
+	}
+	return service.VerifyConfigured(ctx, provider, secret, token, baseURL, h, payload)
+}
+
 func (service *Service) IngestParsed(ctx context.Context, provider, configuredRepository string, providerClient scm.SCMProvider, h http.Header, payload []byte) (bool, error) {
 	event, err := providerClient.ParseEvent(ctx, eventType(provider, h), h, payload)
 	if err != nil || !strings.EqualFold(event.Repository, configuredRepository) {
 		return false, ErrCandidateMismatch
+	}
+	if repo, lookupErr := service.repositories.Repositories.GetByName(ctx, provider, configuredRepository); lookupErr == nil && event.Issue != nil {
+		var mappings map[string]string
+		_ = json.Unmarshal(repo.StatusMappings, &mappings)
+		result := scm.BackfillResult{Issues: []scm.Issue{*event.Issue}}
+		scm.ApplyStatusMapping(provider, &result, mappings)
+		*event.Issue = result.Issues[0]
 	}
 	return service.persistEvent(ctx, provider, configuredRepository, event, payload)
 }

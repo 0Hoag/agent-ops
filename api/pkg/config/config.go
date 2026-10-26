@@ -20,6 +20,7 @@ type Config struct {
 	AgentRunModelPrices map[string]json.RawMessage
 	JWTSecret           string
 	JWTExpiration       time.Duration
+	EncryptionKey       []byte
 }
 
 type RepositoryConfig struct {
@@ -40,6 +41,7 @@ func Load() (Config, error) {
 		AgentRunToken: os.Getenv("AGENT_RUN_TOKEN"),
 		JWTSecret:     os.Getenv("JWT_SECRET"),
 		JWTExpiration: 24 * time.Hour,
+		EncryptionKey: []byte(os.Getenv("REPOSITORY_ENCRYPTION_KEY")),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")

@@ -3,12 +3,17 @@ package store
 import "time"
 
 type Repository struct {
-	ID                  UUID   `gorm:"type:uuid;primaryKey"`
-	Provider            string `gorm:"not null"`
-	FullName            string `gorm:"not null"`
-	WebhookSecretEnvRef string `gorm:"not null"`
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	ID                      UUID   `gorm:"type:uuid;primaryKey"`
+	Provider                string `gorm:"not null"`
+	FullName                string `gorm:"not null"`
+	WebhookSecretEnvRef     string `gorm:"not null;default:''"`
+	OrganizationID          string `gorm:"type:uuid;not null;index"`
+	WebhookSecretCiphertext string `gorm:"not null;default:''"`
+	BackfillTokenCiphertext string `gorm:"not null;default:''"`
+	GitLabBaseURL           string `gorm:"not null;default:''"`
+	StatusMappings          JSONB  `gorm:"type:jsonb;not null;default:'{}'"`
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 type Issue struct {

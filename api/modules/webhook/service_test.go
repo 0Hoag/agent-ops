@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/board"
+	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	githubprovider "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/DATA-DOG/go-sqlmock"
@@ -146,6 +147,31 @@ func TestIngestWithRealGitHubProviderAcceptsValidSignature(t *testing.T) {
 	if _, err := provider.ParseEvent(context.Background(), "issues", h, body); err != nil {
 		t.Fatalf("verified provider rejected valid event: %v", err)
 	}
+}
+
+func TestVerifyConfiguredForRepositoryUsesPersistedSecretAndLegacyFallback(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+	require.NoError(t, err)
+	sealer, err := appcrypto.New([]byte("01234567890123456789012345678901"))
+	require.NoError(t, err)
+	ciphertext, err := sealer.Seal("persisted-secret")
+	require.NoError(t, err)
+	body := []byte(`{"repository":{"full_name":"org/a"},"issue":{"id":101,"number":1,"title":"t","state":"open"}}`)
+	h := http.Header{"X-GitHub-Delivery": []string{"persisted-1"}, "X-GitHub-Event": []string{"issues"}}
+	mac := hmac.New(sha256.New, []byte("persisted-secret"))
+	_, _ = mac.Write(body)
+	h.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).
+		WithArgs("github", "org/a", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "webhook_secret_ciphertext", "backfill_token_ciphertext", "git_lab_base_url", "status_mappings", "organization_id", "created_at", "updated_at"}).
+			AddRow("11111111-1111-1111-1111-111111111111", "github", "org/a", "LEGACY_SECRET", ciphertext, "", "", []byte(`{}`), "org", nil, nil))
+	service := NewServiceWithPublisherAndSealer(db, configuredRegistry{}, nil, sealer)
+	_, err = service.VerifyConfiguredForRepository(context.Background(), "github", "org/a", "wrong-env-secret", "", "", h, body)
+	require.NoError(t, err, "persisted ciphertext must override legacy env-ref secret")
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestControllerHandleBindsSignedPayloadToConfiguredRepository(t *testing.T) {

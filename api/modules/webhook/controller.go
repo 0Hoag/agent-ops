@@ -59,7 +59,7 @@ func (controller *Controller) Handle(c *gin.Context) {
 	accepted := false
 	for _, config := range configs {
 		var verified scm.SCMProvider
-		verified, err = controller.service.VerifyConfigured(c.Request.Context(), c.Param("provider"), os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
+		verified, err = controller.service.VerifyConfiguredForRepository(c.Request.Context(), c.Param("provider"), config.Repository, os.Getenv(config.SecretEnv), os.Getenv(config.TokenEnv), os.Getenv(config.BaseURLEnv), c.Request.Header, body)
 		if err == nil {
 			created, err = controller.service.IngestParsed(c.Request.Context(), c.Param("provider"), config.Repository, verified, c.Request.Header, body)
 		}
