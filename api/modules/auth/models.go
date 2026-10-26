@@ -8,6 +8,7 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 type SessionResponse struct {
-	AccountID string `json:"account_id"`
-	Email     string `json:"email"`
+	AccountID      string `json:"account_id"`
+	Email          string `json:"email"`
+	OrganizationID string `json:"organization_id,omitempty"`
 }

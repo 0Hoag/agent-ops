@@ -94,9 +94,11 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
 	}
 	hub := board.NewHub()
+	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
 	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisher(gormDB, builder.Default(), hub), configs)).Register(router.Group("/api/v1"))
-	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(router.Group("/api/v1"))
-	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(router.Group("/api/v1"))
+	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
+	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)
+	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
 	prices := map[string]agentrun.Price{}
 	for model, raw := range cfg.AgentRunModelPrices {
 		var p agentrun.Price
@@ -104,8 +106,11 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 			prices[model] = p
 		}
 	}
-	agentrun.NewRoutes(agentrun.NewController(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices)).Register(router.Group("/api/v1"))
-	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
+	configuredRepositories := make([]string, 0, len(cfg.Repositories))
+	for _, repository := range cfg.Repositories {
+		configuredRepositories = append(configuredRepositories, repository.FullName)
+	}
+	agentrun.NewRoutes(agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)).Register(private)
 	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
 	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))
 }

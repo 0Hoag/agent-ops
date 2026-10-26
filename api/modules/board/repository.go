@@ -15,6 +15,9 @@ func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 func (r *Repository) ListRepositories(ctx context.Context, page, perPage int) ([]RepositoryDTO, ListMeta, error) {
 	q := r.db.WithContext(ctx).Model(&store.Repository{})
+	if organization := organizationFromContext(ctx); organization != "" {
+		q = q.Where("organization_id = ?", organization)
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, ListMeta{}, fmt.Errorf("count repositories: %w", err)
@@ -32,12 +35,19 @@ func (r *Repository) ListRepositories(ctx context.Context, page, perPage int) ([
 
 func (r *Repository) RepositoryExists(ctx context.Context, id string) (bool, error) {
 	var n int64
-	err := r.db.WithContext(ctx).Model(&store.Repository{}).Where("id = ?", id).Count(&n).Error
+	q := r.db.WithContext(ctx).Model(&store.Repository{}).Where("id = ?", id)
+	if organization := organizationFromContext(ctx); organization != "" {
+		q = q.Where("organization_id = ?", organization)
+	}
+	err := q.Count(&n).Error
 	return n > 0, err
 }
 
 func (r *Repository) ListIssues(ctx context.Context, id string, page, perPage int) ([]IssueDTO, ListMeta, error) {
 	q := r.db.WithContext(ctx).Model(&store.Issue{}).Where("repository_id = ?", id)
+	if organization := organizationFromContext(ctx); organization != "" {
+		q = q.Joins("JOIN repositories ON repositories.id = issues.repository_id").Where("repositories.organization_id = ?", organization)
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, ListMeta{}, fmt.Errorf("count issues: %w", err)

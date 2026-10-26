@@ -1,11 +1,16 @@
 package auth
 
 import (
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/0Hoag/agent-ops/api/modules/account"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func TestSessionRejectsInvalidAndExpiredTokens(t *testing.T) {
@@ -68,4 +73,19 @@ func TestSessionRejectsExpiredAtBoundary(t *testing.T) {
 	require.NoError(t, err)
 	_, err = service.Session(value)
 	require.ErrorIs(t, err, ErrInvalidToken)
+}
+
+func TestHasMembershipChecksCurrentDatabaseMembership(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{})
+	require.NoError(t, err)
+	service := NewService(account.NewRepository(db), "secret", time.Hour)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2`)).
+		WithArgs("org-a", "acct-a").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	member, err := service.HasMembership(t.Context(), "acct-a", "org-a")
+	require.NoError(t, err)
+	require.False(t, member)
+	require.NoError(t, mock.ExpectationsWereMet())
 }

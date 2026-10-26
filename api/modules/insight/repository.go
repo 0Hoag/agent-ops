@@ -25,14 +25,22 @@ type event struct {
 
 func (r *Repository) Build(ctx context.Context, id string) (Response, error) {
 	var n int64
-	if err := r.db.WithContext(ctx).Model(&store.Repository{}).Where("id = ?", id).Count(&n).Error; err != nil {
+	q := r.db.WithContext(ctx).Model(&store.Repository{}).Where("id = ?", id)
+	if organization := organizationFromContext(ctx); organization != "" {
+		q = q.Where("organization_id = ?", organization)
+	}
+	if err := q.Count(&n).Error; err != nil {
 		return Response{}, fmt.Errorf("find repository: %w", err)
 	}
 	if n == 0 {
 		return Response{}, gorm.ErrRecordNotFound
 	}
 	var rows []store.WebhookEvent
-	if err := r.db.WithContext(ctx).Where("repository_id = ?", id).Order("received_at ASC").Find(&rows).Error; err != nil {
+	events := r.db.WithContext(ctx).Where("repository_id = ?", id)
+	if organization := organizationFromContext(ctx); organization != "" {
+		events = events.Where("repository_id IN (SELECT id FROM repositories WHERE organization_id = ?)", organization)
+	}
+	if err := events.Order("received_at ASC").Find(&rows).Error; err != nil {
 		return Response{}, fmt.Errorf("list events: %w", err)
 	}
 	es := make([]event, 0, len(rows))

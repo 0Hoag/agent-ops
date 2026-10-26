@@ -40,6 +40,28 @@ func (service *Service) Login(ctx context.Context, email, password string) (stri
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": item.ID, "email": item.Email, "iat": now.Unix(), "exp": now.Add(service.expiration).Unix()})
 	return token.SignedString(service.secret)
 }
+func (service *Service) SelectOrganization(ctx context.Context, token, organizationID string) (string, error) {
+	session, err := service.Session(token)
+	if err != nil {
+		return "", err
+	}
+	var membership struct{ OrganizationID string }
+	if err := service.accounts.DB().Table("organization_memberships").Where("organization_id = ? AND account_id = ?", organizationID, session.AccountID).First(&membership).Error; err != nil {
+		return "", ErrInvalidToken
+	}
+	now := time.Now()
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": session.AccountID, "email": session.Email, "organization_id": organizationID, "iat": now.Unix(), "exp": now.Add(service.expiration).Unix()})
+	return t.SignedString(service.secret)
+}
+
+// HasMembership confirms that a selected organization is still assigned to the account.
+// The signed selection token is not a durable authorization grant: membership changes
+// must take effect before the token expires.
+func (service *Service) HasMembership(ctx context.Context, accountID, organizationID string) (bool, error) {
+	var count int64
+	err := service.accounts.DB().WithContext(ctx).Table("organization_memberships").Where("organization_id = ? AND account_id = ?", organizationID, accountID).Count(&count).Error
+	return count == 1, err
+}
 func (service *Service) Session(value string) (*SessionResponse, error) {
 	token, err := jwt.Parse(value, func(token *jwt.Token) (interface{}, error) {
 		if token.Method != jwt.SigningMethodHS256 {
@@ -59,5 +81,6 @@ func (service *Service) Session(value string) (*SessionResponse, error) {
 	if !a || !b || sub == "" || email == "" {
 		return nil, ErrInvalidToken
 	}
-	return &SessionResponse{AccountID: sub, Email: email}, nil
+	organizationID, _ := claims["organization_id"].(string)
+	return &SessionResponse{AccountID: sub, Email: email, OrganizationID: organizationID}, nil
 }

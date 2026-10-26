@@ -137,11 +137,18 @@ definitions:
       token:
         type: string
     type: object
+  auth.SelectOrganizationRequest:
+    properties:
+      organization_id:
+        type: string
+    type: object
   auth.SessionResponse:
     properties:
       account_id:
         type: string
       email:
+        type: string
+      organization_id:
         type: string
     type: object
   board.ListMeta:
@@ -412,6 +419,42 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Login
+  /api/v1/auth/select-organization:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bearer account token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Organization
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.SelectOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Select organization
   /api/v1/auth/session:
     get:
       produces:

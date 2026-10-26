@@ -8,4 +8,5 @@ func NewRoutes(controller *Controller) *Routes { return &Routes{controller: cont
 func (routes *Routes) Register(group *gin.RouterGroup) {
 	group.POST("/auth/login", routes.controller.Login)
 	group.GET("/auth/session", routes.controller.Session)
+	group.POST("/auth/select-organization", routes.controller.SelectOrganization)
 }
