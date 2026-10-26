@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,12 +58,29 @@ func TestW7MTenantAcceptance(t *testing.T) {
 	assertJSON(t, r.URL+"/api/v1/agent-runs?repository_id="+repoB, tokenA, http.StatusOK, `"data":[]`)
 	assertJSON(t, r.URL+"/api/v1/agent-runs/aggregate?repository_id="+repoB, tokenA, http.StatusOK, `"data":[]`)
 	assertJSON(t, r.URL+"/api/v1/agent-runs?issue_number=7002", tokenA, http.StatusOK, `"data":[]`)
+	assertJSON(t, r.URL+"/api/v1/agent-runs", tokenA, http.StatusOK, `"repository_id":"`+repoA+`"`)
+	assertNotJSON(t, r.URL+"/api/v1/agent-runs", tokenA, `"repository_id":"`+repoB+`"`)
+	assertJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenA, http.StatusOK, `"runs":1`, `"cost_usd":0.000002`)
+	assertJSON(t, r.URL+"/api/v1/agent-runs", tokenB, http.StatusOK, `"repository_id":"`+repoB+`"`)
+	assertNotJSON(t, r.URL+"/api/v1/agent-runs", tokenB, `"repository_id":"`+repoA+`"`)
+	assertNotJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenB, `"issue_number":7001`)
+
+	postAgentRun(t, r.URL+"/api/v1/agent-runs", "machine", tokenA, repoA, http.StatusCreated)
+	postAgentRun(t, r.URL+"/api/v1/agent-runs", "machine", tokenA, repoB, http.StatusUnauthorized)
 
 	wsA := dialTenantWS(t, r.URL+"/api/v1/board/ws?repository_id="+repoA, tokenA)
 	t.Cleanup(func() { _ = wsA.Close() })
 	wsB := dialTenantWS(t, r.URL+"/api/v1/board/ws?repository_id="+repoB, tokenB)
 	t.Cleanup(func() { _ = wsB.Close() })
 	require.Eventually(t, func() bool { return hub.SubscriberCount(repoA) == 1 && hub.SubscriberCount(repoB) == 1 }, time.Second, 10*time.Millisecond)
+	foreign, foreignResp, err := websocket.DefaultDialer.Dial(strings.Replace(r.URL, "http", "ws", 1)+"/api/v1/board/ws?repository_id="+repoB, http.Header{"Authorization": []string{"Bearer " + tokenA}})
+	if foreignResp != nil {
+		defer func() { _ = foreignResp.Body.Close() }()
+	}
+	if foreign != nil {
+		defer func() { _ = foreign.Close() }()
+	}
+	require.Error(t, err, "cross-tenant websocket admission must be rejected")
 	require.NoError(t, wsA.SetReadDeadline(time.Now().Add(100*time.Millisecond)))
 	hub.Publish(repoB)
 	_, _, err = wsA.ReadMessage()
@@ -113,7 +131,7 @@ INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_t
 
 func buildAcceptanceRouter(t *testing.T, db *gorm.DB, hub *board.Hub) http.Handler {
 	r := gin.New()
-	registerRoutesWithHub(r, database.AsPinger(db), db, config.Config{JWTSecret: "w7m-secret", JWTExpiration: time.Hour, AgentRunToken: "machine", Repositories: []config.RepositoryConfig{{Provider: "github", FullName: "tenant/a"}}}, hub)
+	registerRoutesWithHub(r, database.AsPinger(db), db, config.Config{JWTSecret: "w7m-secret", JWTExpiration: time.Hour, AgentRunToken: "machine", AgentRunModelPrices: map[string]json.RawMessage{"known": json.RawMessage(`{"input_per_million":1,"output_per_million":1}`)}, Repositories: []config.RepositoryConfig{{Provider: "github", FullName: "tenant/a"}}}, hub)
 	return r
 }
 
@@ -151,6 +169,20 @@ func assertNotJSON(t *testing.T, url, token string, absent ...string) {
 	for _, value := range absent {
 		require.NotContains(t, string(body), value)
 	}
+}
+
+func postAgentRun(t *testing.T, url, machineToken, bearerToken, repositoryID string, status int) {
+	body := `{"repository_id":"` + repositoryID + `","wave":"W7","worker":"acceptance","model":"known","issue_numbers":[7001],"input_tokens":1,"started_at":"2026-01-01T00:00:00Z","ended_at":"2026-01-01T00:00:01Z"}`
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Agent-Run-Token", machineToken)
+	req.Header.Set("Authorization", "Bearer "+bearerToken)
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = res.Body.Close() }()
+	got, _ := io.ReadAll(res.Body)
+	require.Equal(t, status, res.StatusCode, string(got))
 }
 
 func dialTenantWS(t *testing.T, url, token string) *websocket.Conn {
