@@ -29,10 +29,15 @@ type codexRecord struct {
 // includes cached input; CachedInput is retained as a source counter and must
 // not be added to Input again by consumers.
 func ParseCodex(r io.Reader) ([]Session, error) {
+	activeThreadID := ""
 	return parse(r, func(line []byte, sessions map[string]*Session, seen map[string]map[string]bool) error {
 		var v codexRecord
 		if err := json.Unmarshal(line, &v); err != nil {
 			return err
+		}
+		if v.Type == "thread.started" {
+			activeThreadID = strings.TrimSpace(v.ThreadID)
+			return nil
 		}
 		if v.Type != "turn.completed" {
 			return nil
@@ -40,6 +45,9 @@ func ParseCodex(r io.Reader) ([]Session, error) {
 		id := strings.TrimSpace(v.SessionID)
 		if id == "" {
 			id = strings.TrimSpace(v.ThreadID)
+		}
+		if id == "" {
+			id = activeThreadID
 		}
 		if id == "" {
 			return fmt.Errorf("turn.completed record has no session identity")

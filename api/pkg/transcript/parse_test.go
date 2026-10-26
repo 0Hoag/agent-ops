@@ -1,17 +1,14 @@
 package transcript
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestParseCodex(t *testing.T) {
-	r := `{"type":"thread.started","thread_id":"t1"}
-{"type":"turn.completed","thread_id":"t1","model":"gpt","timestamp":"2026-10-27T01:00:00Z","usage":{"input_tokens":100,"cached_input_tokens":20,"cache_write_input_tokens":3,"output_tokens":7,"reasoning_output_tokens":2}}
-{"type":"noise","thread_id":"t1"}
-{"type":"turn.completed","thread_id":"t1","timestamp":"2026-10-27T01:01:00Z","usage":{"input_tokens":40,"output_tokens":5}}
-`
-	s, err := ParseCodex(strings.NewReader(r))
+	s, err := ParseCodex(strings.NewReader(readFixture(t, "codex.jsonl")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,12 +23,7 @@ func TestParseCodex(t *testing.T) {
 }
 
 func TestParseOpenCode(t *testing.T) {
-	r := `{"type":"text","sessionID":"s1","part":{"text":"ignored"}}
-{"type":"step_finish","sessionID":"s1","part":{"tokens":{"input":11,"output":2,"reasoning":1,"cache":{"read":4,"write":5}}}}
-{"type":"tool","sessionID":"s1"}
-{"type":"step_finish","sessionID":"s1","part":{"tokens":{"input":7,"output":3,"reasoning":2,"cache":{"read":1,"write":0}}}}
-`
-	s, err := ParseOpenCode(strings.NewReader(r))
+	s, err := ParseOpenCode(strings.NewReader(readFixture(t, "opencode.jsonl")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,18 +33,22 @@ func TestParseOpenCode(t *testing.T) {
 }
 
 func TestParseClaudeDeduplicatesMessagesAndRetainsNoContent(t *testing.T) {
-	r := `{"type":"assistant","uuid":"m1","sessionId":"c1","timestamp":"2026-10-27T01:00:00Z","message":{"model":"claude","content":[{"text":"secret"}],"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":4,"cache_creation_input_tokens":3}}}
-{"type":"assistant","uuid":"m1","sessionId":"c1","message":{"content":[{"text":"secret"}],"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":4,"cache_creation_input_tokens":3}}}
-{"type":"user","uuid":"u1","sessionId":"c1"}
-{"type":"assistant","uuid":"m2","sessionId":"c1","message":{"usage":{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":1}}}
-`
-	s, err := ParseClaude(strings.NewReader(r))
+	s, err := ParseClaude(strings.NewReader(readFixture(t, "claude.jsonl")))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(s) != 1 || s[0].Usage != (Usage{15, 5, 3, 3, 0}) || s[0].Model != "claude" {
 		t.Fatalf("got %#v", s)
 	}
+}
+
+func readFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func TestParseMalformedAndReadFailure(t *testing.T) {

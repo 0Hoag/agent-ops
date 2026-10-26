@@ -1,0 +1,4 @@
+{"type":"assistant","uuid":"m1","sessionId":"c1","timestamp":"2026-10-27T01:00:00Z","message":{"model":"claude","content":[{"text":"synthetic"}],"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":4,"cache_creation_input_tokens":3}}}
+{"type":"assistant","uuid":"m1","sessionId":"c1","message":{"content":[{"text":"synthetic"}],"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":4,"cache_creation_input_tokens":3}}}
+{"type":"user","uuid":"u1","sessionId":"c1","message":{"content":[{"text":"ignored"}]}}
+{"type":"assistant","uuid":"m2","sessionId":"c1","message":{"usage":{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":1}}}

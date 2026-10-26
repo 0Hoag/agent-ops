@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"t1"}
+{"type":"turn.completed","model":"gpt","timestamp":"2026-10-27T01:00:00Z","usage":{"input_tokens":100,"cached_input_tokens":20,"cache_write_input_tokens":3,"output_tokens":7,"reasoning_output_tokens":2}}
+{"type":"noise","thread_id":"t1","payload":{"ignored":true}}
+{"type":"turn.completed","timestamp":"2026-10-27T01:01:00Z","usage":{"input_tokens":40,"output_tokens":5}}
