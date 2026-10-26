@@ -13,6 +13,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
+	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
@@ -104,5 +105,7 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 		}
 	}
 	agentrun.NewRoutes(agentrun.NewController(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices)).Register(router.Group("/api/v1"))
-	auth.NewRoutes(auth.NewController(auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration))).Register(router.Group("/api/v1"))
+	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
+	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
+	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))
 }

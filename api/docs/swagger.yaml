@@ -255,7 +255,38 @@ definitions:
       occurrences:
         type: integer
     type: object
+  organization.AddMemberRequest:
+    properties:
+      account_id:
+        type: string
+      role:
+        type: string
+    required:
+    - account_id
+    - role
+    type: object
+  organization.CreateRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  organization.UpdateRoleRequest:
+    properties:
+      role:
+        type: string
+    required:
+    - role
+    type: object
   response.ErrorResponse:
+    properties:
+      message:
+        type: string
+      status:
+        type: integer
+    type: object
+  response.MessageResponse:
     properties:
       message:
         type: string
@@ -477,6 +508,222 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get repository insights
+  /api/v1/organizations:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List organizations
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/organization.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create organization
+  /api/v1/organizations/{organization_id}:
+    get:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Organization detail
+  /api/v1/organizations/{organization_id}/members:
+    get:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List organization members
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      - description: Membership
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/organization.AddMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Add organization member
+  /api/v1/organizations/{organization_id}/members/{account_id}:
+    delete:
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      - description: Account UUID
+        in: path
+        name: account_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Remove organization member
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      - description: Account UUID
+        in: path
+        name: account_id
+        required: true
+        type: string
+      - description: Role
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/organization.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update member role
   /api/v1/repositories:
     get:
       parameters:
