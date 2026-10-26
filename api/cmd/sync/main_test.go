@@ -116,10 +116,8 @@ func TestConfiguredRepositoriesSelectProvidersCredentialsAndIsolatedPersistence(
 	query := regexp.MustCompile(`INSERT INTO "issues".*ON CONFLICT \("repository_id","number"\) DO UPDATE SET`)
 	for pass := 0; pass < 2; pass++ {
 		for idx, repository := range cfg.Repositories {
-			mock.ExpectBegin()
-			mock.ExpectQuery(regexp.MustCompile(`INSERT INTO "repositories".*ON CONFLICT`).String()).WithArgs(sqlmock.AnyArg(), repository.Provider, repository.FullName, repository.WebhookSecretEnv, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{}`)))
-			mock.ExpectCommit()
-			mock.ExpectQuery(regexp.MustCompile(`SELECT \* FROM "repositories"`).String()).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref"}).AddRow(ids[idx], repository.Provider, repository.FullName, repository.WebhookSecretEnv))
+			mock.ExpectQuery(regexp.MustCompile(`SELECT \* FROM "repositories"`).String()).WithArgs(repository.Provider, repository.FullName, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "organization_id", "status_mappings"}).AddRow(ids[idx], repository.Provider, repository.FullName, repository.WebhookSecretEnv, "org-id", []byte(`{}`)))
+			mock.ExpectQuery(regexp.MustCompile(`SELECT \* FROM "repositories"`).String()).WithArgs(repository.Provider, repository.FullName, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "organization_id", "status_mappings"}).AddRow(ids[idx], repository.Provider, repository.FullName, repository.WebhookSecretEnv, "org-id", []byte(`{}`)))
 			mock.ExpectBegin()
 			mock.ExpectExec(query.String()).WithArgs(sqlmock.AnyArg(), ids[idx], int64(7), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`[]`), "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectCommit()

@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
@@ -38,6 +39,33 @@ func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
 	mock.ExpectQuery(`INSERT INTO "repositories".*ON CONFLICT \("provider","full_name"\).*DO UPDATE SET.*webhook_secret_env_ref.*EXCLUDED\.webhook_secret_env_ref`).WithArgs(id, "github", "acme/app", "APP_SECRET", item.OrganizationID, "sealed-webhook", "sealed-backfill", "https://gitlab.example", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`{"status:review":"review"}`)).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{"status:review":"review"}`)))
 	mock.ExpectCommit()
 	require.NoError(t, store.Repositories.Upsert(context.Background(), item))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRepositoryUpsertConfiguredPreservesExistingTenant(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).
+		WithArgs("gitlab", "tenant/project", 1).
+		WillReturnRows(repositoryRows(&Repository{ID: "repo-id", Provider: "gitlab", FullName: "tenant/project", OrganizationID: "org-owned", BackfillTokenCiphertext: "sealed", GitLabBaseURL: "https://gitlab.example"}))
+	require.NoError(t, store.Repositories.UpsertConfigured(context.Background(), &Repository{ID: "new-id", Provider: "gitlab", FullName: "tenant/project", OrganizationID: ""}))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRepositoryUpsertConfiguredRejectsUnboundNewTenant(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).
+		WithArgs("gitlab", "new/project", 1).WillReturnError(gorm.ErrRecordNotFound)
+	err := store.Repositories.UpsertConfigured(context.Background(), &Repository{ID: "new-id", Provider: "gitlab", FullName: "new/project"})
+	require.EqualError(t, err, "configured repository gitlab/new/project requires a valid organization_id for a new row")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRepositoryUpsertConfiguredRejectsMalformedTenant(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).
+		WithArgs("gitlab", "malformed/project", 1).WillReturnError(gorm.ErrRecordNotFound)
+	err := store.Repositories.UpsertConfigured(context.Background(), &Repository{ID: "new-id", Provider: "gitlab", FullName: "malformed/project", OrganizationID: "not-a-uuid"})
+	require.EqualError(t, err, "configured repository gitlab/malformed/project requires a valid organization_id for a new row")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -30,6 +32,24 @@ func (repository *RepositoryRepository) Upsert(ctx context.Context, item *Reposi
 	}
 	return nil
 }
+
+// UpsertConfigured preserves tenant-owned settings and only creates a new row
+// when the configuration supplies an explicit, valid organization UUID.
+func (repository *RepositoryRepository) UpsertConfigured(ctx context.Context, item *Repository) error {
+	_, err := repository.GetByName(ctx, item.Provider, item.FullName)
+	if err == nil {
+		return nil
+	}
+	if !isRecordNotFound(err) {
+		return err
+	}
+	if _, parseErr := uuid.Parse(item.OrganizationID); parseErr != nil {
+		return fmt.Errorf("configured repository %s/%s requires a valid organization_id for a new row", item.Provider, item.FullName)
+	}
+	return repository.Create(ctx, item)
+}
+
+func isRecordNotFound(err error) bool { return errors.Is(err, gorm.ErrRecordNotFound) }
 
 func (repository *RepositoryRepository) Get(ctx context.Context, id UUID) (*Repository, error) {
 	var item Repository
