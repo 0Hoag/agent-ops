@@ -22,13 +22,6 @@ func NewControllerWithHub(repository *Repository, hub *Hub) *Controller {
 }
 
 // ListRepositories returns public repository selector data.
-// @Summary List repositories
-// @Produce json
-// @Param page query int false "Page"
-// @Param per_page query int false "Items per page"
-// @Success 200 {object} ListResponse
-// @Failure 400 {object} response.ErrorResponse
-// @Router /api/v1/repositories [get]
 func (c *Controller) ListRepositories(ctx *gin.Context) {
 	p, ok := parsePage(ctx)
 	if !ok {
