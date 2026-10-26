@@ -60,6 +60,15 @@ func TestRepositoryUpsertConfiguredRejectsUnboundNewTenant(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRepositoryUpsertConfiguredRejectsMalformedTenant(t *testing.T) {
+	store, mock := mockStore(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).
+		WithArgs("gitlab", "malformed/project", 1).WillReturnError(gorm.ErrRecordNotFound)
+	err := store.Repositories.UpsertConfigured(context.Background(), &Repository{ID: "new-id", Provider: "gitlab", FullName: "malformed/project", OrganizationID: "not-a-uuid"})
+	require.EqualError(t, err, "configured repository gitlab/malformed/project requires a valid organization_id for a new row")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func repositoryRows(item *Repository) *sqlmock.Rows {
 	return row("id", item.ID, "provider", item.Provider, "full_name", item.FullName, "webhook_secret_env_ref", item.WebhookSecretEnvRef,
 		"organization_id", item.OrganizationID, "webhook_secret_ciphertext", item.WebhookSecretCiphertext,
