@@ -48,6 +48,17 @@ func TestW7MTenantAcceptance(t *testing.T) {
 	t.Cleanup(r.Close)
 	tokenA := tenantToken(t, accountA, "a@example.invalid", orgA)
 	tokenB := tenantToken(t, accountB, "b@example.invalid", orgB)
+	if control := os.Getenv("W7M_TENANT_ACCEPTANCE_CONTROL"); control != "" {
+		switch control {
+		case "board":
+			assertBoardScopeControl(t, r.URL, tokenA)
+		case "machine":
+			postAgentRun(t, r.URL+"/api/v1/agent-runs", "machine", tokenA, repoB, http.StatusUnauthorized)
+		default:
+			t.Fatalf("unknown W7M_TENANT_ACCEPTANCE_CONTROL=%q", control)
+		}
+		return
+	}
 
 	assertJSON(t, r.URL+"/api/v1/repositories", tokenA, http.StatusOK, `"total":1`, `tenant/a`)
 	assertJSON(t, r.URL+"/api/v1/repositories", tokenB, http.StatusOK, `"total":1`, `tenant/b`)
@@ -99,6 +110,12 @@ func TestW7MTenantAcceptance(t *testing.T) {
 
 	require.NoError(t, db.Exec("DELETE FROM organization_memberships WHERE organization_id = ? AND account_id = ?", orgA, accountA).Error)
 	assertJSON(t, r.URL+"/api/v1/repositories", tokenA, http.StatusUnauthorized, `organization membership required`)
+}
+
+func assertBoardScopeControl(t *testing.T, baseURL, token string) {
+	assertJSON(t, baseURL+"/api/v1/repositories", token, http.StatusOK, `"total":1`)
+	assertNotJSON(t, baseURL+"/api/v1/repositories", token, `tenant/b`)
+	assertJSON(t, baseURL+"/api/v1/board?repository_id="+repoB, token, http.StatusNotFound, `repository not found`)
 }
 
 func seedTenantFixture(t *testing.T, db *gorm.DB) {
