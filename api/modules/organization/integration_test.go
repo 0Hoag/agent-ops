@@ -61,7 +61,11 @@ func testRouter(db *gorm.DB) http.Handler {
 
 func request(t *testing.T, router http.Handler, actor, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, "/api/v1/organizations"+path, strings.NewReader(body))
+	urlPath := "/api/v1/organizations" + path
+	if strings.HasPrefix(path, "/../") {
+		urlPath = "/api/v1/" + strings.TrimPrefix(path, "/../")
+	}
+	req := httptest.NewRequest(method, urlPath, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if actor != "" {
 		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": actor, "email": actor + "@example.test", "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte("organization-test-secret"))
