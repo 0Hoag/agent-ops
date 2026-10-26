@@ -92,8 +92,10 @@ One pass:
    sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
    and commands; every brief says "commit and push after every finished issue". Start **detached** so it survives this pass:
    `scripts/spawn.sh .agent-runs/<wave>.log scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md`
-   (plain `nohup … &` is killed when the pass ends). Harness: OpenCode for small/client waves, Codex for
-   larger backend waves.
+   (plain `nohup … &` is killed when the pass ends). Harness: **OpenCode for every `area:client` wave**
+   (Codex's sandbox cannot write the client worktree's git dir, run Chromium or `rm -f`; owner 26/10, W7r r7-r9 never
+   pushed); Codex only for backend waves. When restarting a client wave whose worktree has uncommitted work, the
+   RESUME block names those files so the worker verifies and commits them instead of redoing them.
    A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
    **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
    restart that worker on the same branch in a later pass after the reset time.
