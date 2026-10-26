@@ -6,7 +6,7 @@ CLIENT_SHA=ac08a2757fd6913178c0ec2968a62ce36f46ff81
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
 case "${CONTRACT_FIXTURE:-}" in
-  ""|api-missing|client-missing) ;;
+  ""|api-missing|client-missing|client-changed) ;;
   *) echo "Unknown CONTRACT_FIXTURE: $CONTRACT_FIXTURE" >&2; exit 2 ;;
 esac
 
@@ -71,6 +71,9 @@ corepack pnpm@11.21.0 install --frozen-lockfile
 corepack pnpm@11.21.0 generate:api
 if [[ "${CONTRACT_FIXTURE:-}" == client-missing ]]; then
   rm -rf "$client_work/src/shared/api/generated"
+fi
+if [[ "${CONTRACT_FIXTURE:-}" == client-changed ]]; then
+  printf '\nfixture change\n' >> "$client_work/src/shared/api/generated/index.ts"
 fi
 client_drift=0
 if ! compare_paths "$client_baseline" "$client_work" client "${CLIENT_ARTIFACTS[@]}"; then client_drift=1; fi
