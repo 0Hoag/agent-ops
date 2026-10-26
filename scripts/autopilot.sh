@@ -27,7 +27,9 @@ rm -f .agent-runs/STOP
 # Local-only checks (no network, no tokens): running worker pids and the final-message files
 # (.agent-runs/<wave>.md) that run-worker*.sh writes when a worker ends.
 worker_pids() { pgrep -f 'scripts/run-worker' | sort | tr '\n' ' '; }
-results_stamp() { stat -f '%N %m' .agent-runs/*.md 2>/dev/null | shasum; }
+# Workers of the sibling client repo write their results in its own .agent-runs.
+RUN_DIRS=${RUN_DIRS:-".agent-runs $HOME/agent-ops-client/.agent-runs"}
+results_stamp() { local d; for d in $RUN_DIRS; do stat -f '%N %m' "$d"/*.md 2>/dev/null; done | shasum; }
 
 # GitHub fingerprint (gh calls only, no tokens): main SHA, open PRs with head SHA and update time, open issue
 # numbers (status-board excluded: the coordinator rewrites it every pass). Taken right after a pass, so the
