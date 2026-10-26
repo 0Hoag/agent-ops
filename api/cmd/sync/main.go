@@ -51,7 +51,7 @@ func syncConfiguredRepositoriesWithKey(ctx context.Context, repositories []confi
 	return forEachConfiguredRepository(repositories, func(c config.RepositoryConfig) error {
 		token := os.Getenv(c.TokenEnv)
 		secret := os.Getenv(c.WebhookSecretEnv)
-		if err := st.Repositories.Upsert(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
+		if err := st.Repositories.UpsertConfigured(ctx, &store.Repository{ID: store.NewUUID(), Provider: c.Provider, FullName: c.FullName, OrganizationID: c.OrganizationID, WebhookSecretEnvRef: c.WebhookSecretEnv}); err != nil {
 			return err
 		}
 		repo, getErr := st.Repositories.GetByName(ctx, c.Provider, c.FullName)

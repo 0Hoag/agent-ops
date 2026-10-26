@@ -69,7 +69,7 @@ func main() {
 	}
 	configured := store.New(db)
 	for _, repository := range cfg.Repositories {
-		if err := configured.Repositories.Upsert(context.Background(), &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, WebhookSecretEnvRef: repository.WebhookSecretEnv}); err != nil {
+		if err := configured.Repositories.UpsertConfigured(context.Background(), &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv}); err != nil {
 			logger.Fatal(fmt.Errorf("configure repository: %w", err))
 		}
 	}

@@ -26,6 +26,7 @@ type Config struct {
 type RepositoryConfig struct {
 	Provider         string `json:"provider"`
 	FullName         string `json:"full_name"`
+	OrganizationID   string `json:"organization_id"`
 	WebhookSecretEnv string `json:"webhook_secret_env"`
 	TokenEnv         string `json:"token_env"`
 	BaseURLEnv       string `json:"base_url_env"`
