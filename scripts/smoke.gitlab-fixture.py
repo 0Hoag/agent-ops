@@ -17,7 +17,10 @@ class Handler(BaseHTTPRequestHandler):
         with open(log_path, "a", encoding="utf-8") as log:
             log.write(json.dumps({"method": "GET", "path": self.path, "token": self.headers.get("PRIVATE-TOKEN")}) + "\n")
         if self.path.startswith("/api/v4/projects/"):
-            body = b"[]"
+            if self.path.endswith("/issues?per_page=100&page=1&state=all"):
+                body = json.dumps([{"id": 90401, "iid": 904, "title": "Smoke mapped GitLab issue", "state": "opened", "updated_at": "2026-01-01T00:00:00Z", "labels": ["Status::Review"]}]).encode()
+            else:
+                body = b"[]"
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("X-Next-Page", "")
