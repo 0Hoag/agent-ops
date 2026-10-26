@@ -60,8 +60,8 @@ func TestW7MTenantAcceptance(t *testing.T) {
 		return
 	}
 
-	assertJSON(t, r.URL+"/api/v1/repositories", tokenA, http.StatusOK, `"total":1`, `tenant/a`)
-	assertJSON(t, r.URL+"/api/v1/repositories", tokenB, http.StatusOK, `"total":1`, `tenant/b`)
+	assertJSON(t, r.URL+"/api/v1/repositories", tokenA, http.StatusOK, `"full_name":"tenant/a"`)
+	assertJSON(t, r.URL+"/api/v1/repositories", tokenB, http.StatusOK, `"full_name":"tenant/b"`)
 	assertJSON(t, r.URL+"/api/v1/board?repository_id="+repoA, tokenA, http.StatusOK, `tenant-a issue`)
 	assertNotJSON(t, r.URL+"/api/v1/board?repository_id="+repoA, tokenA, `tenant-b issue`, `tenant-b pr`, `b-run`)
 	assertJSON(t, r.URL+"/api/v1/board?repository_id="+repoB, tokenA, http.StatusNotFound, `repository not found`)
@@ -113,7 +113,7 @@ func TestW7MTenantAcceptance(t *testing.T) {
 }
 
 func assertBoardScopeControl(t *testing.T, baseURL, token string) {
-	assertJSON(t, baseURL+"/api/v1/repositories", token, http.StatusOK, `"total":1`)
+	assertJSON(t, baseURL+"/api/v1/repositories", token, http.StatusOK, `"full_name":"tenant/a"`)
 	assertNotJSON(t, baseURL+"/api/v1/repositories", token, `tenant/b`)
 	assertJSON(t, baseURL+"/api/v1/board?repository_id="+repoB, token, http.StatusNotFound, `repository not found`)
 }
@@ -148,7 +148,7 @@ INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_t
 
 func buildAcceptanceRouter(t *testing.T, db *gorm.DB, hub *board.Hub) http.Handler {
 	r := gin.New()
-	registerRoutesWithHub(r, database.AsPinger(db), db, config.Config{JWTSecret: "w7m-secret", JWTExpiration: time.Hour, AgentRunToken: "machine", AgentRunModelPrices: map[string]json.RawMessage{"known": json.RawMessage(`{"input_per_million":1,"output_per_million":1}`)}, Repositories: []config.RepositoryConfig{{Provider: "github", FullName: "tenant/a"}}}, hub)
+	registerRoutesWithHub(r, database.AsPinger(db), db, config.Config{JWTSecret: "w7m-secret", JWTExpiration: time.Hour, EncryptionKey: []byte("01234567890123456789012345678901"), AgentRunToken: "machine", AgentRunModelPrices: map[string]json.RawMessage{"known": json.RawMessage(`{"input_per_million":1,"output_per_million":1}`)}, Repositories: []config.RepositoryConfig{{Provider: "github", FullName: "tenant/a"}}}, hub)
 	return r
 }
 
