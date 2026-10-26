@@ -104,7 +104,11 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 		hub = board.NewHub()
 	}
 	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
-	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisher(gormDB, builder.Default(), hub), configs)).Register(router.Group("/api/v1"))
+	var webhookSealer *appcrypto.Sealer
+	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
+		webhookSealer = sealer
+	}
+	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisherAndSealer(gormDB, builder.Default(), hub, webhookSealer), configs)).Register(router.Group("/api/v1"))
 	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "")).Register(private)
