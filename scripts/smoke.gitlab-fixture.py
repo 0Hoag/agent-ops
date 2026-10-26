@@ -26,6 +26,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
+    def do_POST(self):
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write(json.dumps({"method": "POST", "path": self.path, "token": self.headers.get("PRIVATE-TOKEN")}) + "\n")
+        self.send_response(201)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"id":123,"iid":2,"title":"encrypted fixture","state":"opened","updated_at":"2026-01-01T00:00:00Z"}')
+
     def log_message(self, *_args):
         pass
 

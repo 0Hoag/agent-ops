@@ -12,7 +12,7 @@ CLIENT_URL="http://127.0.0.1:$CLIENT_PORT"
 PREVIEW_PID=
 ARTIFACT_DIR=${SMOKE_ARTIFACT_DIR:-"$ROOT/.agent-runs/smoke"}
 FIXTURE_PORT=${SMOKE_FIXTURE_PORT:-18081}
-COMPOSE_ENV=(env "POSTGRES_PUBLISH=${POSTGRES_PUBLISH-127.0.0.1}" "POSTGRES_HOST_PORT=$POSTGRES_HOST_PORT" "SMOKE_API_PORT=$API_PORT" "SMOKE_CLIENT_PORT=$CLIENT_PORT" "CLIENT_DIR=$CLIENT" "JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke}" "REPOSITORY_ENCRYPTION_KEY=${REPOSITORY_ENCRYPTION_KEY:?set a disposable 32-byte REPOSITORY_ENCRYPTION_KEY for smoke}" "SMOKE_FIXTURE_PORT=$FIXTURE_PORT" "SMOKE_GITLAB_FIXTURE_URL=http://host.docker.internal:$FIXTURE_PORT/api/v4" "SMOKE_WEBHOOK_SECRET=fixture-webhook-secret" "SMOKE_BACKFILL_TOKEN=fixture-backfill-token" "SCM_REPOSITORIES_JSON=[{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"token_env\":\"SMOKE_BACKFILL_TOKEN\",\"webhook_secret_env\":\"SMOKE_WEBHOOK_SECRET\",\"base_url_env\":\"SMOKE_GITLAB_FIXTURE_URL\"}]")
+COMPOSE_ENV=(env "POSTGRES_PUBLISH=${POSTGRES_PUBLISH-127.0.0.1}" "POSTGRES_HOST_PORT=$POSTGRES_HOST_PORT" "SMOKE_API_PORT=$API_PORT" "SMOKE_CLIENT_PORT=$CLIENT_PORT" "CLIENT_DIR=$CLIENT" "JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke}" "REPOSITORY_ENCRYPTION_KEY=${REPOSITORY_ENCRYPTION_KEY:?set a disposable 32-byte REPOSITORY_ENCRYPTION_KEY for smoke}" "SMOKE_FIXTURE_PORT=$FIXTURE_PORT" "SMOKE_GITLAB_FIXTURE_URL=http://host.docker.internal:$FIXTURE_PORT" "SMOKE_WEBHOOK_SECRET=fixture-webhook-secret" "SMOKE_BACKFILL_TOKEN=fixture-backfill-token" "SMOKE_ORGANIZATION_ID=d0000000-0000-4000-8000-000000000011" "SCM_REPOSITORIES_JSON=[{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"organization_id\":\"d0000000-0000-4000-8000-000000000011\",\"token_env\":\"SMOKE_BACKFILL_TOKEN\",\"webhook_secret_env\":\"SMOKE_WEBHOOK_SECRET\",\"base_url_env\":\"SMOKE_GITLAB_FIXTURE_URL\"}]")
 export SMOKE_GITLAB_FIXTURE_URL=${SMOKE_GITLAB_FIXTURE_URL:-http://host.docker.internal:${SMOKE_FIXTURE_PORT:-18081}}
 
 compose() { "${COMPOSE_ENV[@]}" docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" "$@"; }
@@ -83,7 +83,23 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-compose up -d --build postgres api
+# Run migrations without configured repositories, then seed the owner tenant
+# before starting the API with tenant-scoped startup configuration.
+compose up -d postgres
+for _ in $(seq 1 60); do
+  if compose exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+"${COMPOSE_ENV[@]}" SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d api
+for _ in $(seq 1 90); do
+  if curl --fail --silent "http://127.0.0.1:$API_PORT/readyz" >/dev/null; then break; fi
+  sleep 1
+done
+curl --fail --silent "http://127.0.0.1:$API_PORT/readyz" >/dev/null
+compose stop api
+compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c \
+  "INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000011','Smoke tenant') ON CONFLICT (id) DO NOTHING"
+compose up -d --build api
 services=$(compose ps --services --filter status=running | sort)
 if [[ "$services" != $'api\npostgres' ]]; then
   log "unexpected Compose services: ${services//$'\n'/, }"
@@ -103,7 +119,6 @@ curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { compose
 compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
 INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
 INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000011','Smoke tenant');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000012','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000010','owner');
 INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id) VALUES ('d0000000-0000-4000-8000-000000000001','github','smoke/agent-ops','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011');
 INSERT INTO issues (id,repository_id,number,title,state,status,labels) VALUES ('d0000000-0000-4000-8000-000000000002','d0000000-0000-4000-8000-000000000001',99001,'Smoke fixture: board serves real API data','open','review','["status:review"]');
@@ -151,34 +166,69 @@ python3 "$ROOT/scripts/smoke.gitlab-fixture.py" "$FIXTURE_PORT" "$FIXTURE_LOG" >
 FIXTURE_PID=$!
 for _ in $(seq 1 30); do curl --silent "http://127.0.0.1:$FIXTURE_PORT/health" >/dev/null && break; sleep 0.1; done
 FIXTURE_URL="$SMOKE_GITLAB_FIXTURE_URL"
-FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT/api/v4"
+FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT"
 export SMOKE_GITLAB_FIXTURE_URL=$FIXTURE_URL
+export FIXTURE_URL
 export SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used
 export SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used
 
-# Create a GitLab repository through authenticated settings so both consumers must decrypt it.
+# Assert configured startup repository ownership, ciphertext and URL against
+# the real seeded tenant before exercising the settings-created GitLab row.
+startup_repository=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name,organization_id::text FROM repositories WHERE provider='gitlab' AND full_name='smoke/group/project'")
+[[ "$startup_repository" == "gitlab|smoke/group/project|d0000000-0000-4000-8000-000000000011" ]] || { log "startup repository tenant mismatch: $startup_repository"; exit 1; }
+
+# Create the second GitLab repository through authenticated settings so its
+# webhook and backfill consumers must decrypt settings-owned credentials.
 created=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"gitlab_base_url\":\"$FIXTURE_URL\",\"webhook_secret\":\"settings-webhook-secret\",\"backfill_token\":\"settings-backfill-token\",\"status_mappings\":{\"Status::Review\":\"blocked\"}}" \
+  -d "{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project-settings\",\"gitlab_base_url\":\"$FIXTURE_URL\",\"webhook_secret\":\"settings-webhook-secret\",\"backfill_token\":\"settings-backfill-token\",\"status_mappings\":{\"Status::Review\":\"blocked\"}}" \
   "$API_URL/api/v1/repositories")
 FIXTURE_REPO_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["id"])' <<<"$created")
-persisted=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE id='$FIXTURE_REPO_ID'")
+# The API's configured webhook candidate is an existing settings row. Update
+# its encrypted settings through the same organization-scoped HTTP contract so
+# real registered webhook/backfill consumers exercise the stored credentials.
+curl --fail --silent --show-error -X PATCH -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"gitlab_base_url\":\"$FIXTURE_URL\",\"webhook_secret\":\"settings-webhook-secret\",\"backfill_token\":\"settings-backfill-token\",\"status_mappings\":{\"Status::Review\":\"blocked\"}}" \
+  "$API_URL/api/v1/repositories/$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT id FROM repositories WHERE provider='gitlab' AND full_name='smoke/group/project'")" >/dev/null
+persisted=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE provider='gitlab' AND full_name='smoke/group/project'")
 [[ "$persisted" == *"gitlab|d0000000-0000-4000-8000-000000000011|$FIXTURE_URL|{\"Status::Review\": \"blocked\"}|t|t"* ]] || { log "settings persistence mismatch: $persisted"; exit 1; }
-compose exec -T api /agent-ops-api sync
+expected_settings_snapshot="gitlab|d0000000-0000-4000-8000-000000000011|$FIXTURE_URL|{\"Status::Review\": \"blocked\"}|t|t"
+settings_snapshot=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE id='$FIXTURE_REPO_ID'")
+assert_settings_snapshot() { [[ "$1" == "$expected_settings_snapshot" ]]; }
+assert_settings_snapshot "$settings_snapshot" || { log "baseline settings snapshot assertion failed: $settings_snapshot"; exit 1; }
+compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "UPDATE repositories SET status_mappings='{\"Status::Review\":\"review\"}'::jsonb WHERE id='$FIXTURE_REPO_ID'" >/dev/null
+mutated_settings_snapshot=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE id='$FIXTURE_REPO_ID'")
+if assert_settings_snapshot "$mutated_settings_snapshot"; then log "status mapping control unexpectedly passed with mutated persisted mapping"; exit 1; fi
+log "EXPECTED STATUS-MAPPING CONTROL: same settings snapshot assertion rejected changed persisted Status::Review mapping"
+compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "UPDATE repositories SET status_mappings='{\"Status::Review\":\"blocked\"}'::jsonb WHERE id='$FIXTURE_REPO_ID'" >/dev/null
+restored_settings_snapshot=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,organization_id::text,git_lab_base_url,status_mappings::text,webhook_secret_ciphertext <> '',backfill_token_ciphertext <> '' FROM repositories WHERE id='$FIXTURE_REPO_ID'")
+assert_settings_snapshot "$restored_settings_snapshot" || { log "restored settings snapshot assertion failed: $restored_settings_snapshot"; exit 1; }
+log "settings snapshot control restored original mapping and passed"
+docker run --rm --network "${PROJECT}_default" -v "$ROOT/api:/src:ro" -w /src \
+  -e DATABASE_URL='postgres://agent_ops:agent_ops_dev@postgres:5432/agent_ops?sslmode=disable' \
+  -e JWT_SECRET="$JWT_SECRET" -e REPOSITORY_ENCRYPTION_KEY="$REPOSITORY_ENCRYPTION_KEY" \
+  -e SCM_REPOSITORIES_JSON="[{\"provider\":\"gitlab\",\"full_name\":\"smoke/group/project\",\"organization_id\":\"d0000000-0000-4000-8000-000000000011\",\"token_env\":\"SMOKE_BACKFILL_TOKEN\",\"webhook_secret_env\":\"SMOKE_WEBHOOK_SECRET\",\"base_url_env\":\"SMOKE_GITLAB_FIXTURE_URL\"}]" \
+  -e SMOKE_GITLAB_FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT" \
+  -e SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used \
+  -e SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used \
+  golang:1.26-alpine sh -c 'go run ./cmd/sync'
 
 # Exercise the webhook's decrypted credential consumer and verify the fixture receives the exact token.
 webhook_body=$(curl --silent --show-error -o "$ARTIFACT_DIR/webhook-response.json" --write-out '%{http_code}' -X POST -H 'X-Gitlab-Token: settings-webhook-secret' \
   -H 'X-Gitlab-Event: Issue Hook' -H 'Content-Type: application/json' -H 'X-Gitlab-Event-UUID: smoke-runtime-webhook-settings' \
-  -d '{"object_kind":"issue","project":{"path_with_namespace":"smoke/group/project"},"object_attributes":{"iid":2,"title":"encrypted fixture","state":"opened","updated_at":"2026-01-01T00:00:00Z"}}' "$API_URL/api/v1/webhooks/gitlab")
+  -d '{"object_kind":"issue","project":{"id":123,"path_with_namespace":"smoke/group/project"},"object_attributes":{"id":456,"iid":2,"title":"encrypted fixture","state":"open","updated_at":"2026-01-01T00:00:00Z"}}' "$API_URL/api/v1/webhooks/gitlab")
 [[ "$webhook_body" == 200 ]] || { log "encrypted webhook credential consumer returned HTTP $webhook_body"; exit 1; }
 printf '%s\n' "$webhook_body" >"$ARTIFACT_DIR/webhook-status.txt"
 
-log "fixture repository created and webhook credential consumer invoked"
+log "settings-created fixture repository and encrypted webhook credential consumer invoked"
 python3 - "$FIXTURE_LOG" <<'PY'
 import json,sys
 events=[json.loads(line) for line in open(sys.argv[1], encoding='utf-8')]
 assert events and all(e['token']=='settings-backfill-token' for e in events), events
-assert {e['path'].split('?')[0].rsplit('/',1)[-1] for e in events} >= {'issues','merge_requests','pipelines'}, events
-print('fixture observed encrypted setting backfill token and all GitLab API consumers')
+assert all(e['method']=='GET' and e['path'].startswith('/api/v4/projects/smoke%2Fgroup%2Fproject/') for e in events), events
+assert any(e['path'].endswith('/issues?per_page=100&page=1&state=all') for e in events), events
+assert any(e['path'].endswith('/merge_requests?per_page=100&page=1&state=all') for e in events), events
+assert any(e['path'].endswith('/pipelines?per_page=100&page=1') for e in events), events
+print('fixture observed exact settings-owned encrypted backfill token, project URL and all API consumers')
 PY
 
 run_browser() {
