@@ -121,6 +121,7 @@ export SESSION_TOKEN
 export SMOKE_API_URL="$API_URL"
 export SMOKE_ORGANIZATION_ID=d0000000-0000-4000-8000-000000000011
 export SMOKE_WEBHOOK_SECRET=fixture-webhook-secret
+export SMOKE_BACKFILL_TOKEN=fixture-backfill-token
 export SCM_REPOSITORIES_JSON='[{"provider":"gitlab","full_name":"smoke/group/project","token_env":"SMOKE_BACKFILL_TOKEN","webhook_secret_env":"SMOKE_WEBHOOK_SECRET","base_url_env":"SMOKE_GITLAB_FIXTURE_URL"}]'
 export SMOKE_BACKFILL_TOKEN=fixture-backfill-token
 
@@ -152,10 +153,11 @@ python3 "$ROOT/scripts/smoke.gitlab-fixture.py" "$FIXTURE_PORT" "$FIXTURE_LOG" >
 FIXTURE_PID=$!
 for _ in $(seq 1 30); do curl --silent "http://127.0.0.1:$FIXTURE_PORT/health" >/dev/null && break; sleep 0.1; done
 FIXTURE_URL="$SMOKE_GITLAB_FIXTURE_URL"
-# Legacy registration seeds a disposable GitLab fixture. Settings browser/API lifecycle separately
-# verifies encrypted credential writes using the organization-owned settings endpoint.
+# Seed a disposable configured GitLab repository to exercise the actual sync credential consumer.
 FIXTURE_REPO_ID=d0000000-0000-4000-8000-000000000020
-compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id,git_lab_base_url,status_mappings,backfill_token_ciphertext,webhook_secret_ciphertext) VALUES ('$FIXTURE_REPO_ID','gitlab','smoke/group/project','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011','$FIXTURE_URL','{}','','')"
+compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id,git_lab_base_url,status_mappings) VALUES ('$FIXTURE_REPO_ID','gitlab','smoke/group/project','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011','$FIXTURE_URL','{}')"
+SCM_REPOSITORIES_JSON=$(python3 -c 'import json,sys; print(json.dumps([{"provider":"gitlab","full_name":"smoke/group/project","token_env":"SMOKE_BACKFILL_TOKEN","webhook_secret_env":"SMOKE_WEBHOOK_SECRET","base_url_env":"SMOKE_GITLAB_FIXTURE_URL"}]))')
+compose exec -T -e SCM_REPOSITORIES_JSON="$SCM_REPOSITORIES_JSON" -e SMOKE_BACKFILL_TOKEN=fixture-backfill-token -e SMOKE_WEBHOOK_SECRET=fixture-webhook-secret -e SMOKE_GITLAB_FIXTURE_URL="$FIXTURE_URL" api /agent-ops-api sync
 
 # Exercise the webhook's decrypted credential consumer and verify the fixture receives the exact token.
 webhook_status=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'X-Gitlab-Token: fixture-webhook-secret' \
