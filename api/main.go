@@ -47,6 +47,10 @@ var (
 // @securityDefinitions.apikey AgentRunToken
 // @in header
 // @name X-Agent-Run-Token
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Bearer account token
 
 func main() {
 	cfg, err := config.Load()

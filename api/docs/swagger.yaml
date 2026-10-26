@@ -302,6 +302,97 @@ definitions:
     required:
     - role
     type: object
+  repositorysettings.CreateRequest:
+    properties:
+      backfill_token:
+        type: string
+      full_name:
+        type: string
+      gitlab_base_url:
+        type: string
+      provider:
+        type: string
+      status_mappings:
+        additionalProperties:
+          type: string
+        type: object
+      webhook_secret:
+        type: string
+    type: object
+  repositorysettings.CreatedResponse:
+    properties:
+      data:
+        $ref: '#/definitions/repositorysettings.CreatedView'
+      status:
+        type: integer
+    type: object
+  repositorysettings.CreatedView:
+    properties:
+      backfill_token:
+        type: string
+      full_name:
+        type: string
+      gitlab_base_url:
+        type: string
+      id:
+        type: string
+      provider:
+        type: string
+      status_mappings:
+        additionalProperties:
+          type: string
+        type: object
+      webhook_secret:
+        type: string
+      webhook_url:
+        type: string
+    type: object
+  repositorysettings.ListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/repositorysettings.View'
+        type: array
+      status:
+        type: integer
+    type: object
+  repositorysettings.UpdateRequest:
+    properties:
+      backfill_token:
+        type: string
+      gitlab_base_url:
+        type: string
+      status_mappings:
+        additionalProperties:
+          type: string
+        type: object
+      webhook_secret:
+        type: string
+    type: object
+  repositorysettings.View:
+    properties:
+      full_name:
+        type: string
+      gitlab_base_url:
+        type: string
+      id:
+        type: string
+      provider:
+        type: string
+      status_mappings:
+        additionalProperties:
+          type: string
+        type: object
+      webhook_url:
+        type: string
+    type: object
+  repositorysettings.ViewResponse:
+    properties:
+      data:
+        $ref: '#/definitions/repositorysettings.View'
+      status:
+        type: integer
+    type: object
   response.ErrorResponse:
     properties:
       message:
@@ -856,27 +947,176 @@ paths:
       summary: Update member role
   /api/v1/repositories:
     get:
-      parameters:
-      - description: Page
-        in: query
-        name: page
-        type: integer
-      - description: Items per page
-        in: query
-        name: per_page
-        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/board.ListResponse'
+            $ref: '#/definitions/repositorysettings.ListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List repository settings
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Repository settings
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/repositorysettings.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/repositorysettings.CreatedResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/response.ErrorResponse'
-      summary: List repositories
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create repository settings
+  /api/v1/repositories/{repository_id}:
+    delete:
+      parameters:
+      - description: Repository UUID
+        in: path
+        name: repository_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete repository settings
+    get:
+      parameters:
+      - description: Repository UUID
+        in: path
+        name: repository_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.ViewResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get repository settings
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Repository UUID
+        in: path
+        name: repository_id
+        required: true
+        type: string
+      - description: Repository settings changes
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/repositorysettings.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.ViewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update repository settings
   /api/v1/webhooks/{provider}:
     post:
       consumes:
@@ -950,5 +1190,10 @@ securityDefinitions:
   AgentRunToken:
     in: header
     name: X-Agent-Run-Token
+    type: apiKey
+  BearerAuth:
+    description: Bearer account token
+    in: header
+    name: Authorization
     type: apiKey
 swagger: "2.0"
