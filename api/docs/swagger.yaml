@@ -262,6 +262,13 @@ definitions:
       occurrences:
         type: integer
     type: object
+  organization.AcceptInvitationRequest:
+    properties:
+      token:
+        type: string
+    required:
+    - token
+    type: object
   organization.AddMemberRequest:
     properties:
       account_id:
@@ -270,6 +277,15 @@ definitions:
         type: string
     required:
     - account_id
+    - role
+    type: object
+  organization.CreateInvitationRequest:
+    properties:
+      expires_in_seconds:
+        type: integer
+      role:
+        type: string
+    required:
     - role
     type: object
   organization.CreateRequest:
@@ -551,6 +567,37 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get repository insights
+  /api/v1/organization-invitations/accept:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Invitation token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/organization.AcceptInvitationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Accept organization invitation
   /api/v1/organizations:
     get:
       produces:
@@ -615,6 +662,46 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Organization detail
+  /api/v1/organizations/{organization_id}/invitations:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Organization UUID
+        in: path
+        name: organization_id
+        required: true
+        type: string
+      - description: Invitation
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/organization.CreateInvitationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create organization invitation
   /api/v1/organizations/{organization_id}/members:
     get:
       parameters:

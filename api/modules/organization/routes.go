@@ -14,4 +14,6 @@ func (r *Routes) Register(g *gin.RouterGroup) {
 	o.POST("/:organization_id/members", r.controller.Add)
 	o.PATCH("/:organization_id/members/:account_id", r.controller.Role)
 	o.DELETE("/:organization_id/members/:account_id", r.controller.Remove)
+	o.POST("/:organization_id/invitations", r.controller.CreateInvitation)
+	g.POST("/organization-invitations/accept", r.controller.AcceptInvitation)
 }
