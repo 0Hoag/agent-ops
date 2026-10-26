@@ -43,6 +43,7 @@ fingerprint() {
   done | shasum
 }
 base=
+pre=
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
@@ -51,7 +52,7 @@ base=
 wait_for_event() {
   local pids stamp waited=0 limit=$interval now
   pids=$(worker_pids)
-  stamp=$(results_stamp)
+  stamp=$pre   # taken before the pass: a worker that ended during the pass still counts as news
   [ "$(echo $pids | wc -w)" -ge "$cap" ] && limit=$((interval * 3))
   while true; do
     while [ "$waited" -lt "$limit" ]; do
@@ -74,6 +75,7 @@ wait_for_event() {
 while true; do
   ts=$(date +%Y%m%d-%H%M%S)
   echo "[$ts] pass start"
+  pre=$(results_stamp)
   attach=()
   if curl -s -o /dev/null -m 2 "$web"; then attach=(--attach "$web" --dir "$PWD"); echo "  on web UI $web"; fi
   OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run ${attach[@]+"${attach[@]}"} \
