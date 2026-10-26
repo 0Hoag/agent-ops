@@ -6,7 +6,7 @@ CLIENT_SHA=ac08a2757fd6913178c0ec2968a62ce36f46ff81
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
 case "${CONTRACT_FIXTURE:-}" in
-  ""|api-missing|client-missing|client-changed) ;;
+  ""|handler|api-missing|api-new|client-missing|client-new|client-changed) ;;
   *) echo "Unknown CONTRACT_FIXTURE: $CONTRACT_FIXTURE" >&2; exit 2 ;;
 esac
 
@@ -14,15 +14,39 @@ mkdir -p "$ROOT/.agent-runs"
 cd "$ROOT/api"
 API_DOCS=(docs/docs.go docs/swagger.json docs/swagger.yaml)
 tmp=$(mktemp -d "$ROOT/.agent-runs/contract.XXXXXX")
-cleanup() { rm -rf "$tmp"; }
+restore_controller=0
+restore_swagger=0
+cleanup() {
+  if (( restore_controller )); then cp "$tmp/fixture-controller.go" "$ROOT/api/modules/insight/controller.go"; fi
+  if (( restore_swagger )); then cp "$tmp/fixture-swagger.yaml" "$ROOT/api/docs/swagger.yaml"; fi
+  rm -rf "$tmp"
+}
 trap cleanup EXIT
 mkdir -p "$tmp/api"
+if [[ "${CONTRACT_FIXTURE:-}" == handler ]]; then
+  cp "$ROOT/api/modules/insight/controller.go" "$tmp/fixture-controller.go"
+  restore_controller=1
+  python3 - "$ROOT/api/modules/insight/controller.go" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+needle = '// @Failure 500 {object} response.ErrorResponse'
+if needle not in s:
+    raise SystemExit('handler fixture anchor missing')
+p.write_text(s.replace(needle, needle + '\n// @Failure 418 {object} response.ErrorResponse', 1))
+PY
+fi
 cp -R "$ROOT/api/." "$tmp/api/"
 for path in "${API_DOCS[@]}"; do rm -rf "$tmp/api/$path"; done
 cd "$tmp/api"
 make swagger
 if [[ "${CONTRACT_FIXTURE:-}" == api-missing ]]; then
   rm "$tmp/api/docs/swagger.yaml"
+fi
+if [[ "${CONTRACT_FIXTURE:-}" == api-new ]]; then
+  cp "$ROOT/api/docs/swagger.yaml" "$tmp/fixture-swagger.yaml"
+  restore_swagger=1
+  rm "$ROOT/api/docs/swagger.yaml"
 fi
 api_drift=0
 compare_paths() {
@@ -64,6 +88,9 @@ git -C "$CLIENT_DIR" archive "$CLIENT_SHA" | tar -x -C "$client_work"
 client_baseline="$tmp/client-baseline"
 mkdir -p "$client_baseline"
 git -C "$CLIENT_DIR" archive "$CLIENT_SHA" | tar -x -C "$client_baseline"
+if [[ "${CONTRACT_FIXTURE:-}" == client-new ]]; then
+  rm -rf "$client_baseline/src/shared/api/generated"
+fi
 cd "$client_work"
 CLIENT_ARTIFACTS=(src/shared/api/swagger.json src/shared/api/generated)
 cp "$ROOT/api/docs/swagger.json" src/shared/api/swagger.json
