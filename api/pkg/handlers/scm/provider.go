@@ -3,15 +3,47 @@ package scm
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // Config contains provider credentials and transport settings shared by SCM vendors.
 type Config struct {
-	Token         string
-	WebhookSecret string
-	APIBaseURL    string
-	HTTPClient    *http.Client
+	Token          string
+	WebhookSecret  string
+	APIBaseURL     string
+	HTTPClient     *http.Client
+	StatusMappings map[string]string
+}
+
+func MapStatus(provider, label string, custom map[string]string) IssueStatus {
+	if custom != nil {
+		if status, ok := custom[label]; ok {
+			return IssueStatus(status)
+		}
+	}
+	return IssueStatus("")
+}
+
+func ApplyStatusMapping(provider string, result *BackfillResult, mappings map[string]string) {
+	for i := range result.Issues {
+		if result.Issues[i].State == "closed" {
+			result.Issues[i].Status = StatusDone
+			continue
+		}
+		for _, label := range result.Issues[i].Labels {
+			if value, ok := mappings[label]; ok {
+				result.Issues[i].Status = IssueStatus(value)
+				break
+			}
+			l := strings.ToLower(strings.TrimSpace(label))
+			if strings.HasPrefix(l, "status:") {
+				v := strings.TrimPrefix(strings.TrimPrefix(l, "status::"), "status:")
+				result.Issues[i].Status = IssueStatus(strings.ReplaceAll(v, " ", "_"))
+				break
+			}
+		}
+	}
 }
 
 // IssueStatus is the provider-neutral board status.

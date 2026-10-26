@@ -15,7 +15,7 @@ func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
 	id := UUID("11111111-1111-1111-1111-111111111111")
 	item := &Repository{ID: id, Provider: "github", FullName: "acme/app", WebhookSecretEnvRef: "APP_SECRET"}
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "repositories"`)).WithArgs(id, "github", "acme/app", "APP_SECRET", sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmockResult())
+	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "repositories"`)).WithArgs(id, "github", "acme/app", "APP_SECRET", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{}`)))
 	mock.ExpectCommit()
 	// The helper values are deliberately checked by the SQL driver, including conflict identity.
 	require.NoError(t, store.Repositories.Create(context.Background(), item))
@@ -30,7 +30,7 @@ func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
 	require.Len(t, items, 1)
 	require.Equal(t, int64(1), page.Total)
 	mock.ExpectBegin()
-	mock.ExpectExec(`INSERT INTO "repositories".*ON CONFLICT \("provider","full_name"\).*DO UPDATE SET.*webhook_secret_env_ref.*EXCLUDED\.webhook_secret_env_ref`).WillReturnResult(sqlmockResult())
+	mock.ExpectQuery(`INSERT INTO "repositories".*ON CONFLICT \("provider","full_name"\).*DO UPDATE SET.*webhook_secret_env_ref.*EXCLUDED\.webhook_secret_env_ref`).WithArgs(id, "github", "acme/app", "APP_SECRET", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{}`)))
 	mock.ExpectCommit()
 	require.NoError(t, store.Repositories.Upsert(context.Background(), item))
 	require.NoError(t, mock.ExpectationsWereMet())

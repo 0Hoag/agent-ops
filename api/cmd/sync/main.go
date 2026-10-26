@@ -58,6 +58,9 @@ func syncConfiguredRepositories(ctx context.Context, repositories []config.Repos
 		if backfillErr != nil {
 			return backfillErr
 		}
+		var mappings map[string]string
+		_ = json.Unmarshal(repo.StatusMappings, &mappings)
+		scm.ApplyStatusMapping(c.Provider, &result, mappings)
 		if err := persistBackfill(ctx, st, repo.ID, result); err != nil {
 			return err
 		}

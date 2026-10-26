@@ -51,7 +51,8 @@ func (c *Controller) allowed(ctx *gin.Context, write bool) (string, bool) {
 }
 func accountID(ctx *gin.Context) string { v, _ := ctx.Get("account_id"); s, _ := v.(string); return s }
 func (c *Controller) view(r *store.Repository, reveal bool) View {
-	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: c.webhookBase + "/api/v1/webhooks/" + r.Provider}
+	base := c.webhookBase
+	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: base + "/api/v1/webhooks/" + r.Provider}
 	_ = json.Unmarshal(r.StatusMappings, &v.StatusMappings)
 	if reveal {
 		v.WebhookSecret = ""
@@ -112,7 +113,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 		return
 	}
 	mapping, _ := json.Marshal(req.StatusMappings)
-	r := &store.Repository{ID: store.NewUUID(), OrganizationID: org, Provider: req.Provider, FullName: req.FullName, WebhookSecretCiphertext: secret, BackfillTokenCiphertext: token, GitLabBaseURL: req.GitLabBaseURL, StatusMappings: store.JSONB(mapping)}
+	r := &store.Repository{ID: store.NewUUID(), OrganizationID: org, Provider: req.Provider, FullName: req.FullName, WebhookSecretEnvRef: "", WebhookSecretCiphertext: secret, BackfillTokenCiphertext: token, GitLabBaseURL: req.GitLabBaseURL, StatusMappings: store.JSONB(mapping)}
 	if err = c.repos.Create(ctx, r); err != nil {
 		response.InternalError(ctx, "failed to create repository")
 		return

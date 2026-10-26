@@ -6,7 +6,7 @@ type Repository struct {
 	ID                      UUID   `gorm:"type:uuid;primaryKey"`
 	Provider                string `gorm:"not null"`
 	FullName                string `gorm:"not null"`
-	WebhookSecretEnvRef     string `gorm:"not null"`
+	WebhookSecretEnvRef     string `gorm:"not null;default:''"`
 	OrganizationID          string `gorm:"type:uuid;not null;index"`
 	WebhookSecretCiphertext string `gorm:"not null;default:''"`
 	BackfillTokenCiphertext string `gorm:"not null;default:''"`
