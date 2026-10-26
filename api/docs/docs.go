@@ -1016,6 +1016,9 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
                 }
             }
         },

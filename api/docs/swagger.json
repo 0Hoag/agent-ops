@@ -1010,6 +1010,9 @@
                 },
                 "email": {
                     "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
                 }
             }
         },

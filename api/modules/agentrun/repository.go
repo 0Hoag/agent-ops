@@ -19,6 +19,9 @@ func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
 }
 func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
 	q := r.db.WithContext(ctx).Model(&AgentRun{})
+	if organization := organizationFromContext(ctx); organization != "" {
+		q = q.Joins("JOIN repositories ON repositories.id = agent_runs.repository_id").Where("repositories.organization_id = ?", organization)
+	}
 	if f.RepositoryID != "" {
 		q = q.Where("repository_id = ?", f.RepositoryID)
 	}

@@ -23,6 +23,7 @@ var dummyPasswordHash = func() string {
 }()
 
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
+func (repository *Repository) DB() *gorm.DB { return repository.db }
 
 func (repository *Repository) Create(ctx context.Context, email, password string) (*Account, error) {
 	email = strings.TrimSpace(email)

@@ -143,6 +143,8 @@ definitions:
         type: string
       email:
         type: string
+      organization_id:
+        type: string
     type: object
   board.ListMeta:
     properties:
