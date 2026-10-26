@@ -22,7 +22,6 @@ import (
 )
 
 const acceptanceDSN = "W8D_REPOSITORY_ACCEPTANCE_DSN"
-const acceptanceControl = "W8D_REPOSITORY_ACCEPTANCE_CONTROL"
 
 func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 	dsn := os.Getenv(acceptanceDSN)
@@ -51,11 +50,6 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 	})
 	NewRoutes(NewController(store.New(db).Repositories, organization.NewRepository(db), sealer, "https://agent.example")).Register(r.Group("/api/v1"))
 	h := http.Handler(r)
-	if control := os.Getenv(acceptanceControl); control != "" {
-		runControl(t, h, fixture, control)
-		return
-	}
-
 	create := request(t, h, fixture.ownerA, fixture.orgA, http.MethodPost, "/api/v1/repositories", `{"provider":"github","full_name":"acme/a","webhook_secret":"secret-a","backfill_token":"token-a","status_mappings":{"status:review":"review"}}`)
 	require.Equal(t, http.StatusCreated, create.Code, create.Body.String())
 	var created CreatedResponse
@@ -84,6 +78,7 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 		{"member update denied", fixture.memberA, fixture.orgA, http.MethodPatch, "/api/v1/repositories/" + created.Data.ID, 403},
 		{"viewer delete denied", fixture.viewerA, fixture.orgA, http.MethodDelete, "/api/v1/repositories/" + created.Data.ID, 403},
 		{"other tenant get missing", fixture.ownerB, fixture.orgB, http.MethodGet, "/api/v1/repositories/" + created.Data.ID, 404},
+		{"other tenant patch missing", fixture.ownerB, fixture.orgB, http.MethodPatch, "/api/v1/repositories/" + created.Data.ID, 404},
 		{"other tenant delete missing", fixture.ownerB, fixture.orgB, http.MethodDelete, "/api/v1/repositories/" + created.Data.ID, 404},
 	} {
 		w := request(t, h, tc.actor, tc.org, tc.method, tc.path, `{"webhook_secret":"not-authorized"}`)
@@ -97,9 +92,25 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 		require.NotContains(t, w.Body.String(), "webhook_secret")
 		require.NotContains(t, w.Body.String(), "backfill_token")
 	}
+	list := request(t, h, fixture.ownerA, fixture.orgA, http.MethodGet, "/api/v1/repositories", "")
+	require.Equal(t, http.StatusOK, list.Code, list.Body.String())
+	require.NotContains(t, list.Body.String(), "secret-a")
+	require.NotContains(t, list.Body.String(), "token-a")
+	require.NotContains(t, list.Body.String(), "webhook_secret")
+	require.NotContains(t, list.Body.String(), "backfill_token")
+	beforeCrossTenant := row
+	crossTenant := request(t, h, fixture.ownerB, fixture.orgB, http.MethodPatch, "/api/v1/repositories/"+created.Data.ID, `{"webhook_secret":"cross-tenant","backfill_token":"cross-token"}`)
+	require.Equal(t, http.StatusNotFound, crossTenant.Code, crossTenant.Body.String())
+	require.NoError(t, db.First(&row, "id = ?", created.Data.ID).Error)
+	require.Equal(t, beforeCrossTenant.WebhookSecretCiphertext, row.WebhookSecretCiphertext)
+	require.Equal(t, beforeCrossTenant.BackfillTokenCiphertext, row.BackfillTokenCiphertext)
 	updatedSecret, updatedToken := "secret-updated", "token-updated"
 	w := request(t, h, fixture.adminA, fixture.orgA, http.MethodPatch, "/api/v1/repositories/"+created.Data.ID, `{"webhook_secret":"`+updatedSecret+`","backfill_token":"`+updatedToken+`"}`)
 	require.Equal(t, 200, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), updatedSecret)
+	require.NotContains(t, w.Body.String(), updatedToken)
+	require.NotContains(t, w.Body.String(), "webhook_secret")
+	require.NotContains(t, w.Body.String(), "backfill_token")
 	require.NoError(t, db.First(&row, "id = ?", created.Data.ID).Error)
 	opened, err = sealer.Open(row.WebhookSecretCiphertext)
 	require.NoError(t, err)
@@ -134,17 +145,4 @@ func request(t *testing.T, h http.Handler, account, org, method, path, body stri
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	return w
-}
-func runControl(t *testing.T, h http.Handler, f settingsFixture, control string) {
-	switch control {
-	case "role":
-		require.Equal(t, 403, request(t, h, f.memberA, f.orgA, http.MethodPost, "/api/v1/repositories", `{"provider":"github","full_name":"control","webhook_secret":"s","backfill_token":"t"}`).Code)
-	case "tenant":
-		require.Equal(t, 404, request(t, h, f.ownerB, f.orgB, http.MethodGet, "/api/v1/repositories/00000000-0000-0000-0000-000000000001", "").Code)
-	case "redaction":
-		w := request(t, h, f.ownerA, f.orgA, http.MethodGet, "/api/v1/repositories", "")
-		require.NotContains(t, w.Body.String(), "webhook_secret")
-	default:
-		t.Fatalf("unknown control %q", control)
-	}
 }
