@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-CLIENT=${CLIENT_DIR:-"$HOME/agent-ops-client"}
+CLIENT=${CLIENT_DIR:-"$ROOT/.agent-runs/w7r-smoke-client"}
 PROJECT="agent-ops-smoke-$(id -u)-$$"
 API_PORT=${SMOKE_API_PORT:-18080}
 CLIENT_PORT=${SMOKE_CLIENT_PORT:-4173}
