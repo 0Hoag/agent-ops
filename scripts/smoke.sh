@@ -6,10 +6,14 @@ CLIENT=${CLIENT_DIR:-"$HOME/agent-ops-client"}
 PROJECT="agent-ops-smoke-$(id -u)-$$"
 API_PORT=${SMOKE_API_PORT:-18080}
 CLIENT_PORT=${SMOKE_CLIENT_PORT:-4173}
+POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5432}
 API_URL="http://127.0.0.1:$API_PORT"
 CLIENT_URL="http://127.0.0.1:$CLIENT_PORT"
 PREVIEW_PID=
 ARTIFACT_DIR=${SMOKE_ARTIFACT_DIR:-"$ROOT/.agent-runs/smoke"}
+COMPOSE_ENV=(env "POSTGRES_PUBLISH=${POSTGRES_PUBLISH-127.0.0.1}" "POSTGRES_HOST_PORT=$POSTGRES_HOST_PORT" "SMOKE_API_PORT=$API_PORT" "SMOKE_CLIENT_PORT=$CLIENT_PORT" "CLIENT_DIR=$CLIENT" "JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke}")
+
+compose() { "${COMPOSE_ENV[@]}" docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" "$@"; }
 
 log() { printf 'smoke: %s\n' "$*"; }
 cleanup() {
@@ -47,8 +51,8 @@ print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PRE
     done
   fi
   if [[ -n "$PREVIEW_PID" ]] && [[ -n "${listener:-}" ]]; then log "cleanup failed: preview listener remains on $CLIENT_PORT"; status=1; fi
-  docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  if [[ $status -ne 0 ]]; then docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs --no-color >"$ARTIFACT_DIR/compose.log" 2>/dev/null || true; fi
+  if [[ $status -ne 0 ]]; then compose logs --no-color >"$ARTIFACT_DIR/compose.log" 2>/dev/null || true; fi
+  compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   if docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.ID}}' | grep -q .; then log "cleanup failed: containers remain for $PROJECT"; status=1; fi
   if docker volume ls --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Name}}' | grep -q .; then log "cleanup failed: volumes remain for $PROJECT"; status=1; fi
   if [[ $status -eq 0 ]]; then log "cleanup verified: no owned containers or volumes ($PROJECT)"; fi
@@ -74,13 +78,13 @@ if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -
   exit 1
 fi
 
-POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5432} POSTGRES_PUBLISH=${POSTGRES_PUBLISH-} JWT_SECRET=${JWT_SECRET:?set a disposable JWT_SECRET for smoke} docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d --build postgres api
-services=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" ps --services --filter status=running | sort)
+compose up -d --build postgres api
+services=$(compose ps --services --filter status=running | sort)
 if [[ "$services" != $'api\npostgres' ]]; then
   log "unexpected Compose services: ${services//$'\n'/, }"
   exit 1
 fi
-if docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" ps -q client | grep -q .; then
+if compose ps -q client | grep -q .; then
   log "unexpected Compose client container/listener"
   exit 1
 fi
@@ -88,15 +92,35 @@ for _ in $(seq 1 90); do
   if curl --fail --silent "$API_URL/readyz" >/dev/null; then break; fi
   sleep 1
 done
-curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs --no-color >"$ARTIFACT_DIR/compose.log"; log "API did not become ready (see $ARTIFACT_DIR/compose.log)"; exit 1; }
+curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { compose logs --no-color >"$ARTIFACT_DIR/compose.log"; log "API did not become ready (see $ARTIFACT_DIR/compose.log)"; exit 1; }
 
 # Insert deterministic smoke-owned records into this run's isolated Compose database.
-docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
-INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref) VALUES ('d0000000-0000-4000-8000-000000000001','github','smoke/agent-ops','SMOKE_WEBHOOK_SECRET');
+compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
+INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000011','Smoke tenant');
+INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000012','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000010','owner');
+INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id) VALUES ('d0000000-0000-4000-8000-000000000001','github','smoke/agent-ops','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011');
 INSERT INTO issues (id,repository_id,number,title,state,status,labels) VALUES ('d0000000-0000-4000-8000-000000000002','d0000000-0000-4000-8000-000000000001',99001,'Smoke fixture: board serves real API data','open','review','["status:review"]');
 INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes) VALUES ('d0000000-0000-4000-8000-000000000003','d0000000-0000-4000-8000-000000000001',99002,'Smoke fixture: linked pull request','open','d000000000000000000000000000000000000000','smoke/real-data','[99001]');
 INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion) VALUES ('d0000000-0000-4000-8000-000000000004','d0000000-0000-4000-8000-000000000001','smoke-ci-99002',99002,'d000000000000000000000000000000000000000','completed','success');
 SQL
+
+# Exercise real account authentication and the supported organization-selection endpoint.
+login=$(curl --fail --silent --show-error -H 'Content-Type: application/json' -d '{"email":"smoke@example.invalid","password":"smoke-password-not-a-secret"}' "$API_URL/api/v1/auth/login")
+account_token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$login")
+selected=$(curl --fail --silent --show-error -H "Authorization: Bearer $account_token" -H 'Content-Type: application/json' -d '{"organization_id":"d0000000-0000-4000-8000-000000000011"}' "$API_URL/api/v1/auth/select-organization")
+SESSION_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$selected")
+session=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" "$API_URL/api/v1/auth/session")
+python3 -c 'import json,sys; x=json.load(sys.stdin); assert x["account_id"] == "d0000000-0000-4000-8000-000000000010" and x["organization_id"] == "d0000000-0000-4000-8000-000000000011"' <<<"$session"
+export SESSION_TOKEN
+export SMOKE_API_URL="$API_URL"
+
+run_browser() {
+  local control=${1:-0}
+  if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" SMOKE_CONTROL_NO_SESSION="$control" SESSION_TOKEN="$SESSION_TOKEN" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
+    return 1
+  fi
+}
 
 pnpm --dir "$CLIENT" install --frozen-lockfile
 (cd "$CLIENT" && APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" pnpm build)
@@ -112,9 +136,23 @@ for _ in $(seq 1 60); do curl --fail --silent "$CLIENT_URL/board" >/dev/null && 
 curl --fail --silent "$CLIENT_URL/board" >/dev/null || { log "client preview did not become ready"; exit 1; }
 
 cd "$CLIENT"
-if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line 2>&1 | tee "$ARTIFACT_DIR/browser.log"; then
-  docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs --no-color >"$ARTIFACT_DIR/compose.log"
+: >"$ARTIFACT_DIR/browser0.log"
+: >"$ARTIFACT_DIR/browser1.log"
+if ! run_browser 0; then
   exit 1
 fi
-docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs --no-color >"$ARTIFACT_DIR/compose.log"
-log "browser evidence: $ARTIFACT_DIR/browser.log; screenshot: $ARTIFACT_DIR/board.png"
+if run_browser 1; then
+  log "session-removal control unexpectedly passed unchanged baseline assertions"
+  exit 1
+fi
+if ! grep -E 'Expected: visible|Timeout .*exceeded|Issue board' "$ARTIFACT_DIR/browser1.log" >/dev/null; then
+  log "session-removal control failed without the expected baseline auth/data diagnostic (see $ARTIFACT_DIR/browser1.log)"
+  exit 1
+fi
+log "EXPECTED SESSION-REMOVAL CONTROL: unchanged browser assertions failed as unauthenticated (see $ARTIFACT_DIR/browser1.log)"
+if ! run_browser 0; then
+  log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
+  exit 1
+fi
+compose logs --no-color >"$ARTIFACT_DIR/compose.log"
+log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); session-removal control: $ARTIFACT_DIR/browser1.log; screenshot: $ARTIFACT_DIR/board.png"
