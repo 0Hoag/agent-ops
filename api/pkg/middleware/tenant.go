@@ -25,6 +25,12 @@ func RequireOrganization(service *auth.Service) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		member, err := service.HasMembership(c.Request.Context(), s.AccountID, s.OrganizationID)
+		if err != nil || !member {
+			response.Unauthorized(c, "organization membership required")
+			c.Abort()
+			return
+		}
 		c.Set("organization_id", s.OrganizationID)
 		c.Request = c.Request.WithContext(board.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Request = c.Request.WithContext(insight.WithOrganization(c.Request.Context(), s.OrganizationID))

@@ -53,6 +53,15 @@ func (service *Service) SelectOrganization(ctx context.Context, token, organizat
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": session.AccountID, "email": session.Email, "organization_id": organizationID, "iat": now.Unix(), "exp": now.Add(service.expiration).Unix()})
 	return t.SignedString(service.secret)
 }
+
+// HasMembership confirms that a selected organization is still assigned to the account.
+// The signed selection token is not a durable authorization grant: membership changes
+// must take effect before the token expires.
+func (service *Service) HasMembership(ctx context.Context, accountID, organizationID string) (bool, error) {
+	var count int64
+	err := service.accounts.DB().WithContext(ctx).Table("organization_memberships").Where("organization_id = ? AND account_id = ?", organizationID, accountID).Count(&count).Error
+	return count == 1, err
+}
 func (service *Service) Session(value string) (*SessionResponse, error) {
 	token, err := jwt.Parse(value, func(token *jwt.Token) (interface{}, error) {
 		if token.Method != jwt.SigningMethodHS256 {
