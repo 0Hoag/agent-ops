@@ -88,12 +88,19 @@ func productionCORS(cfg config.Config) gin.HandlerFunc {
 }
 
 func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config) {
+	registerRoutesWithHub(router, db, gormDB, cfg, nil)
+}
+
+func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub) {
 	handlers.NewHealth(db).Register(router)
 	configs := map[string][]webhook.Config{}
 	for _, r := range cfg.Repositories {
 		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
 	}
-	hub := board.NewHub()
+	hub := supplied
+	if hub == nil {
+		hub = board.NewHub()
+	}
 	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
 	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisher(gormDB, builder.Default(), hub), configs)).Register(router.Group("/api/v1"))
 	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
