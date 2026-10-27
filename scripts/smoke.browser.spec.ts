@@ -20,10 +20,6 @@ test('renders seeded issue and linked PR/CI from the real API', async ({ page })
     await page.addInitScript((token) => sessionStorage.setItem('agent-ops-token', token), process.env.SESSION_TOKEN);
   }
   await page.goto('/board');
-  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
-    await expect(page).toHaveURL(/\/login/);
-    return;
-  }
   await expect(page.getByRole('heading', { name: 'Issue board' })).toBeVisible({ timeout: 15000 });
   const repositories = page.getByRole('combobox', { name: 'Repository' });
   await expect(repositories).toBeEnabled({ timeout: 15000 });
