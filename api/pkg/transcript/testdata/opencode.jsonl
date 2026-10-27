@@ -1,4 +1,4 @@
 {"type":"text","sessionID":"s1","part":{"text":"ignored"}}
-{"type":"step_finish","sessionID":"s1","part":{"tokens":{"input":11,"output":2,"reasoning":1,"cache":{"read":4,"write":5}}}}
+{"type":"step_finish","timestamp":1761526860000,"sessionID":"s1","part":{"tokens":{"input":11,"output":2,"reasoning":1,"cache":{"read":4,"write":5}}}}
 {"type":"tool","sessionID":"s1","part":{"tool":"ignored"}}
-{"type":"step_finish","sessionID":"s1","part":{"tokens":{"input":7,"output":3,"reasoning":2,"cache":{"read":1,"write":0}}}}
+{"type":"step_finish","timestamp":1761526800000,"sessionID":"s1","part":{"tokens":{"input":7,"output":3,"reasoning":2,"cache":{"read":1,"write":0}}}}

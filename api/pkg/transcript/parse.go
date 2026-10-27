@@ -76,6 +76,7 @@ func ParseCodex(r io.Reader) ([]Session, error) {
 
 type openCodeRecord struct {
 	Type      string `json:"type"`
+	Timestamp int64  `json:"timestamp"`
 	SessionID string `json:"sessionID"`
 	Part      struct {
 		Tokens struct {
@@ -120,6 +121,9 @@ func ParseOpenCode(r io.Reader) ([]Session, error) {
 		s.Usage.Reasoning += t.Reasoning
 		s.Usage.CachedInput += t.Cache.Read
 		s.Usage.CacheWrite += t.Cache.Write
+		if v.Timestamp != 0 {
+			addUnixMillis(s, v.Timestamp)
+		}
 		return nil
 	})
 }
@@ -210,6 +214,16 @@ func addTime(s *Session, raw string) {
 	if err != nil {
 		return
 	}
+	if s.Started.IsZero() || t.Before(s.Started) {
+		s.Started = t
+	}
+	if t.After(s.Ended) {
+		s.Ended = t
+	}
+}
+
+func addUnixMillis(s *Session, millis int64) {
+	t := time.UnixMilli(millis)
 	if s.Started.IsZero() || t.Before(s.Started) {
 		s.Started = t
 	}

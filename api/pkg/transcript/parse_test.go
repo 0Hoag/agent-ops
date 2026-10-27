@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseCodex(t *testing.T) {
@@ -29,6 +30,11 @@ func TestParseOpenCode(t *testing.T) {
 	}
 	if len(s) != 1 || s[0].Usage != (Usage{18, 5, 5, 5, 3}) {
 		t.Fatalf("got %#v", s)
+	}
+	wantStart := time.UnixMilli(1761526800000)
+	wantEnd := time.UnixMilli(1761526860000)
+	if s[0].Started.IsZero() || !s[0].Started.Equal(wantStart) || !s[0].Ended.Equal(wantEnd) {
+		t.Fatalf("times=%s..%s want %s..%s", s[0].Started, s[0].Ended, wantStart, wantEnd)
 	}
 }
 
