@@ -5,6 +5,7 @@ PROJECT="agent-run-acceptance-$(id -u)-$$"
 API_PORT=${AGENT_RUN_ACCEPTANCE_API_PORT:-$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')}
 PG_PORT=${AGENT_RUN_ACCEPTANCE_PG_PORT:-$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')}
 TOKEN=acceptance-secret REPO=a1000000-0000-4000-8000-000000000001 REPO2=a2000000-0000-4000-8000-000000000002
+export JWT_SECRET=${JWT_SECRET:-acceptance-jwt-secret} REPOSITORY_ENCRYPTION_KEY=${REPOSITORY_ENCRYPTION_KEY:-01234567890123456789012345678901}
 API="http://127.0.0.1:$API_PORT" DB="postgres://agent_ops:agent_ops_dev@127.0.0.1:$PG_PORT/agent_ops?sslmode=disable"
 API_PID= TMP=
 die() { echo "acceptance: FAIL: $*" >&2; exit 1; }
@@ -49,12 +50,22 @@ trap 'exit 143' TERM
 [[ -z "$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null || true)" ]] || die "API port $API_PORT busy"
 [[ -z "$(lsof -nP -iTCP:"$PG_PORT" -sTCP:LISTEN 2>/dev/null || true)" ]] || die "PostgreSQL port $PG_PORT busy"
 TMP=$(mktemp -d); BIN="$TMP/api"
-(cd "$ROOT/api" && go build -o "$BIN" .)
+(cd "$ROOT/api" && GOCACHE="$TMP/go-cache" go build -o "$BIN" .)
 POSTGRES_HOST_PORT="$PG_PORT" POSTGRES_PUBLISH=127.0.0.1 docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d postgres >/dev/null
-for _ in $(seq 1 60); do docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1 && break; sleep 1; done
-export AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_MODEL_PRICES='{"gpt-accept":{"input_per_million":1,"cached_input_per_million":2,"cache_write_per_million":3,"output_per_million":4,"reasoning_per_million":5}}' DATABASE_URL="$DB" HTTP_ADDR=":$API_PORT" SCM_REPOSITORIES_JSON='[]'
+postgres_ready=0
+for _ in $(seq 1 60); do
+  if docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1; then postgres_ready=1; break; fi
+  sleep 1
+done
+(( postgres_ready )) || { docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" logs postgres >&2 || true; die 'PostgreSQL not ready'; }
+export AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_MODEL_PRICES='{"gpt-accept":{"input_per_million":1,"cached_input_per_million":2,"cache_write_per_million":3,"output_per_million":4,"reasoning_per_million":5}}' DATABASE_URL="$DB" HTTP_ADDR=":$API_PORT" JWT_SECRET='acceptance-jwt-secret' REPOSITORY_ENCRYPTION_KEY='01234567890123456789012345678901' SCM_REPOSITORIES_JSON='[]'
 "$BIN" >"$TMP/api.log" 2>&1 & API_PID=$!
-for _ in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
+api_ready=0
+for _ in $(seq 1 60); do
+  if curl -fsS "$API/readyz" >/dev/null 2>&1; then api_ready=1; break; fi
+  sleep 1
+done
+(( api_ready )) || { cat "$TMP/api.log" >&2; die 'API readiness timeout'; }
 curl -fsS "$API/readyz" >/dev/null || { cat "$TMP/api.log" >&2; die 'API not ready'; }
 docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -v ON_ERROR_STOP=1 -U agent_ops -d agent_ops -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref) VALUES ('$REPO','github','acceptance/one','ACCEPTANCE_SECRET'),('$REPO2','github','acceptance/two','ACCEPTANCE_SECRET') ON CONFLICT (id) DO NOTHING" >/dev/null
 post() { curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -H "X-Agent-Run-Token: $TOKEN" "$API/api/v1/agent-runs" -d "$1"; }
@@ -73,18 +84,26 @@ identity_id=$(jq -r .data.id <<<"${identity%$'\n'*}")
 duplicate=$(post "$(identity_base "$REPO" 111 codex session-1)"); expect_code "$duplicate" 201 'identity duplicate POST'
 growth=$(post "$(identity_base "$REPO" 222 codex session-1)"); expect_code "$growth" 201 'identity cumulative update'
 isolated=$(post "$(identity_base "$REPO" 333 opencode session-1)"); expect_code "$isolated" 201 'harness isolation POST'
-for _ in 1 2 3 4; do (post "$(identity_base "$REPO" 444 claude session-concurrent)" >/dev/null) & done
-wait
+concurrent_pids=()
+for _ in 1 2 3 4; do
+  (post "$(identity_base "$REPO" 444 claude session-concurrent)" >/dev/null) & concurrent_pids+=("$!")
+done
+for pid in "${concurrent_pids[@]}"; do wait "$pid" || die "concurrent duplicate request $pid failed"; done
 identity_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), min(input_tokens), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-1' AND harness='codex'")
 [[ "$identity_snapshot" == '1|222|222' ]] || die "IDENTITY UPSERT ASSERTION: expected one cumulative codex row at 222 tokens got $identity_snapshot"
 concurrent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-concurrent' AND harness='claude'")
 [[ "$concurrent_snapshot" == '1|444' ]] || die "CONCURRENT UPSERT ASSERTION: expected one claude row at 444 tokens got $concurrent_snapshot"
 kill "$API_PID"; wait "$API_PID" 2>/dev/null || true; API_PID=
 "$BIN" >"$TMP/api-restart.log" 2>&1 & API_PID=$!
-for _ in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
+api_ready=0
+for _ in $(seq 1 60); do
+  if curl -fsS "$API/readyz" >/dev/null 2>&1; then api_ready=1; break; fi
+  sleep 1
+done
+(( api_ready )) || { cat "$TMP/api-restart.log" >&2; die 'API restart readiness timeout'; }
 curl -fsS "$API/readyz" >/dev/null || { cat "$TMP/api-restart.log" >&2; die 'API restart not ready'; }
-persistent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), input_tokens FROM agent_runs WHERE id='$identity_id'")
-[[ "$persistent_snapshot" == '1|222' ]] || die "PERSISTENCE ASSERTION: expected restarted row 1|222 got $persistent_snapshot"
+persistent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), min(input_tokens), max(input_tokens) FROM agent_runs WHERE id='$identity_id'")
+[[ "$persistent_snapshot" == '1|222|222' ]] || die "PERSISTENCE ASSERTION: expected restarted row 1|222|222 got $persistent_snapshot"
 row=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT repository_id,wave,worker,model,issue_numbers::text,pr_number,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at AT TIME ZONE 'UTC',ended_at AT TIME ZONE 'UTC' FROM agent_runs WHERE id='$id1'")
 expected_row="$REPO|W3G|wire|gpt-accept|[191, 192]|3191|100|20|30|40|50|2026-10-24 09:00:00|2026-10-24 09:05:00"
 if [[ ${AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP:-0} == 1 ]]; then
