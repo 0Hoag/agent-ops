@@ -23,7 +23,7 @@ import sys
 p = Path(sys.argv[1])
 s = p.read_text()
 old = 'if old.Sessions[session.ID] == digest {'
-new = 'if old.Sessions[session.ID] == digest { session.InputTokens = 10;'
+new = 'if old.Sessions[session.ID] == digest { session.Usage.Input = 10;'
 assert s.count(old) == 1, 'control: expected exactly one session submission call'
 p.write_text(s.replace(old, new))
 PY
