@@ -27,6 +27,7 @@ if [[ ${EXPECT_OLD_DEFAULT_CONTROL:-0} == 1 ]]; then
     printf 'FAIL: old Compose scalar unexpectedly passed the empty-array assertion\n' >&2
     exit 1
   else
+    compose down --volumes --remove-orphans >/dev/null 2>&1 || true
     printf 'PASS: old Compose scalar failed the intended SCM_REPOSITORIES_JSON assertion\n'
     exit 0
   fi
