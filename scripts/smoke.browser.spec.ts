@@ -39,24 +39,31 @@ test('renders both provider settings from the real API', async ({ page }) => {
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/repositories')) calls.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
-  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') test.skip();
+  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
+    test.skip();
+    return;
+  }
   const apiBase = process.env.SMOKE_API_URL;
   const token = process.env.SESSION_TOKEN;
   if (!apiBase || !token) throw new Error('disposable session and API URL are required');
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const invocation = process.env.SMOKE_INVOCATION_ID || `default-${process.pid}`;
+  const suffix = invocation.replace(/[^a-zA-Z0-9-]/g, '-');
+  const githubName = `fixture/settings-github-${suffix}`;
+  const gitlabName = `fixture/settings-gitlab-${suffix}`;
   const create = async (provider: string, name: string, mappings: object, gitlabURL?: string) => {
     const response = await page.request.post(`${apiBase}/api/v1/repositories`, { headers, data: { provider, full_name: name, status_mappings: mappings, webhook_secret: `disposable-${provider}-webhook`, backfill_token: `disposable-${provider}-backfill`, ...(gitlabURL ? { gitlab_base_url: gitlabURL } : {}) } });
     expect(response.status(), await response.text()).toBe(201);
   };
-  await create('github', 'fixture/settings-github', { 'status:review': 'blocked' });
-  await create('gitlab', 'fixture/settings-gitlab', { 'Status::Review': 'done' }, 'http://127.0.0.1:9/gitlab');
+  await create('github', githubName, { 'status:review': 'blocked' });
+  await create('gitlab', gitlabName, { 'Status::Review': 'done' }, 'http://127.0.0.1:9/gitlab');
   await page.addInitScript((sessionToken) => sessionStorage.setItem('agent-ops-token', sessionToken), token);
   await page.goto('/repositories');
   await expect(page.getByRole('heading', { name: 'Repository settings' })).toBeVisible({ timeout: 15000 });
-  const githubCard = page.locator('article').filter({ hasText: 'fixture/settings-github' });
-  const gitlab = page.locator('article').filter({ hasText: 'fixture/settings-gitlab' });
-  await expect(githubCard.getByRole('heading', { name: /fixture\/settings-github \(github\)/ })).toBeVisible({ timeout: 15000 });
-  await expect(gitlab.getByRole('heading', { name: /fixture\/settings-gitlab \(gitlab\)/ })).toBeVisible({ timeout: 15000 });
+  const githubCard = page.locator('article').filter({ hasText: githubName });
+  const gitlab = page.locator('article').filter({ hasText: gitlabName });
+  await expect(githubCard.getByRole('heading', { name: `${githubName} (github)` })).toBeVisible({ timeout: 15000 });
+  await expect(gitlab.getByRole('heading', { name: `${gitlabName} (gitlab)` })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('GitLab URL: http://127.0.0.1:9/gitlab')).toBeVisible();
   await expect(gitlab.getByText('Status mappings: {"Status::Review":"done"}')).toBeVisible();
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR || '.agent-runs/smoke'}/repository-settings-dual-provider.png`, fullPage: true });
@@ -71,33 +78,40 @@ test('renders both provider settings from the real API', async ({ page }) => {
   await expect(gitlab.getByText('Status mappings: {"Status::Review":"review"}')).toBeVisible();
   await githubCard.getByRole('button', { name: 'Delete' }).click();
   await page.reload();
-  await expect(page.getByRole('heading', { name: /fixture\/settings-github \(github\)/ })).toHaveCount(0);
-  const refreshedGitlab = page.locator('article').filter({ hasText: 'fixture/settings-gitlab' });
+  await expect(page.getByRole('heading', { name: `${githubName} (github)` })).toHaveCount(0);
+  const refreshedGitlab = page.locator('article').filter({ hasText: gitlabName });
   await refreshedGitlab.getByRole('button', { name: 'Delete' }).click();
   await page.reload();
-  await expect(page.getByRole('heading', { name: /fixture\/settings-gitlab \(gitlab\)/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: `${gitlabName} (gitlab)` })).toHaveCount(0);
   console.log(`Repository settings API calls: ${calls.join(' | ')}`);
 });
 
 test('creates lists edits and deletes both settings through real organization HTTP', async ({ page }) => {
-  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') test.skip();
+  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
+    test.skip();
+    return;
+  }
   const token = process.env.SESSION_TOKEN;
   const apiBase = process.env.APP_API_URL || process.env.SMOKE_API_URL;
   if (!token || !apiBase) throw new Error('disposable session and API URL are required');
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const invocation = process.env.SMOKE_INVOCATION_ID || `default-${process.pid}`;
+  const suffix = invocation.replace(/[^a-zA-Z0-9-]/g, '-');
+  const githubName = `fixture/settings-github-${suffix}`;
+  const gitlabName = `fixture/settings-gitlab-${suffix}`;
   const ids: Record<string, string> = {};
   const calls: string[] = [];
   const request = async (method: string, path: string, body?: object) => {
     calls.push(`${method} ${path}`);
     return page.request.fetch(`${apiBase}${path}`, { method, headers, data: body });
   };
-  const github = await request('POST', '/api/v1/repositories', { provider: 'github', full_name: 'fixture/settings-github', webhook_secret: 'smoke-github-webhook', backfill_token: 'smoke-github-backfill', status_mappings: { 'status:review': 'blocked' } });
+  const github = await request('POST', '/api/v1/repositories', { provider: 'github', full_name: githubName, webhook_secret: 'smoke-github-webhook', backfill_token: 'smoke-github-backfill', status_mappings: { 'status:review': 'blocked' } });
   expect(github.status(), await github.text()).toBe(201);
   const githubBody = await github.json();
   ids.github = githubBody.data.id;
   expect(githubBody.data.webhook_secret).toBe('smoke-github-webhook');
   expect(githubBody.data.backfill_token).toBe('smoke-github-backfill');
-  const gitlab = await request('POST', '/api/v1/repositories', { provider: 'gitlab', full_name: 'fixture/settings-gitlab', gitlab_base_url: 'http://127.0.0.1:9/gitlab', webhook_secret: 'smoke-gitlab-webhook', backfill_token: 'smoke-gitlab-backfill', status_mappings: { 'Status::Review': 'done' } });
+  const gitlab = await request('POST', '/api/v1/repositories', { provider: 'gitlab', full_name: gitlabName, gitlab_base_url: 'http://127.0.0.1:9/gitlab', webhook_secret: 'smoke-gitlab-webhook', backfill_token: 'smoke-gitlab-backfill', status_mappings: { 'Status::Review': 'done' } });
   expect(gitlab.status(), await gitlab.text()).toBe(201);
   const gitlabBody = await gitlab.json();
   ids.gitlab = gitlabBody.data.id;
@@ -106,7 +120,7 @@ test('creates lists edits and deletes both settings through real organization HT
   const listed = await request('GET', '/api/v1/repositories');
   expect(listed.status(), await listed.text()).toBe(200);
   const items = (await listed.json()).data;
-  expect(items.map((item: { full_name: string }) => item.full_name)).toEqual(expect.arrayContaining(['fixture/settings-gitlab', 'fixture/settings-github']));
+  expect(items.map((item: { full_name: string }) => item.full_name)).toEqual(expect.arrayContaining([gitlabName, githubName]));
   expect(items.find((item: { provider: string }) => item.provider === 'gitlab').gitlab_base_url).toBe('http://127.0.0.1:9/gitlab');
   const update = await request('PATCH', `/api/v1/repositories/${ids.gitlab}`, { gitlab_base_url: 'http://127.0.0.1:9/gitlab-v2', status_mappings: { 'Status::Review': 'review' } });
   expect(update.status(), await update.text()).toBe(200);
