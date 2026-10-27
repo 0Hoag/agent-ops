@@ -118,6 +118,67 @@ func TestRunRejectsInvalidHarnessInputAndConfiguration(t *testing.T) {
 	}
 }
 
+func TestRunSuppliesModelMetadataWithoutChangingSourceModel(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "sessions.jsonl")
+	records := `{"type":"step_finish","timestamp":1761526800000,"sessionID":"native","part":{"tokens":{"input":18,"output":5,"reasoning":3,"cache":{"read":5,"write":2}}}}
+{"type":"step_finish","timestamp":1761526860000,"sessionID":"native","part":{"tokens":{"input":4,"output":1,"reasoning":0,"cache":{"read":1,"write":0}}}}
+`
+	if err := os.WriteFile(path, []byte(records), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	oldToken := os.Getenv("AGENT_RUN_TOKEN")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	err := run([]string{"push", "--harness", "opencode", "--model", "openai/gpt-6-luna", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9l", "--worker", "worker", path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload["model"] != "openai/gpt-6-luna" || payload["session_id"] != "native" || payload["input_tokens"] != float64(22) || payload["cached_input_tokens"] != float64(6) || payload["output_tokens"] != float64(6) {
+		t.Fatalf("payload=%v", payload)
+	}
+	if payload["started_at"] != "2025-10-27T08:00:00+07:00" || payload["ended_at"] != "2025-10-27T08:01:00+07:00" {
+		t.Fatalf("timestamps=%v", payload)
+	}
+
+	claudePath := filepath.Join(root, "source.jsonl")
+	if err := os.WriteFile(claudePath, []byte(`{"type":"assistant","uuid":"u1","sessionId":"source","timestamp":"2026-10-27T00:00:00Z","message":{"model":"claude-3-7-sonnet","usage":{"input_tokens":1}}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = run([]string{"push", "--harness", "claude", "--model", "wrong-fallback", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9l", "--worker", "worker", claudePath})
+	if err != nil || payload["model"] != "claude-3-7-sonnet" {
+		t.Fatalf("source model err=%v payload=%v", err, payload)
+	}
+}
+
+func TestRunRejectsMissingModelBeforeHTTP(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"step_finish","timestamp":1761526800000,"sessionID":"native","part":{"tokens":{"input":1}}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests++; w.WriteHeader(http.StatusCreated) }))
+	defer server.Close()
+	oldToken, oldModel := os.Getenv("AGENT_RUN_TOKEN"), os.Getenv("AGENT_RUN_MODEL")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken); _ = os.Setenv("AGENT_RUN_MODEL", oldModel) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	_ = os.Unsetenv("AGENT_RUN_MODEL")
+	err := run([]string{"push", "--harness", "opencode", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9l", "--worker", "worker", path})
+	if err == nil || !strings.Contains(err.Error(), "--model or AGENT_RUN_MODEL") || requests != 0 {
+		t.Fatalf("err=%v requests=%d", err, requests)
+	}
+}
+
 func TestSubmitRejectsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusBadRequest) }))
 	defer server.Close()
