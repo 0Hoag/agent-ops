@@ -58,8 +58,12 @@ func TestPollClaudeHandlesAppendPartialRestartAndNoDuplicate(t *testing.T) {
 	if err := os.WriteFile(path, append([]byte(record("a", 3)), []byte(partial[:len(partial)-3])...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pollClaude(context.Background(), root, &cp, s); err == nil {
-		t.Fatal("partial record unexpectedly parsed")
+	changed, err = pollClaude(context.Background(), root, &cp, s)
+	if err != nil || !changed {
+		t.Fatalf("partial poll changed=%v err=%v", changed, err)
+	}
+	if len(got) != 1 || got[0].Usage.Input != 3 {
+		t.Fatalf("partial payloads=%+v", got)
 	}
 	if err := os.WriteFile(path, []byte(record("a", 3)+partial), 0o644); err != nil {
 		t.Fatal(err)
@@ -82,6 +86,21 @@ func TestPollClaudeHandlesAppendPartialRestartAndNoDuplicate(t *testing.T) {
 	changed, err = pollClaude(context.Background(), root, &restarted, s)
 	if err != nil || changed || len(got) != 2 {
 		t.Fatalf("restart changed=%v err=%v payloads=%+v", changed, err, got)
+	}
+}
+
+func TestPollClaudeRejectsMalformedCompletedRecord(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "session.jsonl")
+	contents := `{"type":"assistant","uuid":"bad","sessionId":"s1","message":]}` + "\n"
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := submitter{endpoint: "http://127.0.0.1:1", token: "token", repository: "repo", wave: "W9", worker: "worker", harness: "claude"}
+	cp := watchCheckpoint{Files: map[string]watchFileState{}}
+	_, err := pollClaude(context.Background(), root, &cp, s)
+	if err == nil || !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("err=%v, want malformed JSON diagnostic", err)
 	}
 }
 

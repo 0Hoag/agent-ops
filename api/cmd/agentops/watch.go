@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -93,12 +94,11 @@ func pollClaude(ctx context.Context, root string, cp *watchCheckpoint, s submitt
 		if exists && old.Size == info.Size() && old.Mod == info.ModTime().UnixNano() {
 			continue
 		}
-		f, err := os.Open(path)
+		contents, err := os.ReadFile(path)
 		if err != nil {
 			return false, err
 		}
-		sessions, parseErr := transcript.ParseClaude(f)
-		_ = f.Close()
+		sessions, parseErr := parseClaudeWatchSnapshot(contents)
 		if parseErr != nil {
 			return false, fmt.Errorf("parse %s: %w", path, parseErr)
 		}
@@ -120,6 +120,26 @@ func pollClaude(ctx context.Context, root string, cp *watchCheckpoint, s submitt
 		changed = true
 	}
 	return changed, nil
+}
+
+// parseClaudeWatchSnapshot keeps a live watcher alive while Claude is still
+// appending the final JSONL record. ParseClaude remains strict for completed
+// input; only an unterminated final line whose decoder reports unexpected EOF
+// is deferred until a later poll.
+func parseClaudeWatchSnapshot(contents []byte) ([]transcript.Session, error) {
+	if len(contents) == 0 || contents[len(contents)-1] == '\n' {
+		return transcript.ParseClaude(bytes.NewReader(contents))
+	}
+	lastNewline := bytes.LastIndexByte(contents, '\n')
+	complete := contents[:lastNewline+1]
+	trailing := contents[lastNewline+1:]
+	var probe json.RawMessage
+	if err := json.Unmarshal(trailing, &probe); err == nil {
+		return transcript.ParseClaude(bytes.NewReader(contents))
+	} else if !strings.Contains(err.Error(), "unexpected end of JSON input") {
+		return nil, err
+	}
+	return transcript.ParseClaude(bytes.NewReader(complete))
 }
 
 func claudeFiles(root string) ([]string, error) {
