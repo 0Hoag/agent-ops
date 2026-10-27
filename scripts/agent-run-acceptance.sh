@@ -56,10 +56,11 @@ export AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_MODEL_PRICES='{"gpt-accept":{"input_pe
 "$BIN" >"$TMP/api.log" 2>&1 & API_PID=$!
 for _ in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/readyz" >/dev/null || { cat "$TMP/api.log" >&2; die 'API not ready'; }
-docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -v ON_ERROR_STOP=1 -U agent_ops -d agent_ops -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref) VALUES ('$REPO','github','acceptance/one','ACCEPTANCE_SECRET'),('$REPO2','github','acceptance/two','ACCEPTANCE_SECRET')" >/dev/null
+docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -v ON_ERROR_STOP=1 -U agent_ops -d agent_ops -c "INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref) VALUES ('$REPO','github','acceptance/one','ACCEPTANCE_SECRET'),('$REPO2','github','acceptance/two','ACCEPTANCE_SECRET') ON CONFLICT (id) DO NOTHING" >/dev/null
 post() { curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -H "X-Agent-Run-Token: $TOKEN" "$API/api/v1/agent-runs" -d "$1"; }
 expect_code() { [[ "${1##*$'\n'}" == "$2" ]] || die "$3: expected HTTP $2"; }
 base() { printf '{"repository_id":"%s","wave":"%s","worker":"%s","model":"gpt-accept","issue_numbers":[%s],"pr_number":3191,"input_tokens":100,"cached_input_tokens":20,"cache_write_tokens":30,"output_tokens":40,"reasoning_tokens":50,"started_at":"2026-10-24T09:00:00Z","ended_at":"2026-10-24T09:05:00Z"}' "$1" "$2" "$3" "$4"; }
+identity_base() { printf '{"repository_id":"%s","wave":"W9D","worker":"identity","model":"gpt-accept","issue_numbers":[60],"input_tokens":%s,"cached_input_tokens":2,"cache_write_tokens":3,"output_tokens":4,"reasoning_tokens":5,"started_at":"2026-10-24T10:00:00Z","ended_at":"2026-10-24T10:05:00Z","harness":"%s","session_id":"%s"}' "$1" "$2" "$3" "$4"; }
 one=$(post "$(base "$REPO" W3G wire '191,192')"); expect_code "$one" 201 'authenticated POST'; id1=$(jq -r .data.id <<<"${one%$'\n'*}")
 two=$(post "$(base "$REPO" W3G-distractor wave '191')"); expect_code "$two" 201 'wave distractor POST'; id2=$(jq -r .data.id <<<"${two%$'\n'*}")
 three=$(post "$(base "$REPO2" W3G repo '191')"); expect_code "$three" 201 'repository distractor POST'; id3=$(jq -r .data.id <<<"${three%$'\n'*}")
@@ -67,6 +68,23 @@ four=$(post "$(base "$REPO" W3G issue '999')"); expect_code "$four" 201 'issue d
 negative_body='{"repository_id":"'"$REPO"'","wave":"W3G","worker":"bad","model":"gpt-accept","issue_numbers":[191],"pr_number":3191,"input_tokens":-1,"cached_input_tokens":0,"cache_write_tokens":0,"output_tokens":0,"reasoning_tokens":0,"started_at":"2026-10-24T09:00:00Z","ended_at":"2026-10-24T09:05:00Z"}'
 negative=$(post "$negative_body"); [[ "${negative##*$'\n'}" == 400 ]] || die 'negative token validation: expected HTTP 400'
 unauthorized=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' "$API/api/v1/agent-runs" -d "$(base "$REPO" W3G bad '191')"); expect_code "$unauthorized" 401 'missing authentication'
+identity=$(post "$(identity_base "$REPO" 111 codex session-1)"); expect_code "$identity" 201 'identity initial POST'
+identity_id=$(jq -r .data.id <<<"${identity%$'\n'*}")
+duplicate=$(post "$(identity_base "$REPO" 111 codex session-1)"); expect_code "$duplicate" 201 'identity duplicate POST'
+growth=$(post "$(identity_base "$REPO" 222 codex session-1)"); expect_code "$growth" 201 'identity cumulative update'
+isolated=$(post "$(identity_base "$REPO" 333 opencode session-1)"); expect_code "$isolated" 201 'harness isolation POST'
+for _ in 1 2 3 4; do (post "$(identity_base "$REPO" 444 claude session-concurrent)" >/dev/null) & done
+wait
+identity_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), min(input_tokens), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-1' AND harness='codex'")
+[[ "$identity_snapshot" == '1|222|222' ]] || die "IDENTITY UPSERT ASSERTION: expected one cumulative codex row at 222 tokens got $identity_snapshot"
+concurrent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-concurrent' AND harness='claude'")
+[[ "$concurrent_snapshot" == '1|444' ]] || die "CONCURRENT UPSERT ASSERTION: expected one claude row at 444 tokens got $concurrent_snapshot"
+kill "$API_PID"; wait "$API_PID" 2>/dev/null || true; API_PID=
+"$BIN" >"$TMP/api-restart.log" 2>&1 & API_PID=$!
+for _ in $(seq 1 60); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
+curl -fsS "$API/readyz" >/dev/null || { cat "$TMP/api-restart.log" >&2; die 'API restart not ready'; }
+persistent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), input_tokens FROM agent_runs WHERE id='$identity_id'")
+[[ "$persistent_snapshot" == '1|222' ]] || die "PERSISTENCE ASSERTION: expected restarted row 1|222 got $persistent_snapshot"
 row=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT repository_id,wave,worker,model,issue_numbers::text,pr_number,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at AT TIME ZONE 'UTC',ended_at AT TIME ZONE 'UTC' FROM agent_runs WHERE id='$id1'")
 expected_row="$REPO|W3G|wire|gpt-accept|[191, 192]|3191|100|20|30|40|50|2026-10-24 09:00:00|2026-10-24 09:05:00"
 if [[ ${AGENT_RUN_ACCEPTANCE_CORRUPT_TIMESTAMP:-0} == 1 ]]; then

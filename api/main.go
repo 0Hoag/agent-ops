@@ -126,11 +126,15 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 			prices[model] = p
 		}
 	}
-	configuredRepositories := make([]string, 0, len(cfg.Repositories))
-	for _, repository := range cfg.Repositories {
-		configuredRepositories = append(configuredRepositories, repository.FullName)
+	var configuredRepositories []string
+	if len(cfg.Repositories) > 0 {
+		configuredRepositories = make([]string, 0, len(cfg.Repositories))
+		for _, repository := range cfg.Repositories {
+			configuredRepositories = append(configuredRepositories, repository.FullName)
+		}
 	}
-	agentrun.NewRoutes(agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)).Register(private)
+	// Agent ingestion uses its dedicated machine token; it must not require an interactive user session.
+	agentrun.NewRoutes(agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)).Register(router.Group("/api/v1"))
 	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
 	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))
 }

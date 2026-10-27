@@ -42,8 +42,14 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 	return nil
 }
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "push" {
-		fail("usage: agentops push --harness codex|opencode|claude <file>")
+	if err := run(os.Args[1:]); err != nil {
+		fail(err.Error())
+	}
+}
+
+func run(args []string) error {
+	if len(args) < 1 || args[0] != "push" {
+		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file>")
 	}
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -52,31 +58,31 @@ func main() {
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
-	if err := fs.Parse(os.Args[2:]); err != nil {
-		fail("invalid push flags")
+	if err := fs.Parse(args[1:]); err != nil {
+		return fmt.Errorf("invalid push flags")
 	}
 	if fs.NArg() != 1 {
-		fail("exactly one transcript file is required")
+		return fmt.Errorf("exactly one transcript file is required")
 	}
 	if *harness != "codex" && *harness != "opencode" && *harness != "claude" {
-		fail("--harness must be codex, opencode, or claude")
+		return fmt.Errorf("--harness must be codex, opencode, or claude")
 	}
 	token := os.Getenv("AGENT_RUN_TOKEN")
 	if token == "" {
-		fail("AGENT_RUN_TOKEN is required")
+		return fmt.Errorf("AGENT_RUN_TOKEN is required")
 	}
 	if *repository == "" {
-		fail("--repository-id or AGENT_RUN_REPOSITORY_ID is required")
+		return fmt.Errorf("--repository-id or AGENT_RUN_REPOSITORY_ID is required")
 	}
 	if *wave == "" {
-		fail("--wave is required")
+		return fmt.Errorf("--wave is required")
 	}
 	if *worker == "" {
-		fail("--worker is required")
+		return fmt.Errorf("--worker is required")
 	}
 	f, err := os.Open(filepath.Clean(fs.Arg(0)))
 	if err != nil {
-		fail("open transcript: " + err.Error())
+		return fmt.Errorf("open transcript: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	var sessions []transcript.Session
@@ -89,17 +95,18 @@ func main() {
 		sessions, err = transcript.ParseClaude(f)
 	}
 	if err != nil {
-		fail("parse transcript: " + err.Error())
+		return fmt.Errorf("parse transcript: %w", err)
 	}
 	if len(sessions) == 0 {
-		fail("transcript contains no usable sessions")
+		return fmt.Errorf("transcript contains no usable sessions")
 	}
 	s := submitter{*endpoint, token, *repository, *wave, *worker, *harness, http.DefaultClient}
 	for _, session := range sessions {
 		if err := s.submit(context.Background(), session); err != nil {
-			fail(err.Error())
+			return err
 		}
 	}
+	return nil
 }
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
