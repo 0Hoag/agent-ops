@@ -17,21 +17,21 @@ s = p.read_text()
 s = s.replace('agent_ops_postgres:', f'{sys.argv[2]}_postgres:')
 p.write_text(s)
 PY
-python3 - "$CONTROL/api/cmd/agentops/main.go" <<'PY'
+python3 - "$CONTROL/api/cmd/agentops/watch.go" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 s = p.read_text()
-old = '"session_id": session.ID'
-new = '"session_id": session.ID + "-changed"'
-assert s.count(old) == 1, 'control: expected exactly one submitted session identity'
+old = 'if old.Sessions[session.ID] == digest {'
+new = 'if old.Sessions[session.ID] == digest { session.InputTokens = 10;'
+assert s.count(old) == 1, 'control: expected exactly one session submission call'
 p.write_text(s.replace(old, new))
 PY
-printf 'watch-control: compiling disposable session identity regression\n'
+printf 'watch-control: compiling disposable cumulative-input regression\n'
 (cd "$CONTROL/api" && go build -o "$CONTROL/agentops" ./cmd/agentops)
-printf 'watch-control: running identical acceptance inputs; expected exactly-one SQL assertion failure\n'
+printf 'watch-control: running identical acceptance inputs; expected appended cumulative SQL assertion failure\n'
 set +e
-AGENT_WATCH_BIN_OVERRIDE="$CONTROL/agentops" AGENT_WATCH_PROJECT="$PROJECT" AGENT_WATCH_API_PORT="$API_PORT" AGENT_WATCH_PG_PORT="$PG_PORT" AGENT_WATCH_REPOSITORY_ID="a9000000-0000-4000-8000-000000000002" AGENT_WATCH_SESSION_ID=synthetic-session-changed AGENT_WATCH_ARTIFACT_DIR="${AGENT_WATCH_ARTIFACT_DIR:?set artifact dir}" bash "$ROOT/scripts/agent-watch-acceptance.sh" >"$CONTROL/control.log" 2>&1
+AGENT_WATCH_BIN_OVERRIDE="$CONTROL/agentops" AGENT_WATCH_PROJECT="$PROJECT" AGENT_WATCH_API_PORT="$API_PORT" AGENT_WATCH_PG_PORT="$PG_PORT" AGENT_WATCH_ARTIFACT_DIR="${AGENT_WATCH_ARTIFACT_DIR:?set artifact dir}" bash "$ROOT/scripts/agent-watch-acceptance.sh" >"$CONTROL/control.log" 2>&1
 status=$?
 set -e
 cat "$CONTROL/control.log"
@@ -40,7 +40,9 @@ if ! python3 - "$CONTROL/control.log" <<'PY'
 from pathlib import Path
 import sys
 s = Path(sys.argv[1]).read_text()
-assert 'completed expected 1|32|32|6|6|11|11|8|8|0|0 got 2|' in s, 'control: missing intended exactly-one cumulative SQL diagnostic'
-print('watch-control: PASS intended duplicate cumulative SQL diagnostic observed')
+assert 'initial SQL=1|10|10|2|2|4|4|3|3|0|0' in s, 'control: initial submission did not pass'
+assert 'appended expected 1|25|25|5|5|9|9|7|7|0|0 got 1|10|10|5|5|9|9|7|7|0|0' in s, 'control: missing intended cumulative SQL diagnostic'
+assert 'cleanup PASS: owned PIDs, listeners, containers, volumes absent' in s, 'control: owned cleanup did not pass'
+print('watch-control: PASS intended cumulative-input regression and owned cleanup observed')
 PY
 then exit 1; fi
