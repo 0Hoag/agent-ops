@@ -35,7 +35,7 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 	if err != nil {
 		return fmt.Errorf("submit session %q: %w", session.ID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("submit session %q: HTTP %s", session.ID, resp.Status)
 	}
@@ -78,7 +78,7 @@ func main() {
 	if err != nil {
 		fail("open transcript: " + err.Error())
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var sessions []transcript.Session
 	switch *harness {
 	case "codex":
