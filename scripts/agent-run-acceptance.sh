@@ -38,7 +38,12 @@ cleanup() {
   else
     log "cleanup verified: no owned containers or volumes ($PROJECT)"
   fi
-  [[ -z "$TMP" ]] || rm -rf "$TMP" || { log 'cleanup FAILED: temporary directory'; status=1; }
+  if [[ -n "$TMP" ]]; then
+    find "$TMP" -type d -exec chmod u+rwx {} + 2>/dev/null || true
+    find "$TMP" -type f -exec chmod u+w {} + -delete 2>/dev/null || true
+    find "$TMP" -depth -type d -delete 2>/dev/null || true
+    [[ ! -e "$TMP" ]] || { log 'cleanup FAILED: temporary directory'; status=1; }
+  fi
   if [[ ${AGENT_RUN_ACCEPTANCE_INJECT_CLEANUP_FAILURE:-0} == 1 && ${AGENT_RUN_ACCEPTANCE_DISABLE_CLEANUP_INJECTION:-0} != 1 ]]; then log 'cleanup FAILED: injected cleanup failure'; status=1; fi
   if [[ ${AGENT_RUN_ACCEPTANCE_EXTRA_CLEANUP_FAILURE:-0} == 1 ]]; then log 'cleanup FAILED: injected additional cleanup failure'; status=1; fi
   exit "$status"
@@ -49,8 +54,14 @@ trap 'exit 143' TERM
 [[ "$PG_PORT" != 5432 ]] || die 'refusing PostgreSQL host port 5432'
 [[ -z "$(lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null || true)" ]] || die "API port $API_PORT busy"
 [[ -z "$(lsof -nP -iTCP:"$PG_PORT" -sTCP:LISTEN 2>/dev/null || true)" ]] || die "PostgreSQL port $PG_PORT busy"
-TMP=$(mktemp -d); BIN="$TMP/api"
-(cd "$ROOT/api" && GOCACHE="$TMP/go-cache" go build -o "$BIN" .)
+TMP=$(mktemp -d); BIN="$TMP/api"; CLI="$TMP/agentops"
+BUILD_ROOT="$ROOT/api"
+if [[ ${AGENT_RUN_ACCEPTANCE_IDENTITY_CONTROL:-0} == 1 ]]; then
+  BUILD_ROOT="$TMP/api-control"
+  cp -R "$ROOT/api" "$BUILD_ROOT"
+  perl -0pi -e 's/DoUpdates: clause\.AssignmentColumns\(\[\]string\{[^}]*\}\)/DoNothing: true/' "$BUILD_ROOT/modules/agentrun/repository.go"
+fi
+(cd "$BUILD_ROOT" && GOPATH="$TMP/go-path" GOMODCACHE="$TMP/go-mod-cache" GOCACHE="$TMP/go-cache" go build -o "$BIN" . && GOPATH="$TMP/go-path" GOMODCACHE="$TMP/go-mod-cache" GOCACHE="$TMP/go-cache" go build -o "$CLI" ./cmd/agentops)
 POSTGRES_HOST_PORT="$PG_PORT" POSTGRES_PUBLISH=127.0.0.1 docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" up -d postgres >/dev/null
 postgres_ready=0
 for _ in $(seq 1 60); do
@@ -71,7 +82,6 @@ docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql
 post() { curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -H "X-Agent-Run-Token: $TOKEN" "$API/api/v1/agent-runs" -d "$1"; }
 expect_code() { [[ "${1##*$'\n'}" == "$2" ]] || die "$3: expected HTTP $2"; }
 base() { printf '{"repository_id":"%s","wave":"%s","worker":"%s","model":"gpt-accept","issue_numbers":[%s],"pr_number":3191,"input_tokens":100,"cached_input_tokens":20,"cache_write_tokens":30,"output_tokens":40,"reasoning_tokens":50,"started_at":"2026-10-24T09:00:00Z","ended_at":"2026-10-24T09:05:00Z"}' "$1" "$2" "$3" "$4"; }
-identity_base() { printf '{"repository_id":"%s","wave":"W9D","worker":"identity","model":"gpt-accept","issue_numbers":[60],"input_tokens":%s,"cached_input_tokens":2,"cache_write_tokens":3,"output_tokens":4,"reasoning_tokens":5,"started_at":"2026-10-24T10:00:00Z","ended_at":"2026-10-24T10:05:00Z","harness":"%s","session_id":"%s"}' "$1" "$2" "$3" "$4"; }
 one=$(post "$(base "$REPO" W3G wire '191,192')"); expect_code "$one" 201 'authenticated POST'; id1=$(jq -r .data.id <<<"${one%$'\n'*}")
 two=$(post "$(base "$REPO" W3G-distractor wave '191')"); expect_code "$two" 201 'wave distractor POST'; id2=$(jq -r .data.id <<<"${two%$'\n'*}")
 three=$(post "$(base "$REPO2" W3G repo '191')"); expect_code "$three" 201 'repository distractor POST'; id3=$(jq -r .data.id <<<"${three%$'\n'*}")
@@ -79,20 +89,49 @@ four=$(post "$(base "$REPO" W3G issue '999')"); expect_code "$four" 201 'issue d
 negative_body='{"repository_id":"'"$REPO"'","wave":"W3G","worker":"bad","model":"gpt-accept","issue_numbers":[191],"pr_number":3191,"input_tokens":-1,"cached_input_tokens":0,"cache_write_tokens":0,"output_tokens":0,"reasoning_tokens":0,"started_at":"2026-10-24T09:00:00Z","ended_at":"2026-10-24T09:05:00Z"}'
 negative=$(post "$negative_body"); [[ "${negative##*$'\n'}" == 400 ]] || die 'negative token validation: expected HTTP 400'
 unauthorized=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' "$API/api/v1/agent-runs" -d "$(base "$REPO" W3G bad '191')"); expect_code "$unauthorized" 401 'missing authentication'
-identity=$(post "$(identity_base "$REPO" 111 codex session-1)"); expect_code "$identity" 201 'identity initial POST'
-identity_id=$(jq -r .data.id <<<"${identity%$'\n'*}")
-duplicate=$(post "$(identity_base "$REPO" 111 codex session-1)"); expect_code "$duplicate" 201 'identity duplicate POST'
-growth=$(post "$(identity_base "$REPO" 222 codex session-1)"); expect_code "$growth" 201 'identity cumulative update'
-isolated=$(post "$(identity_base "$REPO" 333 opencode session-1)"); expect_code "$isolated" 201 'harness isolation POST'
+cat >"$TMP/codex-initial.jsonl" <<'EOF'
+{"type":"thread.started","thread_id":"session-1"}
+{"type":"turn.completed","model":"gpt-accept","timestamp":"2026-10-24T10:00:00Z","usage":{"input_tokens":111,"cached_input_tokens":2,"cache_write_input_tokens":3,"output_tokens":4,"reasoning_output_tokens":5}}
+EOF
+cat >"$TMP/codex-growth.jsonl" <<'EOF'
+{"type":"thread.started","thread_id":"session-1"}
+{"type":"turn.completed","model":"gpt-accept","timestamp":"2026-10-24T10:00:00Z","usage":{"input_tokens":222,"cached_input_tokens":2,"cache_write_input_tokens":3,"output_tokens":4,"reasoning_output_tokens":5}}
+EOF
+cat >"$TMP/opencode-same-session.jsonl" <<'EOF'
+{"type":"step_finish","timestamp":1792836000000,"sessionID":"session-1","part":{"tokens":{"input":333,"output":4,"reasoning":5,"cache":{"read":2,"write":3}}}}
+EOF
+cat >"$TMP/claude-concurrent.jsonl" <<'EOF'
+{"type":"assistant","uuid":"session-1-message","sessionId":"session-concurrent","timestamp":"2026-10-24T10:00:00Z","message":{"model":"claude","usage":{"input_tokens":444,"output_tokens":4,"reasoning_tokens":5,"cache_read_input_tokens":2,"cache_creation_input_tokens":3}}}
+EOF
+push_cli() {
+  AGENT_RUN_TOKEN="$TOKEN" AGENT_RUN_API_URL="$API/api/v1/agent-runs" AGENT_RUN_REPOSITORY_ID="$1" \
+    "$CLI" push --harness "$2" --model gpt-accept --wave W9D --worker identity "$3" || { cat "$TMP/api.log" >&2; return 1; }
+}
+push_cli "$REPO" codex "$TMP/codex-initial.jsonl"
+identity_id=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT id FROM agent_runs WHERE repository_id='$REPO' AND harness='codex' AND session_id='session-1'")
+[[ -n "$identity_id" ]] || die 'CLI identity initial submission did not persist a row'
+push_cli "$REPO" codex "$TMP/codex-initial.jsonl"
+push_cli "$REPO" codex "$TMP/codex-growth.jsonl"
+push_cli "$REPO" opencode "$TMP/opencode-same-session.jsonl"
+push_cli "$REPO2" codex "$TMP/codex-growth.jsonl"
 concurrent_pids=()
 for _ in 1 2 3 4; do
-  (post "$(identity_base "$REPO" 444 claude session-concurrent)" >/dev/null) & concurrent_pids+=("$!")
+  (push_cli "$REPO" claude "$TMP/claude-concurrent.jsonl" >/dev/null) & concurrent_pids+=("$!")
 done
 for pid in "${concurrent_pids[@]}"; do wait "$pid" || die "concurrent duplicate request $pid failed"; done
-identity_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), min(input_tokens), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-1' AND harness='codex'")
-[[ "$identity_snapshot" == '1|222|222' ]] || die "IDENTITY UPSERT ASSERTION: expected one cumulative codex row at 222 tokens got $identity_snapshot"
-concurrent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), max(input_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-concurrent' AND harness='claude'")
-[[ "$concurrent_snapshot" == '1|444' ]] || die "CONCURRENT UPSERT ASSERTION: expected one claude row at 444 tokens got $concurrent_snapshot"
+identity_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), min(input_tokens), max(input_tokens), min(cached_input_tokens), max(cached_input_tokens), min(cache_write_tokens), max(cache_write_tokens), min(output_tokens), max(output_tokens), min(reasoning_tokens), max(reasoning_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-1' AND harness='codex'")
+if [[ ${AGENT_RUN_ACCEPTANCE_IDENTITY_CONTROL:-0} == 1 && "$identity_snapshot" != '1|222|222|2|2|3|3|4|4|5|5' ]]; then
+  log "IDENTITY CONTROL FAILED AS INTENDED: disabling production upsert produced $identity_snapshot"
+  exit 0
+fi
+[[ "$identity_snapshot" == '1|222|222|2|2|3|3|4|4|5|5' ]] || die "IDENTITY UPSERT ASSERTION: expected one cumulative codex row with exact counters got $identity_snapshot"
+identity_dimensions=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT repository_id::text,harness,session_id,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens FROM agent_runs WHERE session_id='session-1' ORDER BY repository_id,harness")
+expected_dimensions="$REPO|codex|session-1|222|2|3|4|5
+$REPO|opencode|session-1|333|2|3|4|5
+$REPO2|codex|session-1|222|2|3|4|5"
+[[ "$identity_dimensions" == "$expected_dimensions" ]] || die "IDENTITY DIMENSION ASSERTION: expected repository/harness separation got $identity_dimensions"
+concurrent_snapshot=$(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" exec -T postgres psql -At -U agent_ops -d agent_ops -c "SELECT count(*), max(input_tokens), max(cached_input_tokens), max(cache_write_tokens), max(output_tokens), max(reasoning_tokens) FROM agent_runs WHERE repository_id='$REPO' AND session_id='session-concurrent' AND harness='claude'")
+[[ "$concurrent_snapshot" == '1|444|2|3|4|5' ]] || die "CONCURRENT UPSERT ASSERTION: expected one claude row with exact counters got $concurrent_snapshot"
 kill "$API_PID"; wait "$API_PID" 2>/dev/null || true; API_PID=
 "$BIN" >"$TMP/api-restart.log" 2>&1 & API_PID=$!
 api_ready=0
