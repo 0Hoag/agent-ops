@@ -1219,6 +1219,9 @@ const docTemplate = `{
                 "ended_at": {
                     "type": "string"
                 },
+                "harness": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1244,6 +1247,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "repository_id": {
+                    "type": "string"
+                },
+                "session_id": {
                     "type": "string"
                 },
                 "started_at": {
@@ -1329,6 +1335,9 @@ const docTemplate = `{
                 "ended_at": {
                     "type": "string"
                 },
+                "harness": {
+                    "type": "string"
+                },
                 "input_tokens": {
                     "type": "integer"
                 },
@@ -1351,6 +1360,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "repository_id": {
+                    "type": "string"
+                },
+                "session_id": {
                     "type": "string"
                 },
                 "started_at": {

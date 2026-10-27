@@ -24,4 +24,6 @@ type AgentRun struct {
 	EndedAt           time.Time   `json:"ended_at"`
 	CreatedAt         time.Time   `json:"created_at"`
 	UpdatedAt         time.Time   `json:"updated_at"`
+	Harness           *string     `json:"harness,omitempty"`
+	SessionID         *string     `json:"session_id,omitempty"`
 }

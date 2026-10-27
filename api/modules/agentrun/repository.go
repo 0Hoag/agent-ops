@@ -6,13 +6,18 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Repository struct{ db *gorm.DB }
 
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
-	if err := r.db.WithContext(ctx).Create(run).Error; err != nil {
+	q := r.db.WithContext(ctx)
+	if run.Harness != nil && run.SessionID != nil && *run.Harness != "" && *run.SessionID != "" {
+		q = q.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "harness"}, {Name: "session_id"}}, DoUpdates: clause.AssignmentColumns([]string{"wave", "worker", "model", "issue_numbers", "pr_number", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "updated_at"})})
+	}
+	if err := q.Create(run).Error; err != nil {
 		return fmt.Errorf("create agent run: %w", err)
 	}
 	return nil

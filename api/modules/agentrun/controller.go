@@ -87,6 +87,9 @@ func (c *Controller) Create(ctx *gin.Context) {
 		return
 	}
 	run := AgentRun{ID: store.NewUUID(), RepositoryID: store.UUID(in.RepositoryID), Wave: in.Wave, Worker: in.Worker, Model: in.Model, IssueNumbers: b, PRNumber: in.PRNumber, InputTokens: in.InputTokens, CachedInputTokens: in.CachedInputTokens, CacheWriteTokens: in.CacheWriteTokens, OutputTokens: in.OutputTokens, ReasoningTokens: in.ReasoningTokens, StartedAt: in.StartedAt, EndedAt: in.EndedAt}
+	if in.Harness != "" || in.SessionID != "" {
+		run.Harness, run.SessionID = &in.Harness, &in.SessionID
+	}
 	if err := c.repository.Create(ctx.Request.Context(), &run); err != nil {
 		response.Error(ctx, 500, "failed to create agent run")
 		return

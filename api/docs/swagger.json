@@ -1213,6 +1213,9 @@
                 "ended_at": {
                     "type": "string"
                 },
+                "harness": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -1238,6 +1241,9 @@
                     "type": "integer"
                 },
                 "repository_id": {
+                    "type": "string"
+                },
+                "session_id": {
                     "type": "string"
                 },
                 "started_at": {
@@ -1323,6 +1329,9 @@
                 "ended_at": {
                     "type": "string"
                 },
+                "harness": {
+                    "type": "string"
+                },
                 "input_tokens": {
                     "type": "integer"
                 },
@@ -1345,6 +1354,9 @@
                     "type": "integer"
                 },
                 "repository_id": {
+                    "type": "string"
+                },
+                "session_id": {
                     "type": "string"
                 },
                 "started_at": {
