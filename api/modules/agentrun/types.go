@@ -16,6 +16,8 @@ type CreateInput struct {
 	ReasoningTokens   int64     `json:"reasoning_tokens"`
 	StartedAt         time.Time `json:"started_at" binding:"required"`
 	EndedAt           time.Time `json:"ended_at" binding:"required"`
+	Harness           string    `json:"harness,omitempty"`
+	SessionID         string    `json:"session_id,omitempty"`
 }
 
 type Filter struct {

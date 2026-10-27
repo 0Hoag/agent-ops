@@ -21,9 +21,10 @@ type fakeRepository struct {
 	aggregateFilter Filter
 	aggregatePrices map[string]Price
 	configured      bool
+	err             error
 }
 
-func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return nil }
+func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return f.err }
 func (f *fakeRepository) IsConfiguredRepository(_ context.Context, _ string, _ []string) (bool, error) {
 	if !f.configured {
 		return true, nil
@@ -46,12 +47,48 @@ func TestCreateRejectsRepositoryOutsideConfiguredMachineSet(t *testing.T) {
 }
 func (f *fakeRepository) List(_ context.Context, filter Filter) ([]AgentRun, error) {
 	f.listFilter = filter
-	return f.list, nil
+	return f.list, f.err
 }
 func (f *fakeRepository) Aggregate(_ context.Context, filter Filter, prices map[string]Price) ([]Aggregate, error) {
 	f.aggregateFilter = filter
 	f.aggregatePrices = prices
-	return f.aggregates, nil
+	return f.aggregates, f.err
+}
+
+func TestControllerReturnsHTTPErrorsAndRejectsInvalidIssueFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Run("create database error", func(t *testing.T) {
+		repo := &fakeRepository{err: context.Canceled}
+		r := gin.New()
+		r.POST("/", NewController(repo, "secret", nil).Create)
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"repository_id":"7e57d004-2b97-0e7a-b45f-5387367791cd","wave":"w","worker":"worker","model":"m","started_at":"2026-01-01T00:00:00Z","ended_at":"2026-01-01T00:00:01Z"}`))
+		req.Header.Set("X-Agent-Run-Token", "secret")
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, req)
+		require.Equal(t, http.StatusInternalServerError, res.Code)
+	})
+	t.Run("list invalid issue", func(t *testing.T) {
+		r := gin.New()
+		r.GET("/", NewController(&fakeRepository{}, "", nil).List)
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/?issue_number=0", nil))
+		require.Equal(t, http.StatusBadRequest, res.Code)
+	})
+	t.Run("list and aggregate database errors", func(t *testing.T) {
+		for _, path := range []string{"/", "/aggregate"} {
+			r := gin.New()
+			repo := &fakeRepository{err: context.Canceled}
+			c := NewController(repo, "", nil)
+			if path == "/" {
+				r.GET(path, c.List)
+			} else {
+				r.GET(path, c.Aggregate)
+			}
+			res := httptest.NewRecorder()
+			r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path, nil))
+			require.Equal(t, http.StatusInternalServerError, res.Code, path)
+		}
+	})
 }
 
 func TestAggregateReturnsResultsAndForwardsFilters(t *testing.T) {

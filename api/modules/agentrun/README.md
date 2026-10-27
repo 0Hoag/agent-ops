@@ -2,6 +2,16 @@
 
 `POST /api/v1/agent-runs` accepts normalized token usage and requires `X-Agent-Run-Token`, configured by `AGENT_RUN_TOKEN`. The API binds this machine-authenticated write to the persisted repository whose `full_name` is present in `SCM_REPOSITORIES_JSON`; the request body cannot select an arbitrary tenant repository. All token fields are non-negative; `ended_at` cannot precede `started_at`.
 
+`harness` and `session_id` are optional identity fields for new producers. When both are present,
+the database enforces one row per `(repository_id, harness, session_id)` and retries atomically update
+the cumulative counters and metadata. Legacy producers that omit either field retain insert behavior.
+
+The `agentops push` CLI reads a Codex, OpenCode, or Claude JSONL transcript and submits normalized
+sessions. Example: `AGENT_RUN_TOKEN=... AGENT_RUN_REPOSITORY_ID=<uuid> agentops push --harness codex
+--wave W9d --worker agentops-push transcript.jsonl`. `AGENT_RUN_API_URL` overrides the default endpoint;
+`--endpoint`, `--repository-id`, `--wave`, and `--worker` are available as explicit flags. The CLI never
+prints the token or transcript contents and exits nonzero for invalid input or failed HTTP submission.
+
 `GET /api/v1/agent-runs` lists runs, optionally filtered by `repository_id`, `wave`, and `issue_number`. `GET /api/v1/agent-runs/aggregate` returns totals grouped by wave, worker, and each issue number (or a null issue for runs without issues). Both endpoints accept repository and wave filters.
 
 `AGENT_RUN_MODEL_PRICES` is JSON keyed by model. `input_per_million`, `cached_input_per_million`, `cache_write_per_million`, `output_per_million`, and `reasoning_per_million` are USD per one million tokens. Input counters are mutually exclusive normalized categories: cached input is not included in input tokens, and cache-write usage is distinct. Unconfigured model cost is `null` (unknown), not zero. Aggregate cost is unknown if any contributing run for that group has an unknown model price.
