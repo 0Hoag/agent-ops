@@ -48,7 +48,13 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) < 1 || args[0] != "push" {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: agentops push ... | watch ...")
+	}
+	if args[0] == "watch" {
+		return runWatch(args[1:])
+	}
+	if args[0] != "push" {
 		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file>")
 	}
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
