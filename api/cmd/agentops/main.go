@@ -60,6 +60,7 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	harness := fs.String("harness", "", "transcript harness: codex, opencode, or claude")
+	model := fs.String("model", os.Getenv("AGENT_RUN_MODEL"), "model metadata for transcripts without a source model (or AGENT_RUN_MODEL)")
 	endpoint := fs.String("endpoint", env("AGENT_RUN_API_URL", "http://127.0.0.1:8080/api/v1/agent-runs"), "agent-run API URL")
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
@@ -105,6 +106,15 @@ func run(args []string) error {
 	}
 	if len(sessions) == 0 {
 		return fmt.Errorf("transcript contains no usable sessions")
+	}
+	configuredModel := strings.TrimSpace(*model)
+	for i := range sessions {
+		if strings.TrimSpace(sessions[i].Model) == "" {
+			sessions[i].Model = configuredModel
+		}
+		if strings.TrimSpace(sessions[i].Model) == "" {
+			return fmt.Errorf("session %q has no model metadata; provide --model or AGENT_RUN_MODEL", sessions[i].ID)
+		}
 	}
 	s := submitter{*endpoint, token, *repository, *wave, *worker, *harness, http.DefaultClient}
 	for _, session := range sessions {
