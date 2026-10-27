@@ -87,6 +87,10 @@ test('renders both provider settings from the real API', async ({ page }) => {
 });
 
 test('creates lists edits and deletes both settings through real organization HTTP', async ({ page }) => {
+  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
+    test.skip();
+    return;
+  }
   const token = process.env.SESSION_TOKEN;
   const apiBase = process.env.APP_API_URL || process.env.SMOKE_API_URL;
   if (!token || !apiBase) throw new Error('disposable session and API URL are required');
