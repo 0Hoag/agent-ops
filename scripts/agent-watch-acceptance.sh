@@ -25,18 +25,18 @@ archive=${AGENT_WATCH_ARTIFACT_DIR:-}
 log() { printf 'watch-acceptance: %s\n' "$*"; }
 die() { log "FAIL: $*" >&2; exit 1; }
 cleanup() {
-  local status=$? p containers volumes
+  local status=$? cleanup_status=0 p containers volumes
   trap - EXIT INT TERM
   for p in "$WATCH_PID" "$API_PID"; do [[ -n "$p" ]] && { kill "$p" 2>/dev/null || true; wait "$p" 2>/dev/null || true; } || true; done
   for p in "$WATCH_PID" "$API_PID"; do [[ -z "$p" ]] || ! kill -0 "$p" 2>/dev/null || { log "cleanup FAIL: PID $p remains"; status=1; }; done
-  docker compose -p "$PROJECT" -f "$COMPOSE_ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null 2>&1 || status=1
-  for p in "$API_PORT" "$PG_PORT"; do lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && { log "cleanup FAIL: listener on $p"; status=1; } || true; done
+  docker compose -p "$PROJECT" -f "$COMPOSE_ROOT/docker-compose.yml" down --volumes --remove-orphans >/dev/null 2>&1 || { status=1; cleanup_status=1; }
+  for p in "$API_PORT" "$PG_PORT"; do lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && { log "cleanup FAIL: listener on $p"; status=1; cleanup_status=1; } || true; done
   containers=$(docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.ID}}' || true)
   volumes=$(docker volume ls --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Name}}' || true)
-  [[ -z "$containers$volumes" ]] || { log "cleanup FAIL: owned resources remain"; status=1; }
+  [[ -z "$containers$volumes" ]] || { log "cleanup FAIL: owned resources remain"; status=1; cleanup_status=1; }
   if [[ -n "$archive" ]]; then mkdir -p "$archive"; cp "$TMP"/*.log "$archive"/ 2>/dev/null || true; cp "$TMP"/*.status "$archive"/ 2>/dev/null || true; (( status == 0 )) || { printf 'fixture exit status: %s\n' "$status" > "$archive/fixture.status"; }; fi
   if [[ -d "$TMP" ]]; then python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); [x.unlink() if x.is_file() or x.is_symlink() else x.rmdir() for x in sorted(p.rglob("*"), key=lambda x: len(x.parts), reverse=True)]; p.rmdir()' "$TMP"; fi
-  (( status == 0 )) && log 'cleanup PASS: owned PIDs, listeners, containers, volumes absent'
+  (( cleanup_status == 0 )) && log 'cleanup PASS: owned PIDs, listeners, containers, volumes absent'
   exit "$status"
 }
 trap cleanup EXIT

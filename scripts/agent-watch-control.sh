@@ -22,8 +22,8 @@ from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 s = p.read_text()
-old = 'if old.Sessions[session.ID] == digest {'
-new = 'if old.Sessions[session.ID] == digest { session.Usage.Input = 10;'
+old = '\t\tif err := s.submit(ctx, session); err != nil {'
+new = '\t\tif _, previouslySeen := old.Sessions[session.ID]; previouslySeen { session.Usage.Input = 10 }\n' + old
 assert s.count(old) == 1, 'control: expected exactly one session submission call'
 p.write_text(s.replace(old, new))
 PY
