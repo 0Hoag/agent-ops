@@ -145,8 +145,21 @@ func TestRunSuppliesModelMetadataWithoutChangingSourceModel(t *testing.T) {
 	if payload["model"] != "openai/gpt-6-luna" || payload["session_id"] != "native" || payload["input_tokens"] != float64(22) || payload["cached_input_tokens"] != float64(6) || payload["output_tokens"] != float64(6) {
 		t.Fatalf("payload=%v", payload)
 	}
-	if payload["started_at"] != "2025-10-27T08:00:00+07:00" || payload["ended_at"] != "2025-10-27T08:01:00+07:00" {
-		t.Fatalf("timestamps=%v", payload)
+	started, err := time.Parse(time.RFC3339, payload["started_at"].(string))
+	if err != nil {
+		t.Fatalf("started_at=%v: %v", payload["started_at"], err)
+	}
+	ended, err := time.Parse(time.RFC3339, payload["ended_at"].(string))
+	if err != nil {
+		t.Fatalf("ended_at=%v: %v", payload["ended_at"], err)
+	}
+	wantStarted := time.Date(2025, 10, 27, 1, 0, 0, 0, time.UTC)
+	wantEnded := time.Date(2025, 10, 27, 1, 1, 0, 0, time.UTC)
+	if !started.Equal(wantStarted) || !ended.Equal(wantEnded) {
+		t.Fatalf("timestamps=%v/%v, want %v/%v", started, ended, wantStarted, wantEnded)
+	}
+	if _, err := time.LoadLocation("Asia/Ho_Chi_Minh"); err != nil {
+		t.Fatal(err)
 	}
 
 	claudePath := filepath.Join(root, "source.jsonl")
@@ -157,6 +170,48 @@ func TestRunSuppliesModelMetadataWithoutChangingSourceModel(t *testing.T) {
 	err = run([]string{"push", "--harness", "claude", "--model", "wrong-fallback", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9l", "--worker", "worker", claudePath})
 	if err != nil || payload["model"] != "claude-3-7-sonnet" {
 		t.Fatalf("source model err=%v payload=%v", err, payload)
+	}
+}
+
+func TestRunUsesEnvironmentModelFallbackAndPreservesCodexSourceModel(t *testing.T) {
+	root := t.TempDir()
+	opencodePath := filepath.Join(root, "opencode.jsonl")
+	if err := os.WriteFile(opencodePath, []byte(`{"type":"step_finish","timestamp":1761526800000,"sessionID":"native","part":{"tokens":{"input":1}}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	codexPath := filepath.Join(root, "codex.jsonl")
+	if err := os.WriteFile(codexPath, []byte(`{"type":"turn.completed","timestamp":"2026-10-27T00:00:00Z","session_id":"codex","model":"gpt-5-codex","usage":{"input_tokens":2}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var models []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		models = append(models, payload.Model)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	oldToken, oldModel := os.Getenv("AGENT_RUN_TOKEN"), os.Getenv("AGENT_RUN_MODEL")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken); _ = os.Setenv("AGENT_RUN_MODEL", oldModel) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	_ = os.Setenv("AGENT_RUN_MODEL", "openai/gpt-6-luna")
+	common := []string{"--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9l", "--worker", "worker"}
+	args := append([]string{"push", "--harness", "opencode"}, append(common, opencodePath)...)
+	if err := run(args); err != nil {
+		t.Fatal(err)
+	}
+	args = append([]string{"push", "--harness", "codex", "--model", "wrong-fallback"}, append(common, codexPath)...)
+	if err := run(args); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(models, ","), "openai/gpt-6-luna,gpt-5-codex"; got != want {
+		t.Fatalf("models=%q, want %q", got, want)
 	}
 }
 
