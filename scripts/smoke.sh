@@ -77,6 +77,11 @@ else
   git -C "$CLIENT" fetch origin main
   git -C "$CLIENT" merge --ff-only origin/main
 fi
+EXPECTED_CLIENT_SHA=${SMOKE_EXPECTED_CLIENT_SHA:-}
+if [[ -n "$EXPECTED_CLIENT_SHA" && "$(git -C "$CLIENT" rev-parse HEAD)" != "$EXPECTED_CLIENT_SHA" ]]; then
+  log "client SHA mismatch: expected $EXPECTED_CLIENT_SHA, got $(git -C "$CLIENT" rev-parse HEAD)"
+  exit 1
+fi
 log "client checkout $(git -C "$CLIENT" rev-parse HEAD)"
 if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | grep -q . || lsof -nP -iTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then
   log "smoke port already has a listener (API $API_PORT, client $CLIENT_PORT); set SMOKE_*_PORT to unused ports"
