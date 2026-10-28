@@ -129,6 +129,12 @@ INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organizat
 INSERT INTO issues (id,repository_id,number,title,state,status,labels) VALUES ('d0000000-0000-4000-8000-000000000002','d0000000-0000-4000-8000-000000000001',99001,'Smoke fixture: board serves real API data','open','review','["status:review"]');
 INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes) VALUES ('d0000000-0000-4000-8000-000000000003','d0000000-0000-4000-8000-000000000001',99002,'Smoke fixture: linked pull request','open','d000000000000000000000000000000000000000','smoke/real-data','[99001]');
 INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion) VALUES ('d0000000-0000-4000-8000-000000000004','d0000000-0000-4000-8000-000000000001','smoke-ci-99002',99002,'d000000000000000000000000000000000000000','completed','success');
+INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,cost_usd,started_at,ended_at,billing_type) VALUES
+('d0000000-0000-4000-8000-000000000021','d0000000-0000-4000-8000-000000000001','W10','smoke','acceptance-model','[]',1000000,0,0,0,0,1.25,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','api'),
+('d0000000-0000-4000-8000-000000000022','d0000000-0000-4000-8000-000000000001','W10','smoke','acceptance-subscription','[]',0,0,0,0,0,12.00,'2026-01-02T00:00:00Z','2026-01-02T00:01:00Z','subscription');
+INSERT INTO agent_run_prices (id,model,effective_date,input_per_million,cached_input_per_million,cache_write_per_million,output_per_million,reasoning_per_million) VALUES
+('d0000000-0000-4000-8000-000000000023','acceptance-model','2025-01-01',1.25,0,0,0,0),
+('d0000000-0000-4000-8000-000000000024','acceptance-subscription','2025-01-01',0,0,0,0,0);
 SQL
 
 # Exercise real account authentication and the supported organization-selection endpoint.
