@@ -173,12 +173,13 @@ run_spec() {
   printf 'EXECUTED_COUNT=%s count=%s\n' "$run" "$executed_count" | tee -a "$ARTIFACT_DIR/runs.txt"
   if [[ $expect_failure == yes ]]; then
     if [[ $result -eq 0 ]]; then
+      compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
       log "$run passed; historical expected-201/uniqueness regression is not reproducible with this identical-input runtime"
       return 2
     fi
     if grep -Fq 'Expected: 201' "$ARTIFACT_DIR/$run.log" && grep -Fq 'Received: 500' "$ARTIFACT_DIR/$run.log"; then
-      compose logs --no-color api >"$ARTIFACT_DIR/server.log" 2>&1
-      grep -Fq 'repositories_provider_full_name_key' "$ARTIFACT_DIR/server.log" || { log "server log lacks observed repositories_provider_full_name_key"; return 1; }
+      compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
+      grep -Fq 'repositories_provider_full_name_key' "$ARTIFACT_DIR/$run-server.log" || { log "server log lacks observed repositories_provider_full_name_key"; return 1; }
       log "EXPECTED OLD-IDENTITY CONTROL: browser expected-201 assertion observed HTTP 500; real server uniqueness diagnostic captured"
       return 0
     fi
@@ -194,7 +195,8 @@ run_spec "$TEMP/repaired.spec.ts" baseline no
 control_status=0
 reset_database
 run_spec "$TEMP/old.spec.ts" control yes || control_status=$?
-compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$ARTIFACT_DIR/persisted-identities.txt"
+compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$ARTIFACT_DIR/control-after-identities.txt"
+cp "$ARTIFACT_DIR/control-after-identities.txt" "$ARTIFACT_DIR/persisted-identities.txt"
 cp "$ARTIFACT_DIR/persisted-identities.txt" "$ARTIFACT_DIR/control-persisted-identities.sql-output.txt"
 if [[ $control_status -eq 2 ]]; then
   printf 'CONTROL=PASS (historical failure not reproduced)\n' >"$ARTIFACT_DIR/control-result.txt"
@@ -215,6 +217,6 @@ sed -n '98,115p' "$TEMP/old.spec.ts" >"$ARTIFACT_DIR/old-source-identities.txt"
 sed -n '98,115p' "$TEMP/repaired.spec.ts" >"$ARTIFACT_DIR/repaired-source-identities.txt"
 reset_database
 run_spec "$TEMP/repaired.spec.ts" restored no
-compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$TEMP/restored-identities.txt"
-[[ ! -s "$TEMP/restored-identities.txt" ]] || { log "restored run left unexpected repository identities"; exit 1; }
+compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$ARTIFACT_DIR/restored-after-identities.txt"
+[[ ! -s "$ARTIFACT_DIR/restored-after-identities.txt" ]] || { log "restored run left unexpected repository identities"; exit 1; }
 printf 'IDENTITY BASELINE PASSED\nOLD-IDENTITY CONTROL RESULT: %s\nIDENTITY RESTORATION PASSED\n' "$(<"$ARTIFACT_DIR/control-result.txt")" | tee "$ARTIFACT_DIR/result.txt"
