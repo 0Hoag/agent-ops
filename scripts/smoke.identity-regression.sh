@@ -132,9 +132,12 @@ run_spec() {
   printf 'RUN=%s loaded_spec=%s sha256=%s invocation=agent-ops-identity-fixed-%s\n' "$run" "$loaded" "$actual" "$API_PORT" | tee -a "$ARTIFACT_DIR/runs.txt"
   set +e
   local play_config=$TEMP/client/scripts/smoke.playwright.config.ts
-  printf '%s\n' "import { defineConfig } from 'playwright/test';" "export default defineConfig({ testDir: '.', testMatch: 'smoke.browser.spec.ts', reporter: 'line', outputDir: process.env.SMOKE_ARTIFACT_DIR || '.agent-runs/smoke', use: { baseURL: process.env.SMOKE_CLIENT_URL || 'http://127.0.0.1:4173', browserName: 'chromium' } });" >"$play_config"
+  local config_loaded_hash
+  config_loaded_hash=$(shasum -a 256 "$play_config" | awk '{print $1}')
+  printf 'RUN_CONFIG=%s loaded_config=%s sha256=%s\n' "$run" "$play_config" "$config_loaded_hash" | tee -a "$ARTIFACT_DIR/runs.txt"
+  [[ "$config_loaded_hash" == "$config_hash" ]] || { log "loaded config differs from recorded source"; return 1; }
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-before-identities.txt"
-  (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep='creates lists edits and deletes both settings through real organization HTTP' --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1
+  (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep='creates lists edits and deletes both settings through real organization HTTP|creates lists edits and deletes both settings through real organization API' --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1
   local result=$?
   set -e
   if [[ $expect_failure == yes && $result -eq 0 ]]; then
@@ -154,9 +157,10 @@ run_spec() {
   log "$run browser identity test passed"
 }
 
+reset_database
 run_spec "$TEMP/repaired.spec.ts" baseline no
-compose exec -T postgres pg_dump -U agent_ops -d agent_ops --no-owner --no-privileges >"$TEMP/baseline.sql"
 control_status=0
+reset_database
 run_spec "$TEMP/old.spec.ts" control yes || control_status=$?
 compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$ARTIFACT_DIR/persisted-identities.txt"
 if [[ $control_status -eq 2 ]]; then
