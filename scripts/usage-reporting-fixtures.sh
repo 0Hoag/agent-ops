@@ -91,6 +91,29 @@ if old not in s: raise SystemExit('production mutation target missing')
 p.write_text(s.replace(old, '"session_id": "mutated-session"', 1))
 PY
 (cd "$control_root/api" && go build -o "$tmp/agentops-mutated" ./cmd/agentops)
+credential_control_root="$tmp/credential-control"; mkdir -p "$credential_control_root/api/cmd/agentops"; cp -R "$root/api/." "$credential_control_root/api/"; python3 - "$credential_control_root/api/cmd/agentops/main.go" <<'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1]); s=p.read_text(); old='req.Header.Set("X-Agent-Run-Token", s.token)'
+if old not in s: raise SystemExit('credential mutation target missing')
+p.write_text(s.replace(old, 'req.Header.Set("X-Agent-Run-Token", "mutated-credential")', 1))
+PY
+(cd "$credential_control_root/api" && go build -o "$tmp/agentops-credential-mutated" ./cmd/agentops)
+credential_d="$tmp/launcher-codex"; : >"$tmp/observed.jsonl"; credential_control_rc=0
+(cd "$credential_d" && PATH="$credential_d/bin:$PATH" AGENTOPS_CLI="$tmp/agentops-credential-mutated" AGENT_RUN_API_URL="http://127.0.0.1:$observer_port" AGENT_RUN_TOKEN="$token" AGENT_RUN_REPOSITORY_ID="$repo" AGENT_RUN_ISSUES='[62,299]' bash scripts/launcher.sh W9b fixture-branch "$tmp/brief.md") >"$tmp/credential-control.stdout" 2>"$tmp/credential-control.stderr" || credential_control_rc=$?
+set +e
+python3 - "$tmp/observed.jsonl" >"$tmp/credential-assert.stdout" 2>"$tmp/credential-assert.stderr" <<'PY'
+import json,sys
+rows=[json.loads(line) for line in open(sys.argv[1])]
+if len(rows)!=1 or rows[0] != {'token_present':True,'token_matches':True}: raise SystemExit('launcher credential-header assertion failed')
+PY
+credential_assert_rc=$?
+set -e
+credential_control_diag=$(<"$tmp/credential-assert.stderr")
+[[ $credential_control_rc == 0 ]] || { echo "credential mutation launcher failed before header assertion (exit=$credential_control_rc)"; exit 1; }
+[[ $credential_assert_rc != 0 && "$credential_control_diag" == *'launcher credential-header assertion failed'* ]] || { echo "credential mutation control missed intended assertion (exit=$credential_assert_rc): $credential_control_diag"; exit 1; }
+[[ "$(sql codex)" == '1|100|40|7|20|5|gpt-fixture|[62, 299]' ]] || { echo "credential mutation unexpectedly changed SQL: $(sql codex)"; exit 1; }
+! grep -q 'fixture-secret\|mutated-credential' "$tmp/credential-control.stdout" "$tmp/credential-control.stderr" || { echo 'credential mutation leaked credential to output'; exit 1; }
+echo "disposable credential mutation failed ordinary assertion: $credential_control_diag; unchanged SQL; credentials absent from output"
 control="$tmp/launcher-codex/.agent-runs/W9b.jsonl"
 set +e
 AGENT_RUN_TOKEN="$token" "$tmp/agentops-mutated" push --harness codex --endpoint "http://127.0.0.1:$api_port/api/v1/agent-runs" --repository-id "$repo" --wave W9b --worker fixture --issue-numbers '[62,299]' "$control" >"$tmp/control.stdout" 2>"$tmp/control.stderr"
