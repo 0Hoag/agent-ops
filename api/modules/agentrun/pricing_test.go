@@ -21,3 +21,18 @@ func TestPriceCost(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) { require.InDelta(t, tt.want, priceCost(tt.run, price), 1e-12) })
 	}
 }
+
+func TestPriceCostHistoricalFixtures(t *testing.T) {
+	p := Price{InputPerMillion: 2, CachedInputPerMillion: 1, CacheWritePerMillion: 4, OutputPerMillion: 3, ReasoningPerMillion: 5}
+	for _, tc := range []struct {
+		name string
+		run  AgentRun
+		want float64
+	}{
+		{name: "cache heavy", run: AgentRun{InputTokens: 10, CachedInputTokens: 900, CacheWriteTokens: 20, OutputTokens: 10}, want: .00002 + .0009 + .00008 + .00003},
+		{name: "reasoning heavy", run: AgentRun{OutputTokens: 100, ReasoningTokens: 900}, want: .0003 + .0045},
+		{name: "zero tokens", run: AgentRun{}, want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) { require.InDelta(t, tc.want, priceCost(tc.run, p), 1e-12) })
+	}
+}
