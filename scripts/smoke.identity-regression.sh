@@ -168,6 +168,8 @@ run_spec() {
   compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
   cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
   cp "$ARTIFACT_DIR/$run.log" "$ARTIFACT_DIR/$run-execution.log"
+  grep -F 'Repository settings real API calls:' "$ARTIFACT_DIR/$run.log" >"$ARTIFACT_DIR/$run-api-calls.txt" || true
+  grep -F 'DELETE /api/v1/repositories/' "$ARTIFACT_DIR/$run-api-calls.txt" >"$ARTIFACT_DIR/$run-delete-responses.txt" || true
   local executed_count
   executed_count=$(awk '/Running [0-9]+ tests?/ { print $2; exit }' "$ARTIFACT_DIR/$run.log")
   if [[ "$executed_count" != 2 ]]; then
