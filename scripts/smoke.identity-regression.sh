@@ -162,6 +162,8 @@ run_spec() {
   local result=0
   (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep="$selection_pattern" --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1 || result=$?
   set -e
+  compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-after-identities.txt"
+  compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
   cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
   cp "$ARTIFACT_DIR/$run.log" "$ARTIFACT_DIR/$run-execution.log"
   local executed_count
@@ -173,12 +175,10 @@ run_spec() {
   printf 'EXECUTED_COUNT=%s count=%s\n' "$run" "$executed_count" | tee -a "$ARTIFACT_DIR/runs.txt"
   if [[ $expect_failure == yes ]]; then
     if [[ $result -eq 0 ]]; then
-      compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
       log "$run passed; historical expected-201/uniqueness regression is not reproducible with this identical-input runtime"
       return 2
     fi
     if grep -Fq 'Expected: 201' "$ARTIFACT_DIR/$run.log" && grep -Fq 'Received: 500' "$ARTIFACT_DIR/$run.log"; then
-      compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
       grep -Fq 'repositories_provider_full_name_key' "$ARTIFACT_DIR/$run-server.log" || { log "server log lacks observed repositories_provider_full_name_key"; return 1; }
       log "EXPECTED OLD-IDENTITY CONTROL: browser expected-201 assertion observed HTTP 500; real server uniqueness diagnostic captured"
       return 0
