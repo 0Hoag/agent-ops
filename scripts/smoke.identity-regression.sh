@@ -7,13 +7,13 @@ INVOCATION=agent-ops-smoke-identity-regression-fixed
 TEMP=$(mktemp -d "${TMPDIR:-/tmp}/smoke-identity.XXXXXX")
 ARTIFACT_DIR=${SMOKE_IDENTITY_ARTIFACT_DIR:-"$ROOT/.agent-runs/smoke-identity-regression"}
 mkdir -p "$ARTIFACT_DIR"
-trap 'rm -f "$TEMP/old.spec" "$TEMP/restored.log" "$TEMP/old.log" "$TEMP/restored-again.log"; rmdir "$TEMP"' EXIT
+trap 'rm -rf "$TEMP"' EXIT
 
 actual_hash=$(shasum -a 256 "$SPEC" | awk '{print $1}')
 [[ "$actual_hash" =~ ^[a-f0-9]{64}$ ]] || { printf 'invalid spec hash: %s\n' "$actual_hash" >&2; exit 1; }
 grep -Fq 'const githubName = `fixture/settings-api-github-${suffix}`;' "$SPEC"
 grep -Fq 'const githubName = `fixture/settings-github-${suffix}`;' "$SPEC"
-printf 'LOADED SPEC sha256=%s invocation=%s\n' "$actual_hash" "$INVOCATION"
+printf 'LOADED SPEC path=%s sha256=%s invocation=%s\n' "$SPEC" "$actual_hash" "$INVOCATION" | tee "$ARTIFACT_DIR/source.txt"
 
 # The fixed input produces both identities from the actual loaded spec. The
 # disposable control mutates only the second test's identity expression back
@@ -32,6 +32,8 @@ text = text.slice(0, secondTest) + second;
 fs.writeFileSync(output, text);
 NODE
 
-printf 'FIXTURE INCOMPLETE: source mutation is prepared at %s; a disposable real API/Postgres browser run is required to assert observed HTTP/SQL behavior.\n' "$TEMP/old.spec" >&2
+mutated_hash=$(shasum -a 256 "$TEMP/old.spec" | awk '{print $1}')
+printf 'DISPOSABLE OLD SPEC path=%s sha256=%s\n' "$TEMP/old.spec" "$mutated_hash" | tee -a "$ARTIFACT_DIR/source.txt"
+
+printf 'FIXTURE INCOMPLETE: source mutation is prepared at %s; no browser/API/Postgres execution occurred, so no observed HTTP or SQL evidence exists.\n' "$TEMP/old.spec" | tee -a "$ARTIFACT_DIR/source.txt" >&2
 exit 1
-printf 'Evidence artifacts: %s\n' "$ARTIFACT_DIR"
