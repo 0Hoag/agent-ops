@@ -49,8 +49,8 @@ test('renders both provider settings from the real API', async ({ page }) => {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const invocation = process.env.SMOKE_INVOCATION_ID || `default-${process.pid}`;
   const suffix = invocation.replace(/[^a-zA-Z0-9-]/g, '-');
-  const githubName = `fixture/settings-github-${suffix}`;
-  const gitlabName = `fixture/settings-gitlab-${suffix}`;
+  const githubName = `fixture/settings-api-github-${suffix}`;
+  const gitlabName = `fixture/settings-api-gitlab-${suffix}`;
   const create = async (provider: string, name: string, mappings: object, gitlabURL?: string) => {
     const response = await page.request.post(`${apiBase}/api/v1/repositories`, { headers, data: { provider, full_name: name, status_mappings: mappings, webhook_secret: `disposable-${provider}-webhook`, backfill_token: `disposable-${provider}-backfill`, ...(gitlabURL ? { gitlab_base_url: gitlabURL } : {}) } });
     expect(response.status(), await response.text()).toBe(201);
@@ -121,7 +121,7 @@ test('creates lists edits and deletes both settings through real organization HT
   expect(listed.status(), await listed.text()).toBe(200);
   const items = (await listed.json()).data;
   expect(items.map((item: { full_name: string }) => item.full_name)).toEqual(expect.arrayContaining([gitlabName, githubName]));
-  expect(items.find((item: { provider: string }) => item.provider === 'gitlab').gitlab_base_url).toBe('http://127.0.0.1:9/gitlab');
+  expect(items.find((item: { id: string }) => item.id === ids.gitlab).gitlab_base_url).toBe('http://127.0.0.1:9/gitlab');
   const update = await request('PATCH', `/api/v1/repositories/${ids.gitlab}`, { gitlab_base_url: 'http://127.0.0.1:9/gitlab-v2', status_mappings: { 'Status::Review': 'review' } });
   expect(update.status(), await update.text()).toBe(200);
   const githubUpdate = await request('PATCH', `/api/v1/repositories/${ids.github}`, { status_mappings: { 'status:review': 'review' } });
