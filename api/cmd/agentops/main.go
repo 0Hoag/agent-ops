@@ -16,11 +16,12 @@ import (
 
 type submitter struct {
 	endpoint, token, repository, wave, worker, harness string
+	issues                                             []int64
 	client                                             *http.Client
 }
 
 func (s submitter) submit(ctx context.Context, session transcript.Session) error {
-	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": []int64{}, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID}
+	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID}
 	b, err := json.Marshal(p)
 	if err != nil {
 		return err
@@ -65,6 +66,7 @@ func run(args []string) error {
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
+	issues := fs.String("issue-numbers", os.Getenv("AGENT_RUN_ISSUES"), "JSON issue-number array")
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("invalid push flags")
 	}
@@ -116,7 +118,13 @@ func run(args []string) error {
 			return fmt.Errorf("session %q has no model metadata; provide --model or AGENT_RUN_MODEL", sessions[i].ID)
 		}
 	}
-	s := submitter{*endpoint, token, *repository, *wave, *worker, *harness, http.DefaultClient}
+	var issueNumbers []int64
+	if strings.TrimSpace(*issues) != "" {
+		if err := json.Unmarshal([]byte(*issues), &issueNumbers); err != nil {
+			return fmt.Errorf("invalid issue-numbers JSON: %w", err)
+		}
+	}
+	s := submitter{*endpoint, token, *repository, *wave, *worker, *harness, issueNumbers, http.DefaultClient}
 	for _, session := range sessions {
 		if err := s.submit(context.Background(), session); err != nil {
 			return err
