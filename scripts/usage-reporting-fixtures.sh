@@ -110,7 +110,10 @@ wrong_token_rc=$?
 set -e
 [[ $wrong_token_rc != 0 ]] || { echo 'wrong credential unexpectedly accepted'; exit 1; }
 ! grep -q 'wrong-fixture-secret' "$tmp/wrong-token.stdout" "$tmp/wrong-token.stderr" || { echo 'wrong credential leaked to CLI output'; exit 1; }
-echo "wrong-token control rejected (exit=$wrong_token_rc); credential absent from stdout/stderr"
+wrong_status=$(curl -sS -o "$tmp/wrong-http.body" -w '%{http_code}' -X POST "http://127.0.0.1:$api_port/api/v1/agent-runs" -H 'Content-Type: application/json' -H 'X-Agent-Run-Token: wrong-fixture-secret' --data '{"repository_id":"00000000-0000-0000-0000-000000000001","harness":"codex"}')
+[[ $wrong_status == 401 || $wrong_status == 403 ]] || { echo "wrong credential HTTP status was $wrong_status"; exit 1; }
+[[ "$(sql codex)" == '2|100|40|7|20|5|gpt-fixture|[62, 299]' ]] || { echo 'wrong-token request changed SQL'; exit 1; }
+echo "wrong-token API request rejected HTTP $wrong_status; unchanged SQL; CLI exit=$wrong_token_rc; credential absent from stdout/stderr"
 set +e
 "$tmp/agentops" push --harness codex --endpoint "http://127.0.0.1:$api_port/api/v1/agent-runs" --repository-id "$repo" --wave W9b --worker fixture --issue-numbers '[62,299]' "$control" >"$tmp/missing-token.stdout" 2>"$tmp/missing-token.stderr"
 missing_rc=$?
