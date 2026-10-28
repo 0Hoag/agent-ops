@@ -125,21 +125,52 @@ curl --fail --silent "http://127.0.0.1:$CLIENT_PORT/board" >/dev/null
 run_spec() {
   local source=$1 run=$2 expect_failure=$3
   local loaded=$TEMP/client/scripts/smoke.browser.spec.ts
-  local actual
+  local actual selected_listing="$TEMP/selected-$run.txt"
+  local expected_titles="$TEMP/expected-titles.txt"
+  local selection_pattern='renders both provider settings from the real API|creates lists edits and deletes both settings through real organization HTTP'
+  local preflight_pattern=${SMOKE_IDENTITY_SELECTION_PATTERN:-$selection_pattern}
+  local selected_count
+  printf '%s\n' 'renders both provider settings from the real API' 'creates lists edits and deletes both settings through real organization HTTP' >"$expected_titles"
   cp "$source" "$loaded"
   actual=$(shasum -a 256 "$loaded" | awk '{print $1}')
   [[ "$actual" == "$([[ "$run" == control ]] && printf %s "$old_hash" || printf %s "$actual_hash")" ]]
   printf 'RUN=%s loaded_spec=%s sha256=%s invocation=agent-ops-identity-fixed-%s\n' "$run" "$loaded" "$actual" "$API_PORT" | tee -a "$ARTIFACT_DIR/runs.txt"
-  set +e
   local play_config=$TEMP/client/scripts/smoke.playwright.config.ts
   local config_loaded_hash
   config_loaded_hash=$(shasum -a 256 "$play_config" | awk '{print $1}')
   printf 'RUN_CONFIG=%s loaded_config=%s sha256=%s\n' "$run" "$play_config" "$config_loaded_hash" | tee -a "$ARTIFACT_DIR/runs.txt"
   [[ "$config_loaded_hash" == "$config_hash" ]] || { log "loaded config differs from recorded source"; return 1; }
+  local selection_status=0
+  set +e
+  (cd "$TEMP/client" && ./node_modules/.bin/playwright test --config="$play_config" --list --grep="$preflight_pattern") >"$ARTIFACT_DIR/$run-selection-list.log" 2>&1 || selection_status=$?
+  set -e
+  awk '/\.ts:[0-9]+:[0-9]+ › / { sub(/^.*\.ts:[0-9]+:[0-9]+ › /, ""); print }' "$ARTIFACT_DIR/$run-selection-list.log" >"$selected_listing"
+  selected_count=$(wc -l <"$selected_listing" | tr -d ' ')
+  if ! diff -u "$expected_titles" "$selected_listing"; then
+    if ! grep -Fxq 'renders both provider settings from the real API' "$selected_listing"; then
+      log "$run selection preflight failed: missing expected identity test 'renders both provider settings from the real API' (selected $selected_count; Playwright --list exit $selection_status)"
+    else
+      log "$run selection preflight failed: missing or unexpected identity test; expected both exact titles in historical order (selected $selected_count; Playwright --list exit $selection_status)"
+    fi
+    return 1
+  fi
+  if [[ "$selected_count" != 2 ]]; then
+    log "$run selection preflight failed: expected exactly 2 identity tests, selected $selected_count (Playwright --list exit $selection_status)"
+    return 1
+  fi
+  printf 'PREFLIGHT_SELECTED=%s count=2\n' "$run" | tee -a "$ARTIFACT_DIR/runs.txt"
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-before-identities.txt"
-  (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep='creates lists edits and deletes both settings through real organization HTTP|creates lists edits and deletes both settings through real organization API' --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1
+  (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep="$selection_pattern" --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1
   local result=$?
   set -e
+  cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
+  local executed_count
+  executed_count=$(awk '/Running [0-9]+ tests?/ { print $2; exit }' "$ARTIFACT_DIR/$run.log")
+  if [[ "$executed_count" != 2 ]]; then
+    log "$run execution count mismatch: expected Running 2 tests, observed ${executed_count:-none}"
+    return 1
+  fi
+  printf 'EXECUTED_COUNT=%s count=%s\n' "$run" "$executed_count" | tee -a "$ARTIFACT_DIR/runs.txt"
   if [[ $expect_failure == yes && $result -eq 0 ]]; then
     log "$run passed; historical expected-201/uniqueness regression is not reproducible with this identical-input runtime"
     return 2
