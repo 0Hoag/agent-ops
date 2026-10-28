@@ -46,5 +46,5 @@ usage=$(jq -sc '[.[] | select(.type=="step_finish") | .part.tokens] as $t
 printf '%s\n' "$usage"
 printf '%s\n' "$usage" > "$root/.agent-runs/$wave-usage.json"
 source "$root/scripts/report-agent-run.sh"
-report_agent_run "$usage" "$started_at" "$ended_at" || printf '%s\n' 'Agent run API reporting failed' >&2
+report_agent_run "$root/.agent-runs/$wave.jsonl" opencode || printf '%s\n' 'Agent run API reporting failed' >&2
 exit "$worker_status"
