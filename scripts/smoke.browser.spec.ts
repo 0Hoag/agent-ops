@@ -49,8 +49,8 @@ test('renders both provider settings from the real API', async ({ page }) => {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const invocation = process.env.SMOKE_INVOCATION_ID || `default-${process.pid}`;
   const suffix = invocation.replace(/[^a-zA-Z0-9-]/g, '-');
-  const githubName = `fixture/settings-github-${suffix}`;
-  const gitlabName = `fixture/settings-gitlab-${suffix}`;
+  const githubName = `fixture/settings-api-github-${suffix}`;
+  const gitlabName = `fixture/settings-api-gitlab-${suffix}`;
   const create = async (provider: string, name: string, mappings: object, gitlabURL?: string) => {
     const response = await page.request.post(`${apiBase}/api/v1/repositories`, { headers, data: { provider, full_name: name, status_mappings: mappings, webhook_secret: `disposable-${provider}-webhook`, backfill_token: `disposable-${provider}-backfill`, ...(gitlabURL ? { gitlab_base_url: gitlabURL } : {}) } });
     expect(response.status(), await response.text()).toBe(201);
