@@ -146,16 +146,12 @@ run_spec() {
   set -e
   awk '/\.ts:[0-9]+:[0-9]+ › / { sub(/^.*\.ts:[0-9]+:[0-9]+ › /, ""); print }' "$ARTIFACT_DIR/$run-selection-list.log" >"$selected_listing"
   selected_count=$(wc -l <"$selected_listing" | tr -d ' ')
-  if ! diff -u "$expected_titles" "$selected_listing"; then
-    if ! grep -Fxq 'renders both provider settings from the real API' "$selected_listing"; then
-      log "$run selection preflight failed: missing expected identity test 'renders both provider settings from the real API' (selected $selected_count; Playwright --list exit $selection_status)"
-    else
-      log "$run selection preflight failed: missing or unexpected identity test; expected both exact titles in historical order (selected $selected_count; Playwright --list exit $selection_status)"
-    fi
+  if ! grep -Fxq 'renders both provider settings from the real API' "$selected_listing"; then
+    log "$run selection preflight failed: missing expected identity test 'renders both provider settings from the real API' (selected $selected_count; Playwright --list exit $selection_status)"
     return 1
   fi
-  if [[ "$selected_count" != 2 ]]; then
-    log "$run selection preflight failed: expected exactly 2 identity tests, selected $selected_count (Playwright --list exit $selection_status)"
+  if ! diff -u "$expected_titles" "$selected_listing"; then
+    log "$run selection preflight failed: expected exactly the two identity test titles in historical order (selected $selected_count; Playwright --list exit $selection_status)"
     return 1
   fi
   printf 'PREFLIGHT_SELECTED=%s count=2\n' "$run" | tee -a "$ARTIFACT_DIR/runs.txt"
