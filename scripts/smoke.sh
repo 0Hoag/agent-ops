@@ -279,8 +279,8 @@ print('fixture observed exact settings-owned encrypted backfill token, project U
 PY
 
 run_browser() {
-  local control=${1:-0}
-  if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" SMOKE_CONTROL_NO_SESSION="$control" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
+  local control=${1:-0} run=${2:-baseline}
+  if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" SMOKE_CONTROL_NO_SESSION="$control" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-$run" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
     return 1
   fi
 }
@@ -301,10 +301,10 @@ curl --fail --silent "$CLIENT_URL/board" >/dev/null || { log "client preview did
 cd "$CLIENT"
 : >"$ARTIFACT_DIR/browser0.log"
 : >"$ARTIFACT_DIR/browser1.log"
-if ! run_browser 0; then
+if ! run_browser 0 baseline; then
   exit 1
 fi
-if run_browser 1; then
+if run_browser 1 baseline; then
   log "session-removal control unexpectedly passed unchanged baseline/settings assertions"
   exit 1
 fi
@@ -313,7 +313,7 @@ if ! grep -E 'Expected: visible|Timeout .*exceeded|Issue board|Repository settin
   exit 1
 fi
 log "EXPECTED SESSION-REMOVAL CONTROL: board auth assertion failed; both settings browser tests skipped without a session (see $ARTIFACT_DIR/browser1.log)"
-if ! run_browser 0; then
+if ! run_browser 0 restored; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1
 fi
