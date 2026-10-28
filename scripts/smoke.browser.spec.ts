@@ -121,7 +121,7 @@ test('creates lists edits and deletes both settings through real organization HT
   expect(listed.status(), await listed.text()).toBe(200);
   const items = (await listed.json()).data;
   expect(items.map((item: { full_name: string }) => item.full_name)).toEqual(expect.arrayContaining([gitlabName, githubName]));
-  expect(items.find((item: { provider: string }) => item.provider === 'gitlab').gitlab_base_url).toBe('http://127.0.0.1:9/gitlab');
+  expect(items.find((item: { id: string }) => item.id === ids.gitlab).gitlab_base_url).toBe('http://127.0.0.1:9/gitlab');
   const update = await request('PATCH', `/api/v1/repositories/${ids.gitlab}`, { gitlab_base_url: 'http://127.0.0.1:9/gitlab-v2', status_mappings: { 'Status::Review': 'review' } });
   expect(update.status(), await update.text()).toBe(200);
   const githubUpdate = await request('PATCH', `/api/v1/repositories/${ids.github}`, { status_mappings: { 'status:review': 'review' } });

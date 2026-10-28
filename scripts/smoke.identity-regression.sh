@@ -32,44 +32,6 @@ text = text.slice(0, secondTest) + second;
 fs.writeFileSync(output, text);
 NODE
 
-run_identity_check() {
-  local spec=$1 mode=$2 logfile=$3
-  node - "$spec" "$mode" "$INVOCATION" >"$logfile" 2>&1 <<'NODE'
-const fs = require('fs');
-const [file, mode, invocation] = process.argv.slice(2);
-const spec = fs.readFileSync(file, 'utf8');
-const suffix = invocation.replace(/[^a-zA-Z0-9-]/g, '-');
-const names = [...spec.matchAll(/const githubName = `([^`]+)`;/g)].map((m) => m[1].replaceAll('${suffix}', suffix));
-if (names.length !== 2) throw new Error(`expected two browser identities, got ${names.length}`);
-const seen = new Set();
-for (const name of names) {
-  if (seen.has(name)) {
-    const diagnostic = 'SQLSTATE 23505: duplicate key value violates unique constraint "repositories_provider_full_name_key"; POST /api/v1/repositories returned 500 instead of expected HTTP 201';
-    console.error(diagnostic);
-    if (mode !== 'old') process.exit(1);
-    process.exit(2);
-  }
-  seen.add(name);
-}
-if (mode === 'old') throw new Error('old-identity control unexpectedly passed');
-console.log(`PASS distinct repository identities: ${names.join(' | ')}`);
-NODE
-}
-
-run_identity_check "$SPEC" restored "$TEMP/restored.log"
-if run_identity_check "$TEMP/old.spec" old "$TEMP/old.log"; then
-  printf 'old-identity control unexpectedly succeeded\n' >&2
-  exit 1
-else
-  status=$?
-  [[ $status -eq 2 ]] || { printf 'old-identity control failed unexpectedly (exit %s)\n' "$status" >&2; exit 1; }
-fi
-grep -Fq 'repositories_provider_full_name_key' "$TEMP/old.log"
-grep -Fq 'expected HTTP 201' "$TEMP/old.log"
-run_identity_check "$SPEC" restored "$TEMP/restored-again.log"
-cp "$TEMP/restored.log" "$ARTIFACT_DIR/restored.log"
-cp "$TEMP/old.log" "$ARTIFACT_DIR/old-control.log"
-cp "$TEMP/restored-again.log" "$ARTIFACT_DIR/restored-again.log"
-printf 'EXPECTED OLD-IDENTITY CONTROL: %s\n' "$(tr '\n' ' ' <"$TEMP/old.log")"
-printf 'RESTORATION PASS: same invocation=%s, distinct repaired identities\n' "$INVOCATION"
+printf 'FIXTURE INCOMPLETE: source mutation is prepared at %s; a disposable real API/Postgres browser run is required to assert observed HTTP/SQL behavior.\n' "$TEMP/old.spec" >&2
+exit 1
 printf 'Evidence artifacts: %s\n' "$ARTIFACT_DIR"
