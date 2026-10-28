@@ -117,6 +117,7 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "")).Register(private)
 	}
+	agentrun.RegisterPriceRoutes(private, agentrun.NewPriceController(agentrun.NewRepository(gormDB), organization.NewRepository(gormDB)))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
 	prices := map[string]agentrun.Price{}
@@ -134,7 +135,9 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 		}
 	}
 	// Agent ingestion uses its dedicated machine token; it must not require an interactive user session.
-	agentrun.NewRoutes(agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)).Register(router.Group("/api/v1"))
+	runController := agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)
+	runController.SetExchangeRateVND(cfg.ExchangeRateVNDPerUSD)
+	agentrun.NewRoutes(runController).Register(router.Group("/api/v1"))
 	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
 	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))
 }

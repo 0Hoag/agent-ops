@@ -105,6 +105,84 @@ func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]
 	return out, nil
 }
 
+func (r *Repository) AggregateHistorical(ctx context.Context, f Filter, fallback map[string]Price) ([]Aggregate, error) {
+	runs, err := r.List(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	groups := map[string]*Aggregate{}
+	unknown := map[string]bool{}
+	for _, run := range runs {
+		var issues []int64
+		_ = jsonUnmarshal(run.IssueNumbers, &issues)
+		if len(issues) == 0 {
+			issues = []int64{0}
+		}
+		p, priceErr := r.priceAt(ctx, organizationFromContext(ctx), run.Model, run.StartedAt)
+		if priceErr != nil {
+			return nil, fmt.Errorf("resolve historical price: %w", priceErr)
+		}
+		if p == nil {
+			if fp, ok := fallback[run.Model]; ok {
+				p = &fp
+			}
+		}
+		for _, issue := range issues {
+			key := run.Wave + "\x00" + run.Worker + fmt.Sprint(issue)
+			a := groups[key]
+			if a == nil {
+				a = &Aggregate{Wave: run.Wave, Worker: run.Worker}
+				if issue != 0 {
+					x := issue
+					a.IssueNumber = &x
+				}
+				groups[key] = a
+			}
+			a.Runs++
+			a.InputTokens += run.InputTokens
+			a.CachedInputTokens += run.CachedInputTokens
+			a.CacheWriteTokens += run.CacheWriteTokens
+			a.OutputTokens += run.OutputTokens
+			a.ReasoningTokens += run.ReasoningTokens
+			if p == nil {
+				unknown[key] = true
+				a.CostUSD = nil
+			} else if !unknown[key] {
+				v := priceCost(run, *p)
+				if a.CostUSD == nil {
+					x := 0.0
+					a.CostUSD = &x
+				}
+				*a.CostUSD += v
+				x := v
+				a.EquivalentCostUSD = addCost(a.EquivalentCostUSD, x)
+				if run.BillingType == "subscription" {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, 0)
+				} else {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, x)
+				}
+			}
+		}
+	}
+	order := make([]string, 0, len(groups))
+	for k := range groups {
+		order = append(order, k)
+	}
+	out := make([]Aggregate, 0, len(order))
+	for _, k := range order {
+		out = append(out, *groups[k])
+	}
+	return out, nil
+}
+
+func addCost(current *float64, value float64) *float64 {
+	if current == nil {
+		current = new(float64)
+	}
+	*current += value
+	return current
+}
+
 type Price struct {
 	InputPerMillion       float64 `json:"input_per_million"`
 	CachedInputPerMillion float64 `json:"cached_input_per_million"`

@@ -18,6 +18,7 @@ type CreateInput struct {
 	EndedAt           time.Time `json:"ended_at" binding:"required"`
 	Harness           string    `json:"harness,omitempty"`
 	SessionID         string    `json:"session_id,omitempty"`
+	BillingType       string    `json:"billing_type,omitempty"`
 }
 
 type Filter struct {
@@ -35,6 +36,9 @@ type Aggregate struct {
 	OutputTokens      int64    `json:"output_tokens"`
 	ReasoningTokens   int64    `json:"reasoning_tokens"`
 	CostUSD           *float64 `json:"cost_usd,omitempty"`
+	CostVND           *float64 `json:"cost_vnd,omitempty"`
+	EquivalentCostUSD *float64 `json:"equivalent_cost_usd,omitempty"`
+	BilledCostUSD     *float64 `json:"billed_cost_usd,omitempty"`
 }
 
 type CreatedResponse struct {
