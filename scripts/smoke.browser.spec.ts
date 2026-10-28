@@ -64,7 +64,7 @@ test('renders both provider settings from the real API', async ({ page }) => {
   const gitlab = page.locator('article').filter({ hasText: gitlabName });
   await expect(githubCard.getByRole('heading', { name: `${githubName} (github)` })).toBeVisible({ timeout: 15000 });
   await expect(gitlab.getByRole('heading', { name: `${gitlabName} (gitlab)` })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText('GitLab URL: http://127.0.0.1:9/gitlab')).toBeVisible();
+  await expect(gitlab.getByText('GitLab URL: http://127.0.0.1:9/gitlab', { exact: true })).toBeVisible();
   await expect(gitlab.getByText('Status mappings: {"Status::Review":"done"}')).toBeVisible();
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR || '.agent-runs/smoke'}/repository-settings-dual-provider.png`, fullPage: true });
 
