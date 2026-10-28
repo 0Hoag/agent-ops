@@ -19,14 +19,24 @@ type RunRepository interface {
 	List(context.Context, Filter) ([]AgentRun, error)
 	Aggregate(context.Context, Filter, map[string]Price) ([]Aggregate, error)
 }
+type HistoricalAggregator interface {
+	AggregateHistorical(context.Context, Filter, map[string]Price) ([]Aggregate, error)
+}
 
 // Controller exposes agent run persistence and reporting endpoints.
 // @Tags agent-runs
 type Controller struct {
-	repository RunRepository
-	token      string
-	prices     map[string]Price
-	configured []string
+	repository      RunRepository
+	token           string
+	prices          map[string]Price
+	configured      []string
+	exchangeRateVND float64
+}
+
+func (c *Controller) SetExchangeRateVND(rate float64) {
+	if rate > 0 {
+		c.exchangeRateVND = rate
+	}
 }
 
 func NewController(repository RunRepository, token string, prices map[string]Price) *Controller {
@@ -133,10 +143,24 @@ func (c *Controller) Aggregate(ctx *gin.Context) {
 		response.BadRequest(ctx, "invalid issue_number")
 		return
 	}
-	items, err := c.repository.Aggregate(ctx.Request.Context(), filter, c.prices)
-	if err != nil {
+	var items []Aggregate
+	var aggregateErr error
+	if historical, ok := c.repository.(HistoricalAggregator); ok {
+		items, aggregateErr = historical.AggregateHistorical(ctx.Request.Context(), filter, c.prices)
+	} else {
+		items, aggregateErr = c.repository.Aggregate(ctx.Request.Context(), filter, c.prices)
+	}
+	if aggregateErr != nil {
 		response.Error(ctx, 500, "failed to aggregate agent runs")
 		return
+	}
+	if c.exchangeRateVND > 0 {
+		for i := range items {
+			if items[i].CostUSD != nil {
+				v := *items[i].CostUSD * c.exchangeRateVND
+				items[i].CostVND = &v
+			}
+		}
 	}
 	response.OK(ctx, items)
 }

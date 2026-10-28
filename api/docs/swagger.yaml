@@ -45,11 +45,17 @@ definitions:
     type: object
   agentrun.Aggregate:
     properties:
+      billed_cost_usd:
+        type: number
       cache_write_tokens:
         type: integer
       cached_input_tokens:
         type: integer
       cost_usd:
+        type: number
+      cost_vnd:
+        type: number
+      equivalent_cost_usd:
         type: number
       input_tokens:
         type: integer
@@ -132,6 +138,31 @@ definitions:
         type: array
       status:
         type: integer
+    type: object
+  agentrun.PriceVersion:
+    properties:
+      cache_write_per_million:
+        type: number
+      cached_input_per_million:
+        type: number
+      created_at:
+        type: string
+      effective_date:
+        type: string
+      id:
+        type: string
+      input_per_million:
+        type: number
+      model:
+        type: string
+      organization_id:
+        type: string
+      output_per_million:
+        type: number
+      reasoning_per_million:
+        type: number
+      updated_at:
+        type: string
     type: object
   auth.LoginRequest:
     properties:
@@ -428,6 +459,66 @@ info:
   title: Agent Ops API
   version: "1.0"
 paths:
+  /api/v1/agent-run-prices:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: List model price versions
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Price version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/agentrun.PriceVersion'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Create model price version
+  /api/v1/agent-run-prices/{price_id}:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Price version UUID
+        in: path
+        name: price_id
+        required: true
+        type: string
+      - description: Price version
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/agentrun.PriceVersion'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Update model price version
   /api/v1/agent-runs:
     get:
       parameters:

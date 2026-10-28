@@ -11,16 +11,17 @@ import (
 )
 
 type Config struct {
-	HTTPAddr            string
-	DatabaseURL         string
-	LogLevel            string
-	CORSOrigins         []string
-	Repositories        []RepositoryConfig
-	AgentRunToken       string
-	AgentRunModelPrices map[string]json.RawMessage
-	JWTSecret           string
-	JWTExpiration       time.Duration
-	EncryptionKey       []byte
+	HTTPAddr              string
+	DatabaseURL           string
+	LogLevel              string
+	CORSOrigins           []string
+	Repositories          []RepositoryConfig
+	AgentRunToken         string
+	AgentRunModelPrices   map[string]json.RawMessage
+	ExchangeRateVNDPerUSD float64
+	JWTSecret             string
+	JWTExpiration         time.Duration
+	EncryptionKey         []byte
 }
 
 type RepositoryConfig struct {
@@ -43,6 +44,11 @@ func Load() (Config, error) {
 		JWTSecret:     os.Getenv("JWT_SECRET"),
 		JWTExpiration: 24 * time.Hour,
 		EncryptionKey: []byte(os.Getenv("REPOSITORY_ENCRYPTION_KEY")),
+	}
+	if raw := os.Getenv("EXCHANGE_RATE_VND_PER_USD"); raw != "" {
+		if _, err := fmt.Sscan(raw, &cfg.ExchangeRateVNDPerUSD); err != nil || cfg.ExchangeRateVNDPerUSD <= 0 {
+			return Config{}, fmt.Errorf("EXCHANGE_RATE_VND_PER_USD is invalid")
+		}
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")

@@ -15,6 +15,105 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/agent-run-prices": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List model price versions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create model price version",
+                "parameters": [
+                    {
+                        "description": "Price version",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.PriceVersion"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/agent-run-prices/{price_id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Update model price version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Price version UUID",
+                        "name": "price_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Price version",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.PriceVersion"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/agent-runs": {
             "get": {
                 "produces": [
@@ -1269,6 +1368,9 @@ const docTemplate = `{
         "agentrun.Aggregate": {
             "type": "object",
             "properties": {
+                "billed_cost_usd": {
+                    "type": "number"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },
@@ -1276,6 +1378,12 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "cost_usd": {
+                    "type": "number"
+                },
+                "cost_vnd": {
+                    "type": "number"
+                },
+                "equivalent_cost_usd": {
                     "type": "number"
                 },
                 "input_tokens": {
@@ -1398,6 +1506,44 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "integer"
+                }
+            }
+        },
+        "agentrun.PriceVersion": {
+            "type": "object",
+            "properties": {
+                "cache_write_per_million": {
+                    "type": "number"
+                },
+                "cached_input_per_million": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "effective_date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "input_per_million": {
+                    "type": "number"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "output_per_million": {
+                    "type": "number"
+                },
+                "reasoning_per_million": {
+                    "type": "number"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
