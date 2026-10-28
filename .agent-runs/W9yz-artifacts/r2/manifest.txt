@@ -1,0 +1,30 @@
+W9yz retry 2 final-tree evidence
+Final tree SHA: 3aafffa4ffc57e4743d66f264cf68ca3f282b697
+The root archive is outside the worktree at /Users/zeross/agent-ops/.agent-runs/W9yz-artifacts/r2.
+Identity smoke: identity-final/; three two-test variants passed; historical control passed (failure not reproduced).
+Selection preflight: preflight/; intended missing-first-test rejection recorded.
+Full smoke: full-smoke/browser0.log and browser1.log. Baseline and intended missing-session control passed; restored run failed on existing board-heading and GitLab URL assertion issues; see logs.
+API gate commands: cd api && go vet ./... && golangci-lint run && go test ./... && go build ./...
+API gate result: exit 0; golangci-lint reported 0 issues; tests and build passed.
+Client checkout SHA: 1e5b7cd6eafc13f3383ade212121c2588760262d; clean.
+Owned identity/smoke compose containers, volumes, and ports 55961-55964 were absent after runs.
+Historic #329 cause remains unknown; the retained-row scenario did not reproduce. #323 expected-201/HTTP-500 uniqueness control did not reproduce; keep open.
+
+SHA256 evidence checks:
+e6ee262d85eb1b3f9a6880b962dcef57e80ae32ebfbd3335b5f05215d39b9d78  identity-final/source.txt
+f5ad54a2a16be109a0d1e97edb0a68876b5461cbb3df5b5f38af96ec96d277f1  identity-final/baseline-loaded.spec.ts
+ce8090756c9c75509482a17344cb88a61913ea8210a2472b9589bc29539e4126  identity-final/control-loaded.spec.ts
+f5ad54a2a16be109a0d1e97edb0a68876b5461cbb3df5b5f38af96ec96d277f1  identity-final/restored-loaded.spec.ts
+91a91f45ba82c8eb25ad5b59748412d246fdaf893dba3dd95a93db42fec32ab9  identity-final/{baseline,control,restored}-loaded.config.ts
+420024f94e8f9142a5846d614c7f13a480ec6bc94ac95ac3c21ad0c432782798  identity-final/baseline.log
+26186406fca28f658ca2eed39dfd8f8913e96c70cfde5a34a79bcd053be639ff  identity-final/control.log
+207f30bbaaa6e82e16a047f64e46f886bcb6474307c9c8abe95eaee2744d9a55  identity-final/restored.log
+94287c98a0001faaa6c78513fba1c77e0d985587c106fb78eb9ed5b8157c5953  identity-final/baseline-server.log
+55aecaf09f48d96a85dc31347f327f0fc94296afcb443d8315f166af94f49dec  identity-final/control-server.log
+51593160f46a00bdd4d31e8d784eadcee792ced2d364134daf60130d1dc9974f  identity-final/restored-server.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  identity-final/*-before-identities.txt and *-after-identities.txt (all six empty snapshots)
+a0d3d4001d391ffa394766d41e2bb733be2a88a37b0ec2bac56e928b3c81d551  identity-final/control-result.txt
+a47ee76c1595b84d36d3999e5da9913f1263b919eba0336100d1a3c6ec7f2510  identity-final/result.txt
+17623803baa1389878af1d1d11f7fb893401f15ed2385268981a43924bb98bca  preflight/baseline-selection-list.log
+305dca49e270032e84e8a3fba9d45e192e3d9826afd09c19171b9c6c8673036e  full-smoke/browser0.log
+733c309dc7ee9feac62efcbdc2ec36016a1d6501b5f9d337edd9cdad9166b65a  full-smoke/browser1.log
