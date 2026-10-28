@@ -154,6 +154,13 @@ func (r *Repository) AggregateHistorical(ctx context.Context, f Filter, fallback
 					a.CostUSD = &x
 				}
 				*a.CostUSD += v
+				x := v
+				a.EquivalentCostUSD = addCost(a.EquivalentCostUSD, x)
+				if run.BillingType == "subscription" {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, 0)
+				} else {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, x)
+				}
 			}
 		}
 	}
@@ -166,6 +173,14 @@ func (r *Repository) AggregateHistorical(ctx context.Context, f Filter, fallback
 		out = append(out, *groups[k])
 	}
 	return out, nil
+}
+
+func addCost(current *float64, value float64) *float64 {
+	if current == nil {
+		current = new(float64)
+	}
+	*current += value
+	return current
 }
 
 type Price struct {

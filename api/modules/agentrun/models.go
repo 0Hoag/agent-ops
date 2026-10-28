@@ -26,4 +26,5 @@ type AgentRun struct {
 	UpdatedAt         time.Time   `json:"updated_at"`
 	Harness           *string     `json:"harness,omitempty"`
 	SessionID         *string     `json:"session_id,omitempty"`
+	BillingType       string      `json:"billing_type" gorm:"not null;default:'api'"`
 }

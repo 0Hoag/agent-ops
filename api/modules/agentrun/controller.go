@@ -100,6 +100,14 @@ func (c *Controller) Create(ctx *gin.Context) {
 	if in.Harness != "" || in.SessionID != "" {
 		run.Harness, run.SessionID = &in.Harness, &in.SessionID
 	}
+	run.BillingType = in.BillingType
+	if run.BillingType == "" {
+		run.BillingType = "api"
+	}
+	if run.BillingType != "api" && run.BillingType != "subscription" {
+		response.BadRequest(ctx, "billing_type must be api or subscription")
+		return
+	}
 	if err := c.repository.Create(ctx.Request.Context(), &run); err != nil {
 		response.Error(ctx, 500, "failed to create agent run")
 		return

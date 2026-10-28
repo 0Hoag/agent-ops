@@ -1297,6 +1297,9 @@
         "agentrun.AgentRun": {
             "type": "object",
             "properties": {
+                "billing_type": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },
@@ -1428,6 +1431,9 @@
                 "worker"
             ],
             "properties": {
+                "billing_type": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },

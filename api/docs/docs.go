@@ -1303,6 +1303,9 @@ const docTemplate = `{
         "agentrun.AgentRun": {
             "type": "object",
             "properties": {
+                "billing_type": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },
@@ -1434,6 +1437,9 @@ const docTemplate = `{
                 "worker"
             ],
             "properties": {
+                "billing_type": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },

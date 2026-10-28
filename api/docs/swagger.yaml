@@ -2,6 +2,8 @@ basePath: /
 definitions:
   agentrun.AgentRun:
     properties:
+      billing_type:
+        type: string
       cache_write_tokens:
         type: integer
       cached_input_tokens:
@@ -83,6 +85,8 @@ definitions:
     type: object
   agentrun.CreateInput:
     properties:
+      billing_type:
+        type: string
       cache_write_tokens:
         type: integer
       cached_input_tokens:

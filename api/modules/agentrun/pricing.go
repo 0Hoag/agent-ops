@@ -51,7 +51,14 @@ func (r *Repository) UpdatePrice(ctx context.Context, org, id string, p *PriceVe
 	if err := validatePrice(p); err != nil {
 		return err
 	}
-	return r.db.WithContext(ctx).Model(&PriceVersion{}).Where("id = ? AND organization_id = ?", id, org).Updates(map[string]any{"model": p.Model, "effective_date": p.EffectiveDate, "input_per_million": p.InputPerMillion, "cached_input_per_million": p.CachedInputPerMillion, "cache_write_per_million": p.CacheWritePerMillion, "output_per_million": p.OutputPerMillion, "reasoning_per_million": p.ReasoningPerMillion, "updated_at": time.Now().UTC()}).Error
+	result := r.db.WithContext(ctx).Model(&PriceVersion{}).Where("id = ? AND organization_id = ?", id, org).Updates(map[string]any{"model": p.Model, "effective_date": p.EffectiveDate, "input_per_million": p.InputPerMillion, "cached_input_per_million": p.CachedInputPerMillion, "cache_write_per_million": p.CacheWritePerMillion, "output_per_million": p.OutputPerMillion, "reasoning_per_million": p.ReasoningPerMillion, "updated_at": time.Now().UTC()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 func (r *Repository) priceAt(ctx context.Context, org, model string, day time.Time) (*Price, error) {
 	var p PriceVersion

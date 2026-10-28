@@ -18,6 +18,7 @@ type CreateInput struct {
 	EndedAt           time.Time `json:"ended_at" binding:"required"`
 	Harness           string    `json:"harness,omitempty"`
 	SessionID         string    `json:"session_id,omitempty"`
+	BillingType       string    `json:"billing_type,omitempty"`
 }
 
 type Filter struct {
