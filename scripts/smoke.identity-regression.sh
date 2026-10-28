@@ -159,12 +159,12 @@ run_spec() {
   printf 'PREFLIGHT_SELECTED=%s count=2\n' "$run" | tee -a "$ARTIFACT_DIR/runs.txt"
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-before-identities.txt"
   cp "$ARTIFACT_DIR/$run-before-identities.txt" "$ARTIFACT_DIR/$run-before-identities.sql-output.txt"
-  compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT id,provider,full_name,deleted_at FROM repositories ORDER BY provider,full_name" >"$ARTIFACT_DIR/$run-before-repository-state.sql-output.txt"
+  compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT id,provider,full_name,created_at,updated_at FROM repositories ORDER BY provider,full_name" >"$ARTIFACT_DIR/$run-before-repository-state.sql-output.txt"
   local result=0
   (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep="$selection_pattern" --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1 || result=$?
   set -e
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-after-identities.txt"
-  compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT id,provider,full_name,deleted_at FROM repositories ORDER BY provider,full_name" >"$ARTIFACT_DIR/$run-after-repository-state.sql-output.txt"
+  compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT id,provider,full_name,created_at,updated_at FROM repositories ORDER BY provider,full_name" >"$ARTIFACT_DIR/$run-after-repository-state.sql-output.txt"
   compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
   cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
   cp "$ARTIFACT_DIR/$run.log" "$ARTIFACT_DIR/$run-execution.log"
