@@ -23,6 +23,30 @@ run_one(){ local h=$1 f="$tmp/$1.jsonl" expected_model=gpt-fixture; [[ $h == ope
 run_one codex; run_one opencode
 run_launcher(){ local h=$1; local d="$tmp/launcher-$h"; mkdir -p "$d/scripts" "$d/.agent-runs" "$d/bin"; git -C "$d" init -q; git -C "$d" config user.email fixture@example.invalid; git -C "$d" config user.name Fixture; git -C "$d" commit --allow-empty -qm fixture; git -C "$d" branch -M main; git -C "$d" remote add origin "$d"; cp "$root/scripts/run-worker.sh" "$d/scripts/launcher.sh"; [[ $h == opencode ]] && cp "$root/scripts/run-worker-opencode.sh" "$d/scripts/launcher.sh"; cp "$root/scripts/report-agent-run.sh" "$d/scripts/report-agent-run.sh"; if [[ $h == codex ]]; then printf '#!/usr/bin/env bash\nprintf '\''%%s\\n'\'' '\''{"type":"thread.started","thread_id":"codex-session"}'\'' '\''{"type":"turn.completed","model":"gpt-fixture","timestamp":"2026-10-27T01:00:00Z","usage":{"input_tokens":100,"cached_input_tokens":40,"cache_write_input_tokens":7,"output_tokens":20,"reasoning_output_tokens":5}}'\''\n' >"$d/bin/codex"; else printf '#!/usr/bin/env bash\nprintf '\''%%s\\n'\'' '\''{"type":"step_finish","timestamp":1793062800000,"sessionID":"opencode-session","part":{"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":7}}}}'\'' '\''{"type":"text","part":{"text":"fixture"}}'\''\n' >"$d/bin/opencode"; fi; chmod +x "$d/bin/"*; (cd "$d" && PATH="$d/bin:$PATH" AGENTOPS_CLI="$tmp/agentops" AGENT_RUN_API_URL="http://127.0.0.1:$api_port" AGENT_RUN_TOKEN="$token" AGENT_RUN_REPOSITORY_ID="$repo" AGENT_RUN_ISSUES='[62,299]' bash scripts/launcher.sh W9b fixture-branch "$tmp/brief.md") 2>"$d/err" || { cat "$d/err"; return 1; }; [[ -f "$d/.agent-runs/W9b.jsonl" && -f "$d/.agent-runs/W9b-usage.json" ]] || return 1; echo "launcher $h passed"; }
 printf 'fixture brief\n' >"$tmp/brief.md"; docker compose -p "$project" -f "$root/docker-compose.yml" exec -T postgres psql -v ON_ERROR_STOP=1 -U agent_ops -d agent_ops -c "DELETE FROM agent_runs WHERE repository_id='$repo'" >/dev/null; run_launcher codex; [[ "$(sql codex)" == '1|100|40|7|20|5|gpt-fixture|[62, 299]' ]] || { echo "launcher-created Codex SQL mismatch: $(sql codex)"; exit 1; }; run_launcher opencode; [[ "$(sql opencode)" == '1|100|40|7|20|5|openai/gpt-6-luna|[62, 299]' ]] || { echo "launcher-created OpenCode SQL mismatch: $(sql opencode)"; exit 1; }
+# Verify each real launcher preserves a failing harness status even when API
+# reporting fails. Use an unreachable local endpoint and identical fake output.
+for h in codex opencode; do
+  d="$tmp/failure-$h"; mkdir -p "$d/scripts" "$d/.agent-runs" "$d/bin"
+  git -C "$d" init -q; git -C "$d" config user.email fixture@example.invalid; git -C "$d" config user.name Fixture; git -C "$d" commit --allow-empty -qm fixture; git -C "$d" remote add origin "$d"
+  cp "$root/scripts/report-agent-run.sh" "$d/scripts/report-agent-run.sh"
+  launcher=run-worker.sh; [[ $h == opencode ]] && launcher=run-worker-opencode.sh; cp "$root/scripts/$launcher" "$d/scripts/launcher.sh"
+  if [[ $h == codex ]]; then cat >"$d/bin/codex" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"turn.completed","model":"gpt-fixture","usage":{"input_tokens":100}}'
+exit 7
+SH
+  else cat >"$d/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"step_finish","sessionID":"opencode-session","part":{"tokens":{"input":100}}}' '{"type":"text","part":{"text":"fixture"}}'
+exit 7
+SH
+  fi
+  chmod +x "$d/bin/"*; rc=0
+  (cd "$d" && PATH="$d/bin:$PATH" AGENT_RUN_API_URL="http://127.0.0.1:1" AGENT_RUN_TOKEN="$token" AGENT_RUN_REPOSITORY_ID="$repo" bash scripts/launcher.sh W9b fixture-branch "$tmp/brief.md") >"$d/output" 2>&1 || rc=$?
+  [[ $rc == 7 ]] || { echo "$h failed-worker status changed by reporting failure: expected 7 got $rc; output=$(<"$d/output")"; exit 1; }
+  [[ $(<"$d/output") != *"$token"* ]] || { echo "$h leaked credential in reporting-failure output"; exit 1; }
+  echo "launcher $h HTTP failure isolation and worker exit=7 passed; credential absent from stdout/stderr"
+done
 control_root="$tmp/production-control"; mkdir -p "$control_root/api/cmd/agentops"; cp -R "$root/api/." "$control_root/api/"; python3 - "$control_root/api/cmd/agentops/main.go" <<'PY'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1]); s=p.read_text(); old='"session_id": session.ID'
@@ -43,5 +67,12 @@ echo "ordinary SQL assertion failed for production mutation: expected one unchan
 AGENT_RUN_TOKEN="$token" "$tmp/agentops" push --harness codex --endpoint "http://127.0.0.1:$api_port/api/v1/agent-runs" --repository-id "$repo" --wave W9b --worker fixture --issue-numbers '[62,299]' "$control"
 [[ "$(sql codex)" == "2|100|40|7|20|5|gpt-fixture|[62, 299]" ]] || { echo 'restored production replay changed row count'; exit 1; }
 echo "restored pass with identical inputs: $(sql codex)"
+set +e
+AGENT_RUN_TOKEN=wrong-fixture-secret "$tmp/agentops" push --harness codex --endpoint "http://127.0.0.1:$api_port/api/v1/agent-runs" --repository-id "$repo" --wave W9b --worker fixture --issue-numbers '[62,299]' "$control" >"$tmp/wrong-token.stdout" 2>"$tmp/wrong-token.stderr"
+wrong_token_rc=$?
+set -e
+[[ $wrong_token_rc != 0 ]] || { echo 'wrong credential unexpectedly accepted'; exit 1; }
+! grep -q 'wrong-fixture-secret' "$tmp/wrong-token.stdout" "$tmp/wrong-token.stderr" || { echo 'wrong credential leaked to CLI output'; exit 1; }
+echo "wrong-token control rejected (exit=$wrong_token_rc); credential absent from stdout/stderr"
 AGENT_RUN_API_URL=http://127.0.0.1 AGENT_RUN_TOKEN= AGENT_RUN_REPOSITORY_ID="$repo" root="$root" bash -c 'source "$0/scripts/report-agent-run.sh"; report_agent_run "$1" codex' "$root" "$tmp/no-such-transcript"
 echo 'fixture opt-out passed; real CLI and disposable API/Postgres replay proof passed'
