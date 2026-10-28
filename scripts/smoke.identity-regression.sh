@@ -166,6 +166,7 @@ run_spec() {
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-after-identities.txt"
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT id,provider,full_name,created_at,updated_at FROM repositories ORDER BY provider,full_name" >"$ARTIFACT_DIR/$run-after-repository-state.sql-output.txt"
   compose logs --no-color api >"$ARTIFACT_DIR/$run-server.log" 2>&1
+  grep '"method":"DELETE".*"path":"/api/v1/repositories/.*"status":' "$ARTIFACT_DIR/$run-server.log" >"$ARTIFACT_DIR/$run-delete-responses.txt" || true
   cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
   cp "$ARTIFACT_DIR/$run.log" "$ARTIFACT_DIR/$run-execution.log"
   grep -F 'Repository settings real API calls:' "$ARTIFACT_DIR/$run.log" >"$ARTIFACT_DIR/$run-api-calls.txt" || true
