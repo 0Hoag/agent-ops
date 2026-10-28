@@ -132,6 +132,8 @@ run_spec() {
   local selected_count
   printf '%s\n' 'renders both provider settings from the real API' 'creates lists edits and deletes both settings through real organization HTTP' >"$expected_titles"
   cp "$source" "$loaded"
+  cp "$loaded" "$ARTIFACT_DIR/$run-loaded.spec.ts"
+  cp "$TEMP/client/scripts/smoke.playwright.config.ts" "$ARTIFACT_DIR/$run-loaded.config.ts"
   actual=$(shasum -a 256 "$loaded" | awk '{print $1}')
   [[ "$actual" == "$([[ "$run" == control ]] && printf %s "$old_hash" || printf %s "$actual_hash")" ]]
   printf 'RUN=%s loaded_spec=%s sha256=%s invocation=agent-ops-identity-fixed-%s\n' "$run" "$loaded" "$actual" "$API_PORT" | tee -a "$ARTIFACT_DIR/runs.txt"
@@ -156,10 +158,12 @@ run_spec() {
   fi
   printf 'PREFLIGHT_SELECTED=%s count=2\n' "$run" | tee -a "$ARTIFACT_DIR/runs.txt"
   compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c 'SELECT provider,full_name FROM repositories ORDER BY provider,full_name' >"$ARTIFACT_DIR/$run-before-identities.txt"
+  cp "$ARTIFACT_DIR/$run-before-identities.txt" "$ARTIFACT_DIR/$run-before-identities.sql-output.txt"
   local result=0
   (cd "$TEMP/client" && SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR/$run" SMOKE_CLIENT_URL="http://127.0.0.1:$CLIENT_PORT" APP_API_URL="http://127.0.0.1:$API_PORT" SMOKE_API_URL="http://127.0.0.1:$API_PORT" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_INVOCATION_ID="agent-ops-identity-fixed-$API_PORT" ./node_modules/.bin/playwright test --config="$play_config" --grep="$selection_pattern" --reporter=line) >"$ARTIFACT_DIR/$run.log" 2>&1 || result=$?
   set -e
   cp "$selected_listing" "$ARTIFACT_DIR/$run-selected-titles.txt"
+  cp "$ARTIFACT_DIR/$run.log" "$ARTIFACT_DIR/$run-execution.log"
   local executed_count
   executed_count=$(awk '/Running [0-9]+ tests?/ { print $2; exit }' "$ARTIFACT_DIR/$run.log")
   if [[ "$executed_count" != 2 ]]; then
@@ -191,6 +195,7 @@ control_status=0
 reset_database
 run_spec "$TEMP/old.spec.ts" control yes || control_status=$?
 compose exec -T postgres psql -U agent_ops -d agent_ops -At -F '|' -c "SELECT provider,full_name FROM repositories WHERE full_name LIKE 'fixture/settings-%-agent-ops-identity-fixed-$API_PORT' ORDER BY provider,full_name" >"$ARTIFACT_DIR/persisted-identities.txt"
+cp "$ARTIFACT_DIR/persisted-identities.txt" "$ARTIFACT_DIR/control-persisted-identities.sql-output.txt"
 if [[ $control_status -eq 2 ]]; then
   printf 'CONTROL=PASS (historical failure not reproduced)\n' >"$ARTIFACT_DIR/control-result.txt"
 elif [[ $control_status -ne 0 ]]; then
