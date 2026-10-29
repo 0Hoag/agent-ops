@@ -44,11 +44,12 @@ func TestProductionRouterAuthenticatedRepositoryRoutesCoexist(t *testing.T) {
 		http.MethodDelete + " /api/v1/repositories/:repository_id",
 		http.MethodGet + " /api/v1/board",
 		http.MethodGet + " /api/v1/board/ws",
+		http.MethodGet + " /api/v1/agent-runs/aggregate",
 	} {
 		require.Truef(t, paths[route], "missing production route %s", route)
 	}
 
-	for _, path := range []string{"/api/v1/board?repository_id=00000000-0000-0000-0000-000000000001", "/api/v1/board/ws?repository_id=00000000-0000-0000-0000-000000000001"} {
+	for _, path := range []string{"/api/v1/board?repository_id=00000000-0000-0000-0000-000000000001", "/api/v1/board/ws?repository_id=00000000-0000-0000-0000-000000000001", "/api/v1/agent-runs/aggregate"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		res := httptest.NewRecorder()
 		router.ServeHTTP(res, req)
