@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,6 +22,33 @@ type PriceVersion struct {
 	Price
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UnmarshalJSON accepts the browser's date input format while retaining the
+// time.Time field for database scanning and the existing response format.
+func (p *PriceVersion) UnmarshalJSON(data []byte) error {
+	type priceVersionAlias PriceVersion
+	var raw struct {
+		*priceVersionAlias
+		EffectiveDate json.RawMessage `json:"effective_date"`
+	}
+	raw.priceVersionAlias = (*priceVersionAlias)(p)
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var value string
+	if err := json.Unmarshal(raw.EffectiveDate, &value); err != nil {
+		return err
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		parsed, err = time.Parse(time.RFC3339Nano, value)
+	}
+	if err != nil {
+		return err
+	}
+	p.EffectiveDate = parsed
+	return nil
 }
 
 func (PriceVersion) TableName() string { return "agent_run_price_versions" }
