@@ -329,17 +329,22 @@ cd "$CLIENT"
 if ! run_browser 0 baseline; then
   exit 1
 fi
-if ! run_browser 1 no-session; then
-  log "session-removal control failed"
+if run_browser 1 no-session; then
+  log "session-removal control unexpectedly passed unchanged board assertions"
   exit 1
 fi
-log "EXPECTED SESSION-REMOVAL CONTROL: browser session storage remained empty"
+if ! grep -q "getByRole('heading', { name: 'Issue board' })" "$ARTIFACT_DIR/browser1.log"; then
+  log "session-removal control failed for an unexpected reason (see $ARTIFACT_DIR/browser1.log)"
+  exit 1
+fi
+log "EXPECTED SESSION-REMOVAL CONTROL: unchanged board assertion could not find Issue board without production session installation"
 if ! run_browser 0 restored; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1
 fi
 if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-pricing" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --grep='pricing versions' --reporter=line 2>&1 | tee "$ARTIFACT_DIR/pricing-browser.log"; then
   log "pricing acceptance failed: authenticated historical aggregate returned non-success; follow-up issue #342"
+  exit 1
 fi
 compose logs --no-color >"$ARTIFACT_DIR/compose.log"
 log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); session-removal control: $ARTIFACT_DIR/browser1.log; screenshot: $ARTIFACT_DIR/board.png"
