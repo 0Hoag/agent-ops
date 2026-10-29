@@ -3,11 +3,12 @@ package agentrun
 import (
 	"context"
 	"fmt"
+	"net/http"
+
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"net/http"
 )
 
 type TimelineRepository interface {
