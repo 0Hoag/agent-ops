@@ -62,7 +62,6 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 		return nil
 	}
 	steps := make([]map[string]any, 0, len(session.Steps))
-	var cumulative float64
 	for _, step := range session.Steps {
 		item := map[string]any{"started_at": step.Started, "ended_at": step.Ended, "input_tokens": step.Usage.Input, "cached_input_tokens": step.Usage.CachedInput, "cache_write_tokens": step.Usage.CacheWrite, "output_tokens": step.Usage.Output, "reasoning_tokens": step.Usage.Reasoning, "cache_hit": step.CacheHit}
 		if step.ToolName != "" {
@@ -74,7 +73,6 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 		if step.Ended.IsZero() {
 			delete(item, "ended_at")
 		}
-		_ = cumulative
 		steps = append(steps, item)
 	}
 	b, err = json.Marshal(map[string]any{"steps": steps})

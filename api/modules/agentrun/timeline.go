@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,8 +23,27 @@ type TimelineInput struct {
 
 func (r *Repository) Steps(ctx context.Context, id string) ([]RunStep, error) {
 	var out []RunStep
-	err := r.db.WithContext(ctx).Table("agent_run_steps s").Select("s.*").Joins("JOIN agent_runs ar ON ar.id=s.run_id JOIN repositories repo ON repo.id=ar.repository_id").Where("s.run_id = ? AND repo.organization_id = ?", id, organizationFromContext(ctx)).Order("s.sequence ASC").Find(&out).Error
-	return out, err
+	var run AgentRun
+	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id=ar.repository_id").Where("ar.id = ? AND repo.organization_id = ?", id, organizationFromContext(ctx))
+	if err := q.First(&run).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).Table("agent_run_steps s").Where("s.run_id = ?", id).Order("s.sequence ASC").Find(&out).Error; err != nil {
+		return nil, err
+	}
+	price, err := r.priceAt(ctx, organizationFromContext(ctx), run.Model, run.StartedAt)
+	if err != nil {
+		return nil, fmt.Errorf("resolve historical timeline price: %w", err)
+	}
+	if price != nil {
+		var cumulative float64
+		for i := range out {
+			cumulative += stepCost(out[i], *price)
+			value := cumulative
+			out[i].CumulativeCostUSD = &value
+		}
+	}
+	return out, nil
 }
 func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunStep) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -38,13 +58,31 @@ func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunSte
 		if err := tx.Exec("DELETE FROM agent_run_steps WHERE run_id = ?", id).Error; err != nil {
 			return err
 		}
+		seen := make(map[string]int, len(steps))
 		for i := range steps {
-			steps[i].ID = uuid.NewMD5(uuid.Nil, []byte(id+":"+strconv.Itoa(i))).String()
+			fingerprint := timelineStepFingerprint(steps[i])
+			occurrence := seen[fingerprint]
+			seen[fingerprint] = occurrence + 1
+			steps[i].ID = uuid.NewMD5(uuid.Nil, []byte(id+":"+fingerprint+":"+strconv.Itoa(occurrence))).String()
 			steps[i].RunID = id
 			steps[i].Sequence = i
 		}
 		return tx.Table("agent_run_steps").Create(&steps).Error
 	})
+}
+
+func timelineStepFingerprint(step RunStep) string {
+	step.ID, step.RunID, step.Sequence, step.CumulativeCostUSD = "", "", 0, nil
+	b, _ := json.Marshal(step)
+	return string(b)
+}
+
+func stepCost(step RunStep, price Price) float64 {
+	return float64(step.InputTokens)*price.InputPerMillion/1e6 +
+		float64(step.CachedInputTokens)*price.CachedInputPerMillion/1e6 +
+		float64(step.CacheWriteTokens)*price.CacheWritePerMillion/1e6 +
+		float64(step.OutputTokens)*price.OutputPerMillion/1e6 +
+		float64(step.ReasoningTokens)*price.ReasoningPerMillion/1e6
 }
 
 // Timeline returns sanitized ordered steps for an organization-scoped run.
