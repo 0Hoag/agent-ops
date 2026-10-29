@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,12 @@ type submitter struct {
 	endpoint, token, repository, wave, worker, harness string
 	issues                                             []int64
 	client                                             *http.Client
+}
+
+type createdRun struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
 }
 
 func (s submitter) submit(ctx context.Context, session transcript.Session) error {
@@ -39,6 +46,53 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("submit session %q: HTTP %s", session.ID, resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var created createdRun
+	if len(body) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(body, &created); err != nil || created.Data.ID == "" {
+		return fmt.Errorf("submit session %q: response missing run id", session.ID)
+	}
+	if len(session.Steps) == 0 {
+		return nil
+	}
+	steps := make([]map[string]any, 0, len(session.Steps))
+	for _, step := range session.Steps {
+		item := map[string]any{"started_at": step.Started, "ended_at": step.Ended, "input_tokens": step.Usage.Input, "cached_input_tokens": step.Usage.CachedInput, "cache_write_tokens": step.Usage.CacheWrite, "output_tokens": step.Usage.Output, "reasoning_tokens": step.Usage.Reasoning, "cache_hit": step.CacheHit}
+		if step.ToolName != "" {
+			item["tool_name"] = step.ToolName
+		}
+		if step.Started.IsZero() {
+			delete(item, "started_at")
+		}
+		if step.Ended.IsZero() {
+			delete(item, "ended_at")
+		}
+		steps = append(steps, item)
+	}
+	b, err = json.Marshal(map[string]any{"steps": steps})
+	if err != nil {
+		return err
+	}
+	timelineURL := strings.TrimRight(s.endpoint, "/") + "/" + created.Data.ID + "/timeline"
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, timelineURL, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Agent-Run-Token", s.token)
+	resp, err = s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("submit timeline %q: %w", session.ID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("submit timeline %q: HTTP %s", session.ID, resp.Status)
 	}
 	return nil
 }

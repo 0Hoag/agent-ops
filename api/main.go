@@ -139,6 +139,7 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	runController.SetExchangeRateVND(cfg.ExchangeRateVNDPerUSD)
 	runRoutes := agentrun.NewRoutes(runController)
 	runRoutes.Register(router.Group("/api/v1"))
+	runRoutes.RegisterPrivate(private)
 	runRoutes.RegisterAggregate(private)
 	auth.NewRoutes(auth.NewController(authService)).Register(router.Group("/api/v1"))
 	organization.NewRoutes(organization.NewController(organization.NewRepository(gormDB), authService)).Register(router.Group("/api/v1"))

@@ -13,4 +13,13 @@ type Session struct {
 	Model          string
 	Started, Ended time.Time
 	Usage          Usage
+	Steps          []Step
+}
+
+// Step contains only usage and safe tool metadata; transcript content is never retained.
+type Step struct {
+	Started, Ended time.Time
+	Usage          Usage
+	ToolName       string
+	CacheHit       bool
 }

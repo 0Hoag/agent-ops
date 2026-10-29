@@ -22,6 +22,11 @@ type fakeRepository struct {
 	aggregatePrices map[string]Price
 	configured      bool
 	err             error
+	pageItems       []AgentRun
+	pageTotal       int64
+	page            int
+	perPage         int
+	pageFilter      Filter
 }
 
 func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return f.err }
@@ -48,6 +53,10 @@ func TestCreateRejectsRepositoryOutsideConfiguredMachineSet(t *testing.T) {
 func (f *fakeRepository) List(_ context.Context, filter Filter) ([]AgentRun, error) {
 	f.listFilter = filter
 	return f.list, f.err
+}
+func (f *fakeRepository) ListPage(_ context.Context, filter Filter, page, perPage int) ([]AgentRun, int64, error) {
+	f.pageFilter, f.page, f.perPage = filter, page, perPage
+	return f.pageItems, f.pageTotal, f.err
 }
 func (f *fakeRepository) Aggregate(_ context.Context, filter Filter, prices map[string]Price) ([]Aggregate, error) {
 	f.aggregateFilter = filter
@@ -111,6 +120,40 @@ func TestAggregateReturnsResultsAndForwardsFilters(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 	got := envelope.Data
 	require.Equal(t, want, got)
+}
+
+func TestListForwardsConjunctiveFiltersAndExactPaginationMeta(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	after := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	before := after.Add(24 * time.Hour)
+	repo := &fakeRepository{pageItems: []AgentRun{{Wave: "w11a"}}, pageTotal: 37}
+	r := gin.New()
+	r.GET("/", NewController(repo, "", nil).List)
+	req := httptest.NewRequest(http.MethodGet, "/?repository_id=repo-a&wave=w11a&harness=codex&model=gpt&issue_number=66&pr_number=357&started_after=2026-10-01T00:00:00Z&started_before=2026-10-02T00:00:00Z&page=3&per_page=10", nil)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code)
+	require.Equal(t, Filter{RepositoryID: "repo-a", Wave: "w11a", Harness: "codex", Model: "gpt", IssueNumber: 66, PRNumber: 357, StartedAfter: &after, StartedBefore: &before}, repo.pageFilter)
+	require.Equal(t, 3, repo.page)
+	require.Equal(t, 10, repo.perPage)
+	var got ListResponse
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &got))
+	meta := got.Meta.(map[string]any)
+	require.Equal(t, float64(3), meta["page"])
+	require.Equal(t, float64(10), meta["per_page"])
+	require.Equal(t, float64(37), meta["total"])
+}
+
+func TestListRejectsInvalidDateAndPaginationBeforeRepositoryAccess(t *testing.T) {
+	for _, query := range []string{"started_after=not-a-date", "page=0", "per_page=101", "started_after=2026-10-02T00:00:00Z&started_before=2026-10-01T00:00:00Z"} {
+		repo := &fakeRepository{}
+		r := gin.New()
+		r.GET("/", NewController(repo, "", nil).List)
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/?"+query, nil))
+		require.Equal(t, http.StatusBadRequest, res.Code, query)
+		require.Empty(t, repo.pageFilter, query)
+	}
 }
 
 func TestCreateValidationPrecedesRepositoryAccess(t *testing.T) {

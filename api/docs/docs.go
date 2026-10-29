@@ -119,7 +119,7 @@ const docTemplate = `{
                 "produces": [
                     "application/json"
                 ],
-                "summary": "List agent runs",
+                "summary": "List organization-scoped agent runs",
                 "parameters": [
                     {
                         "type": "string",
@@ -137,6 +137,48 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Issue number",
                         "name": "issue_number",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pull request number",
+                        "name": "pr_number",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Harness identity",
+                        "name": "harness",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model identity",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 lower bound",
+                        "name": "started_after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 upper bound",
+                        "name": "started_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20, maximum 100)",
+                        "name": "per_page",
                         "in": "query"
                     }
                 ],
@@ -233,6 +275,76 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/agentrun.AggregateResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/agent-runs/{run_id}/timeline": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get run timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run UUID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "AgentRunToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Ingest run timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run UUID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Sanitized steps",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.TimelineInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
                         }
                     }
                 }
@@ -1348,6 +1460,9 @@ const docTemplate = `{
                 "reasoning_tokens": {
                     "type": "integer"
                 },
+                "relations": {
+                    "$ref": "#/definitions/agentrun.RunRelations"
+                },
                 "repository_id": {
                     "type": "string"
                 },
@@ -1510,6 +1625,7 @@ const docTemplate = `{
                         "$ref": "#/definitions/agentrun.AgentRun"
                     }
                 },
+                "meta": {},
                 "status": {
                     "type": "integer"
                 }
@@ -1550,6 +1666,147 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "agentrun.RunCI": {
+            "type": "object",
+            "properties": {
+                "conclusion": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunIssue": {
+            "type": "object",
+            "properties": {
+                "number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunPullRequest": {
+            "type": "object",
+            "properties": {
+                "head_sha": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunRelations": {
+            "type": "object",
+            "properties": {
+                "ci": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunCI"
+                    }
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunIssue"
+                    }
+                },
+                "pull_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunPullRequest"
+                    }
+                }
+            }
+        },
+        "agentrun.RunStep": {
+            "type": "object",
+            "properties": {
+                "cache_hit": {
+                    "type": "boolean"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "cumulative_cost_usd": {
+                    "type": "number"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "tool_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.TimelineInput": {
+            "type": "object",
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunStep"
+                    }
                 }
             }
         },

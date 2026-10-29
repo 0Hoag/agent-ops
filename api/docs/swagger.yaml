@@ -32,6 +32,8 @@ definitions:
         type: integer
       reasoning_tokens:
         type: integer
+      relations:
+        $ref: '#/definitions/agentrun.RunRelations'
       repository_id:
         type: string
       session_id:
@@ -140,6 +142,7 @@ definitions:
         items:
           $ref: '#/definitions/agentrun.AgentRun'
         type: array
+      meta: {}
       status:
         type: integer
     type: object
@@ -167,6 +170,98 @@ definitions:
         type: number
       updated_at:
         type: string
+    type: object
+  agentrun.RunCI:
+    properties:
+      conclusion:
+        type: string
+      external_id:
+        type: string
+      pr_number:
+        type: integer
+      repository_id:
+        type: string
+      sha:
+        type: string
+      status:
+        type: string
+    type: object
+  agentrun.RunIssue:
+    properties:
+      number:
+        type: integer
+      repository_id:
+        type: string
+      state:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  agentrun.RunPullRequest:
+    properties:
+      head_sha:
+        type: string
+      number:
+        type: integer
+      repository_id:
+        type: string
+      state:
+        type: string
+      title:
+        type: string
+    type: object
+  agentrun.RunRelations:
+    properties:
+      ci:
+        items:
+          $ref: '#/definitions/agentrun.RunCI'
+        type: array
+      issues:
+        items:
+          $ref: '#/definitions/agentrun.RunIssue'
+        type: array
+      pull_requests:
+        items:
+          $ref: '#/definitions/agentrun.RunPullRequest'
+        type: array
+    type: object
+  agentrun.RunStep:
+    properties:
+      cache_hit:
+        type: boolean
+      cache_write_tokens:
+        type: integer
+      cached_input_tokens:
+        type: integer
+      cumulative_cost_usd:
+        type: number
+      ended_at:
+        type: string
+      id:
+        type: string
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      reasoning_tokens:
+        type: integer
+      run_id:
+        type: string
+      sequence:
+        type: integer
+      started_at:
+        type: string
+      tool_name:
+        type: string
+    type: object
+  agentrun.TimelineInput:
+    properties:
+      steps:
+        items:
+          $ref: '#/definitions/agentrun.RunStep'
+        type: array
     type: object
   auth.LoginRequest:
     properties:
@@ -538,6 +633,34 @@ paths:
         in: query
         name: issue_number
         type: integer
+      - description: Pull request number
+        in: query
+        name: pr_number
+        type: integer
+      - description: Harness identity
+        in: query
+        name: harness
+        type: string
+      - description: Model identity
+        in: query
+        name: model
+        type: string
+      - description: RFC3339 lower bound
+        in: query
+        name: started_after
+        type: string
+      - description: RFC3339 upper bound
+        in: query
+        name: started_before
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, maximum 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
       - application/json
       responses:
@@ -545,7 +668,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/agentrun.ListResponse'
-      summary: List agent runs
+      summary: List organization-scoped agent runs
     post:
       consumes:
       - application/json
@@ -579,6 +702,49 @@ paths:
       security:
       - AgentRunToken: []
       summary: Create an agent run
+  /api/v1/agent-runs/{run_id}/timeline:
+    get:
+      parameters:
+      - description: Run UUID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Get run timeline
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Run UUID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: Sanitized steps
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/agentrun.TimelineInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - AgentRunToken: []
+      summary: Ingest run timeline
   /api/v1/agent-runs/aggregate:
     get:
       parameters:
