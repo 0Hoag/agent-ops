@@ -588,6 +588,81 @@
                 }
             }
         },
+        "/api/v1/insights/analytics": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get cost and cache analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "harness",
+                            "model",
+                            "wave",
+                            "area"
+                        ],
+                        "type": "string",
+                        "default": "harness",
+                        "description": "Grouping dimension",
+                        "name": "group_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "daily",
+                            "weekly"
+                        ],
+                        "type": "string",
+                        "default": "daily",
+                        "description": "Bucket period",
+                        "name": "period",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD), max 366 days",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.AnalyticsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/organization-invitations/accept": {
             "post": {
                 "consumes": [
@@ -1865,6 +1940,82 @@
                 "data": {},
                 "meta": {
                     "$ref": "#/definitions/board.ListMeta"
+                }
+            }
+        },
+        "insight.AnalyticsBucket": {
+            "type": "object",
+            "properties": {
+                "actual_cost_usd": {
+                    "type": "number"
+                },
+                "cache_hit_rate": {
+                    "type": "number"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "start": {
+                    "type": "string"
+                },
+                "unknown_price_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.AnalyticsResponse": {
+            "type": "object",
+            "properties": {
+                "bucket_timestamp": {
+                    "type": "string"
+                },
+                "buckets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.AnalyticsBucket"
+                    }
+                },
+                "cache_denominator": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "group_by": {
+                    "type": "string"
+                },
+                "period": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "unknown_price_count": {
+                    "type": "integer"
+                },
+                "week_starts": {
+                    "type": "string"
                 }
             }
         },
