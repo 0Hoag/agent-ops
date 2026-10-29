@@ -106,6 +106,11 @@ One pass:
    evidence in the PR body in one fixed shape: gate output, one smoke or test result, one failing control. Prefer
    waves that ship features (`feat`) over waves that only harden smoke/CI; never open a wave whose only goal is more
    acceptance evidence for an already merged PR.
+   **Run budget (owner 29/10: 65% of worker tokens went into 2nd+ runs of the same wave):** a wave gets at most
+   **2 worker runs** (first + one RESUME). After that: CI green and the feature works -> merge; otherwise mark the
+   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave.
+   **Acceptance scope:** live smoke or browser evidence is required only in the dedicated smoke/e2e waves (WS-d, W8e,
+   W16) and for client pages. Backend feature PRs need CI + unit/integration tests; do not ask them for live smoke.
    A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
    **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
    restart that worker on the same branch in a later pass after the reset time.
