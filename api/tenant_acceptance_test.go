@@ -74,7 +74,7 @@ func TestW7MTenantAcceptance(t *testing.T) {
 	assertJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenA, http.StatusOK, `"runs":1`, `"cost_usd":0.000002`)
 	assertJSON(t, r.URL+"/api/v1/agent-runs", tokenB, http.StatusOK, `"repository_id":"`+repoB+`"`)
 	assertNotJSON(t, r.URL+"/api/v1/agent-runs", tokenB, `"repository_id":"`+repoA+`"`)
-	assertJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenB, http.StatusOK, `"issue_number":7002`, `"cost_usd":0.0002`)
+	assertJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenB, http.StatusOK, `"issue_number":7002`, `"cost_usd":0.0004`)
 	assertNotJSON(t, r.URL+"/api/v1/agent-runs/aggregate", tokenB, `"issue_number":7001`, `"cost_usd":0.000002`)
 
 	postAgentRun(t, r.URL+"/api/v1/agent-runs", "machine", tokenA, repoA, http.StatusCreated)
@@ -120,7 +120,7 @@ func assertBoardScopeControl(t *testing.T, baseURL, token string) {
 }
 
 func seedTenantFixture(t *testing.T, db *gorm.DB) {
-	for _, table := range []string{"agent_runs", "pipeline_runs", "pull_requests", "issues", "repositories", "organization_memberships", "organizations", "accounts"} {
+	for _, table := range []string{"agent_runs", "agent_run_price_versions", "pipeline_runs", "pull_requests", "issues", "repositories", "organization_memberships", "organizations", "accounts"} {
 		require.NoError(t, db.Exec("DELETE FROM "+table).Error)
 	}
 	q := `INSERT INTO accounts (id,email,password_hash) VALUES
