@@ -22,7 +22,10 @@ type Service struct {
 	registry     ProviderRegistry
 	publisher    Publisher
 	sealer       *appcrypto.Sealer
+	metrics      LagObserver
+	now          func() time.Time
 }
+type LagObserver interface{ ObserveWebhook(string, time.Time) }
 
 type ProviderRegistry interface {
 	Build(string, scm.Config) (scm.SCMProvider, error)
@@ -33,13 +36,19 @@ func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
 }
 
 func NewServiceWithPublisher(db *gorm.DB, registry ProviderRegistry, publisher Publisher) *Service {
-	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher}
+	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher, now: time.Now}
 }
 
 func NewServiceWithPublisherAndSealer(db *gorm.DB, registry ProviderRegistry, publisher Publisher, sealer *appcrypto.Sealer) *Service {
 	service := NewServiceWithPublisher(db, registry, publisher)
 	service.sealer = sealer
 	return service
+}
+func (service *Service) SetMetrics(observer LagObserver, now func() time.Time) {
+	service.metrics = observer
+	if now != nil {
+		service.now = now
+	}
 }
 
 func (service *Service) Ingest(ctx context.Context, provider, configuredRepository, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
@@ -114,6 +123,7 @@ func (service *Service) persistVerified(ctx context.Context, provider, configure
 var ErrCandidateMismatch = errors.New("webhook candidate mismatch")
 
 func (service *Service) persistEvent(ctx context.Context, provider, configuredRepository string, event scm.Event, payload []byte) (bool, error) {
+	started := service.now()
 	if !strings.EqualFold(event.Repository, configuredRepository) {
 		return false, ErrCandidateMismatch
 	}
@@ -160,6 +170,9 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 	}
 	if result && service.publisher != nil {
 		service.publisher.Publish(string(repositoryID))
+	}
+	if result && service.metrics != nil {
+		service.metrics.ObserveWebhook(provider, started)
 	}
 	return result, nil
 }

@@ -25,6 +25,7 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 	"github.com/0Hoag/agent-ops/api/pkg/logger"
+	"github.com/0Hoag/agent-ops/api/pkg/metrics"
 	"github.com/0Hoag/agent-ops/api/pkg/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -99,6 +100,9 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 
 func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub) {
 	handlers.NewHealth(db).Register(router)
+	serviceMetrics := metrics.New(nil)
+	router.Use(serviceMetrics.GinMiddleware())
+	router.GET("/metrics", gin.WrapH(serviceMetrics.Handler()))
 	configs := map[string][]webhook.Config{}
 	for _, r := range cfg.Repositories {
 		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
@@ -107,12 +111,15 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	if hub == nil {
 		hub = board.NewHub()
 	}
+	hub.SetQueueObserver(serviceMetrics)
 	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
 	var webhookSealer *appcrypto.Sealer
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		webhookSealer = sealer
 	}
-	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisherAndSealer(gormDB, builder.Default(), hub, webhookSealer), configs)).Register(router.Group("/api/v1"))
+	webhookService := webhook.NewServiceWithPublisherAndSealer(gormDB, builder.Default(), hub, webhookSealer)
+	webhookService.SetMetrics(serviceMetrics, nil)
+	webhook.NewRoutes(webhook.NewController(webhookService, configs)).Register(router.Group("/api/v1"))
 	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "")).Register(private)
