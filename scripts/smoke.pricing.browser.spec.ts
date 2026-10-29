@@ -34,56 +34,111 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
     { endpoint: '/api/v1/agent-run-prices', status: priceResponse.status(), body: await priceResponse.json() },
   ];
   const aggregateResponse = await request('/api/v1/agent-runs/aggregate');
-  if (aggregateResponse.status() !== 200) {
-    const body = await aggregateResponse.json();
-    console.log(`PRICING ACCEPTANCE BLOCKED: aggregate HTTP ${aggregateResponse.status()} response ${JSON.stringify(body)}`);
-    test.skip(true, 'Tracked production aggregate context failure: agent-ops #342');
-  }
+  expect(aggregateResponse.status(), `aggregate HTTP ${aggregateResponse.status()}`).toBe(200);
   const aggregateBody = await aggregateResponse.json();
   responseLog.push({ endpoint: '/api/v1/agent-runs/aggregate', status: aggregateResponse.status(), body: aggregateBody });
   const rows = aggregateBody.data as AggregateRow[];
   expect(rows).toHaveLength(2);
-  const apiRun = rows.find((row) => row.wave === 'W10' && row.worker === 'smoke' && row.cost_usd === 1.25 && row.equivalent_cost_usd === 1.25 && row.billed_cost_usd === 1.25);
-  const subscriptionRun = rows.find((row) => row.wave === 'W10' && row.worker === 'smoke' && row.equivalent_cost_usd === 2.5 && row.billed_cost_usd === 0);
+  const apiRun = rows.find((row) => row.wave === 'W10' && row.worker === 'smoke-api' && row.cost_usd === 1.25 && row.equivalent_cost_usd === 1.25 && row.billed_cost_usd === 1.25);
+  const subscriptionRun = rows.find((row) => row.wave === 'W10' && row.worker === 'smoke-sub' && row.cost_usd === 2.5 && row.equivalent_cost_usd === 2.5 && row.billed_cost_usd === 0);
   expect(apiRun, JSON.stringify(rows)).toBeTruthy();
   expect(subscriptionRun, JSON.stringify(rows)).toBeTruthy();
-  if (apiRun!.cost_vnd !== undefined) expect(apiRun!.cost_vnd).toBeGreaterThan(apiRun!.cost_usd!);
+  responseLog.push({ endpoint: '/api/v1/agent-runs/aggregate asserted totals', status: 200, body: rows });
+  const exchangeRate = Number(process.env.EXCHANGE_RATE_VND_PER_USD || 0);
+  if (exchangeRate > 0) {
+    expect(apiRun!.cost_vnd).toBeCloseTo(apiRun!.cost_usd! * exchangeRate, 6);
+    expect(subscriptionRun!.cost_vnd).toBeCloseTo(subscriptionRun!.cost_usd! * exchangeRate, 6);
+    expect(apiRun!.cost_vnd).toBeGreaterThan(apiRun!.cost_usd!);
+    expect(subscriptionRun!.cost_vnd).toBeGreaterThan(subscriptionRun!.cost_usd!);
+  } else {
+    expect(apiRun!.cost_vnd).toBeUndefined();
+    expect(subscriptionRun!.cost_vnd).toBeUndefined();
+  }
 
   await page.addInitScript((sessionToken) => sessionStorage.setItem('agent-ops-token', sessionToken), token);
-  await page.goto('/pricing');
+  await page.goto('/prices');
   await expect(page.getByRole('heading', { name: 'Model prices' })).toBeVisible();
-  const suffix = (process.env.SMOKE_INVOCATION_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9-]/g, '-');
-  const model = `smoke-${suffix}`;
-  const occupiedDate = '2099-01-01';
-  const draft = { model, effective_date: occupiedDate, input_per_million: 1, cached_input_per_million: 0.2, cache_write_per_million: 0.3, output_per_million: 2, reasoning_per_million: 0.4 };
+  const model = 'acceptance-model';
+  const occupiedDate = '2027-01-01';
+  const newDate = '2027-01-04';
+  const secondDate = '2027-01-08';
+  const thirdDate = '2027-01-10';
+  const draft = { model, effective_date: `${newDate}T00:00:00Z`, input_per_million: 1, cached_input_per_million: 0.2, cache_write_per_million: 0.3, output_per_million: 2, reasoning_per_million: 0.4 };
   await page.getByLabel('Model').fill(model);
-  await page.getByLabel('Effective date').fill(occupiedDate);
-  for (const [field, value] of Object.entries(draft).filter(([key]) => key.endsWith('_per_million'))) {
-    await page.getByLabel(new RegExp(field.replace('_per_million', '').replaceAll('_', ' '), 'i')).fill(String(value));
-  }
+  await page.getByLabel('Effective date').fill(newDate);
+  await page.getByRole('spinbutton', { name: 'input per million', exact: true }).fill('1');
+  await page.getByRole('spinbutton', { name: 'cached input per million', exact: true }).fill('0.2');
+  await page.getByRole('spinbutton', { name: 'cache write per million', exact: true }).fill('0.3');
+  await page.getByRole('spinbutton', { name: 'output per million', exact: true }).fill('2');
+  await page.getByRole('spinbutton', { name: 'reasoning per million', exact: true }).fill('0.4');
+  const createResponsePromise = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/api/v1/agent-run-prices'));
   await page.getByRole('button', { name: 'Create version' }).click();
-  await expect(page.getByText(model, { exact: true })).toBeVisible();
-  const created = await request('/api/v1/agent-run-prices', { method: 'POST', data: draft });
-  expect([400, 409]).toContain(created.status());
-  const createdBody = await created.json();
-  responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied duplicate)', status: created.status(), body: createdBody });
-
-  await page.getByRole('button', { name: 'Edit' }).last().click();
+  const createResponse = await createResponsePromise;
+  const createBody = await createResponse.json();
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser create)', status: createResponse.status(), body: createBody, request: createResponse.request().postDataJSON() });
+  expect(createResponse.status(), JSON.stringify({ request: createResponse.request().postDataJSON(), response: createBody })).toBe(201);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const initialPriceResponse = await request('/api/v1/agent-run-prices');
+  const initialPriceBody = await initialPriceResponse.json();
+  expect(initialPriceResponse.status(), JSON.stringify(initialPriceBody)).toBe(200);
+  expect(initialPriceBody.data.some((item: { model: string; effective_date: string }) => item.model === model && item.effective_date.startsWith(newDate)), JSON.stringify(initialPriceBody)).toBeTruthy();
+  const initialPricesResponse = await request('/api/v1/agent-run-prices');
+  const initialPricesBody = await initialPricesResponse.json();
+  const newPrice = initialPricesBody.data.find((item: { model: string; effective_date: string }) => item.model === model && item.effective_date.startsWith(newDate));
+  expect(newPrice).toBeTruthy();
+  const ownPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: newDate });
+  await expect(ownPriceRow).toHaveCount(1);
+  const occupiedRow = initialPricesBody.data.find((item: { model: string; effective_date: string; id: string }) => item.model === model && item.effective_date.startsWith(occupiedDate) && item.id !== newPrice.id);
+  expect(occupiedRow).toBeTruthy();
+  const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model' } });
+  expect([400, 409]).toContain(occupiedPairProbe.status());
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied model/date control)', status: occupiedPairProbe.status(), body: await occupiedPairProbe.json() });
+  await ownPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
-  await page.getByLabel('Effective date').fill('2099-01-02');
-  await page.getByLabel(/output/i).fill('3');
+  await page.getByLabel('Effective date').fill(occupiedRow.effective_date.slice(0, 10));
+  await page.getByRole('spinbutton', { name: 'output per million', exact: true }).fill('3');
+  const rejectedPatch = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes(`/api/v1/agent-run-prices/${newPrice.id}`));
   await page.getByRole('button', { name: /save|update/i }).click();
+  const rejectedResponse = await rejectedPatch;
+  const rejectedBody = await rejectedResponse.json();
+  expect(rejectedResponse.status(), JSON.stringify({ request: rejectedResponse.request().postDataJSON(), response: rejectedBody, expectedID: newPrice.id, occupiedID: occupiedRow.id })).toBe(409);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied browser PATCH)', status: rejectedResponse.status(), body: rejectedBody });
+  const afterRejected = await request('/api/v1/agent-run-prices');
+  const afterRejectedBody = await afterRejected.json();
+  const unchanged = afterRejectedBody.data.find((item: { id: string }) => item.id === newPrice.id);
+  expect(unchanged?.effective_date).toContain(newDate);
+  expect(unchanged?.output_per_million).toBe(2);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (persisted after rejected collision)', status: afterRejected.status(), body: unchanged });
+  await expect(page.getByRole('alert')).toContainText('Unable to save price version. Check for a duplicate or invalid version.');
+  await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/pricing-occupied-date.png`, fullPage: true });
+  await page.getByLabel('Effective date').fill(secondDate);
+  const recoveredPatch = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes(`/api/v1/agent-run-prices/${newPrice.id}`));
+  await page.getByRole('button', { name: /save|update/i }).click();
+  const recoveredResponse = await recoveredPatch;
+  expect(recoveredResponse.status()).toBe(200);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser PATCH recovery)', status: recoveredResponse.status(), body: await recoveredResponse.json() });
+  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: secondDate });
+  await expect(recoveredPriceRow).toHaveCount(1);
+  await recoveredPriceRow.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByLabel('Model')).toHaveValue(model);
+  await page.getByLabel('Effective date').fill(thirdDate);
+  await page.getByRole('spinbutton', { name: 'output per million', exact: true }).fill('3');
+  const updateResponsePromise = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes(`/api/v1/agent-run-prices/${newPrice.id}`));
+  await page.getByRole('button', { name: /save|update/i }).click();
+  const updateResponse = await updateResponsePromise;
+  expect(updateResponse.status()).toBe(200);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser edit)', status: updateResponse.status(), body: await updateResponse.json() });
   const listed = await request('/api/v1/agent-run-prices');
   const listedBody = await listed.json();
-  const saved = listedBody.data.find((item: { model: string }) => item.model === model);
-  expect(saved?.effective_date).toContain('2099-01-02');
-  const versionPatch = await request(`/api/v1/agent-run-prices/${saved.id}`, { method: 'PATCH', data: { ...draft, effective_date: '2099-01-02', output_per_million: 3 } });
-  expect(versionPatch.status()).toBe(200);
-  responseLog.push({ endpoint: '/api/v1/agent-run-prices (recovered persisted)', status: listed.status(), body: listedBody });
+  const saved = listedBody.data.find((item: { id: string }) => item.id === newPrice.id);
+  expect(saved?.effective_date).toContain(thirdDate);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (recovered persisted)', status: listed.status(), body: saved });
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/pricing-owner.png`, fullPage: true });
 
   const inviteeLogin = await page.request.post(`${api}/api/v1/auth/login`, { data: { email: 'invitee@example.invalid', password: 'smoke-password-not-a-secret' } });
-  const viewerToken = (await inviteeLogin.json()).token as string;
+  const inviteeAccountToken = (await inviteeLogin.json()).token as string;
+  const viewerSelect = await page.request.post(`${api}/api/v1/auth/select-organization`, { headers: { Authorization: `Bearer ${inviteeAccountToken}` }, data: { organization_id: org } });
+  const viewerToken = (await viewerSelect.json()).token as string;
   const memberLogin = await page.request.post(`${api}/api/v1/auth/login`, { data: { email: 'member@example.invalid', password: 'smoke-password-not-a-secret' } });
   const memberAccountToken = (await memberLogin.json()).token as string;
   const memberSelect = await page.request.post(`${api}/api/v1/auth/select-organization`, { headers: { Authorization: `Bearer ${memberAccountToken}` }, data: { organization_id: org } });
@@ -95,7 +150,7 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   const memberWrite = await request('/api/v1/agent-run-prices', { method: 'POST', token: memberToken, data: { ...draft, model: `${model}-member` } });
   expect(memberWrite.status()).toBe(403);
   await page.addInitScript((value) => sessionStorage.setItem('agent-ops-token', value), viewerToken);
-  await page.goto('/pricing');
+  await page.goto('/prices');
   await expect(page.getByText('Read-only: only organization owners and admins can edit prices.')).toBeVisible();
   expect(await page.getByRole('button', { name: 'Create version' }).count()).toBe(0);
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/pricing-viewer.png`, fullPage: true });
@@ -120,8 +175,12 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   await expect(page.getByText('$1.2500 (equivalent API USD $1.2500)')).toBeVisible();
   await expect(page.getByText('$0.0000 (equivalent API USD $2.5000)')).toBeVisible();
   await page.getByLabel(/currency/i).selectOption('VND');
-  if (apiRun!.cost_vnd !== undefined) await expect(page.getByText(`VND ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(apiRun!.cost_vnd)}`)).toBeVisible();
-  else await expect(page.getByText(/unknown/i)).toBeVisible();
+  if (apiRun!.cost_vnd !== undefined) {
+    await expect(page.getByText(`VND ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(apiRun!.cost_vnd)}`)).toBeVisible();
+    await expect(page.getByText(`VND ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(subscriptionRun!.cost_vnd!)}`)).toBeVisible();
+  } else {
+    await expect(page.getByText(/unknown/i)).toHaveCount(2);
+  }
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/runs-vnd.png`, fullPage: true });
   console.log(`Pricing live API responses: ${JSON.stringify(responseLog)}; aggregate rows: ${JSON.stringify(rows)}; browser requests: ${calls.join(' | ')}`);
   expect(calls.some((call) => call.includes('/agent-run-prices'))).toBeTruthy();

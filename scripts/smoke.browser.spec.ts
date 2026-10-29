@@ -30,7 +30,7 @@ test('renders seeded issue and linked PR/CI from the real API', async ({ page })
   expect(apiResponses.some((item) => item.startsWith('200 ') && item.includes('/api/v1/repositories'))).toBeTruthy();
   expect(apiResponses.some((item) => item.startsWith('200 ') && item.includes('/api/v1/board?') && item.includes('repository_id='))).toBeTruthy();
   expect(apiResponses.some((item) => item.startsWith('200 ') && item.includes('/api/v1/auth/session'))).toBeTruthy();
-  await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR || '.agent-runs/smoke'}/board.png`, fullPage: true });
+  await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR || '.agent-runs/smoke'}/board.png`, fullPage: true, timeout: 60000, animations: 'disabled', caret: 'hide' });
   console.log(`API responses: ${apiResponses.join(' | ')}`);
 });
 
