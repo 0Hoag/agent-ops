@@ -238,6 +238,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/agent-runs/{run_id}/timeline": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get run timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run UUID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "AgentRunToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Ingest run timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run UUID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Sanitized steps",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/agentrun.TimelineInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "consumes": [
@@ -1510,6 +1580,7 @@ const docTemplate = `{
                         "$ref": "#/definitions/agentrun.AgentRun"
                     }
                 },
+                "meta": {},
                 "status": {
                     "type": "integer"
                 }
@@ -1550,6 +1621,61 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "agentrun.RunStep": {
+            "type": "object",
+            "properties": {
+                "cache_hit": {
+                    "type": "boolean"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "cumulative_cost_usd": {
+                    "type": "number"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "tool_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.TimelineInput": {
+            "type": "object",
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunStep"
+                    }
                 }
             }
         },

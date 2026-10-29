@@ -32,6 +32,14 @@ func (r *Repository) IsConfiguredRepository(ctx context.Context, id string, name
 	return count == 1, err
 }
 func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
+	q := r.listQuery(ctx, f)
+	var out []AgentRun
+	if err := q.Order("started_at DESC").Find(&out).Error; err != nil {
+		return nil, fmt.Errorf("list agent runs: %w", err)
+	}
+	return out, nil
+}
+func (r *Repository) listQuery(ctx context.Context, f Filter) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&AgentRun{})
 	if organization := organizationFromContext(ctx); organization != "" {
 		q = q.Joins("JOIN repositories ON repositories.id = agent_runs.repository_id").Where("repositories.organization_id = ?", organization)
@@ -45,11 +53,34 @@ func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
 	if f.IssueNumber != 0 {
 		q = q.Where("issue_numbers @> ?::jsonb", fmt.Sprintf("[%d]", f.IssueNumber))
 	}
-	var out []AgentRun
-	if err := q.Order("started_at DESC").Find(&out).Error; err != nil {
-		return nil, fmt.Errorf("list agent runs: %w", err)
+	if f.Harness != "" {
+		q = q.Where("harness = ?", f.Harness)
 	}
-	return out, nil
+	if f.Model != "" {
+		q = q.Where("model = ?", f.Model)
+	}
+	if f.PRNumber != 0 {
+		q = q.Where("pr_number = ?", f.PRNumber)
+	}
+	if f.StartedAfter != nil {
+		q = q.Where("started_at >= ?", *f.StartedAfter)
+	}
+	if f.StartedBefore != nil {
+		q = q.Where("started_at <= ?", *f.StartedBefore)
+	}
+	return q
+}
+func (r *Repository) ListPage(ctx context.Context, f Filter, page, perPage int) ([]AgentRun, int64, error) {
+	q := r.listQuery(ctx, f)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count agent runs: %w", err)
+	}
+	var out []AgentRun
+	if err := q.Order("agent_runs.started_at DESC, agent_runs.id DESC").Offset((page - 1) * perPage).Limit(perPage).Find(&out).Error; err != nil {
+		return nil, 0, fmt.Errorf("list agent runs: %w", err)
+	}
+	return out, total, nil
 }
 func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]Price) ([]Aggregate, error) {
 	runs, err := r.List(ctx, f)

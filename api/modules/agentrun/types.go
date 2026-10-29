@@ -22,8 +22,9 @@ type CreateInput struct {
 }
 
 type Filter struct {
-	RepositoryID, Wave string
-	IssueNumber        int64
+	RepositoryID, Wave, Harness, Model string
+	IssueNumber, PRNumber              int64
+	StartedAfter, StartedBefore        *time.Time
 }
 type Aggregate struct {
 	Wave              string   `json:"wave"`
@@ -49,6 +50,23 @@ type CreatedResponse struct {
 type ListResponse struct {
 	Status int        `json:"status"`
 	Data   []AgentRun `json:"data"`
+	Meta   any        `json:"meta"`
+}
+
+type RunStep struct {
+	ID                string     `json:"id"`
+	RunID             string     `json:"run_id"`
+	Sequence          int        `json:"sequence"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	EndedAt           *time.Time `json:"ended_at,omitempty"`
+	InputTokens       int64      `json:"input_tokens"`
+	CachedInputTokens int64      `json:"cached_input_tokens"`
+	CacheWriteTokens  int64      `json:"cache_write_tokens"`
+	OutputTokens      int64      `json:"output_tokens"`
+	ReasoningTokens   int64      `json:"reasoning_tokens"`
+	ToolName          string     `json:"tool_name,omitempty"`
+	CacheHit          bool       `json:"cache_hit"`
+	CumulativeCostUSD *float64   `json:"cumulative_cost_usd,omitempty"`
 }
 
 type AggregateResponse struct {

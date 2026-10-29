@@ -140,6 +140,7 @@ definitions:
         items:
           $ref: '#/definitions/agentrun.AgentRun'
         type: array
+      meta: {}
       status:
         type: integer
     type: object
@@ -167,6 +168,42 @@ definitions:
         type: number
       updated_at:
         type: string
+    type: object
+  agentrun.RunStep:
+    properties:
+      cache_hit:
+        type: boolean
+      cache_write_tokens:
+        type: integer
+      cached_input_tokens:
+        type: integer
+      cumulative_cost_usd:
+        type: number
+      ended_at:
+        type: string
+      id:
+        type: string
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      reasoning_tokens:
+        type: integer
+      run_id:
+        type: string
+      sequence:
+        type: integer
+      started_at:
+        type: string
+      tool_name:
+        type: string
+    type: object
+  agentrun.TimelineInput:
+    properties:
+      steps:
+        items:
+          $ref: '#/definitions/agentrun.RunStep'
+        type: array
     type: object
   auth.LoginRequest:
     properties:
@@ -579,6 +616,49 @@ paths:
       security:
       - AgentRunToken: []
       summary: Create an agent run
+  /api/v1/agent-runs/{run_id}/timeline:
+    get:
+      parameters:
+      - description: Run UUID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Get run timeline
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Run UUID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      - description: Sanitized steps
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/agentrun.TimelineInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - AgentRunToken: []
+      summary: Ingest run timeline
   /api/v1/agent-runs/aggregate:
     get:
       parameters:

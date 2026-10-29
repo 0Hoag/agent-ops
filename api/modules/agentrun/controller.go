@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
@@ -129,12 +130,26 @@ func (c *Controller) List(ctx *gin.Context) {
 		response.BadRequest(ctx, "invalid issue_number")
 		return
 	}
-	items, err := c.repository.List(ctx.Request.Context(), filter)
+	page, perPage, err := parsePagination(ctx)
+	if err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
+	var items []AgentRun
+	var total int64
+	if paged, ok := c.repository.(interface {
+		ListPage(context.Context, Filter, int, int) ([]AgentRun, int64, error)
+	}); ok {
+		items, total, err = paged.ListPage(ctx.Request.Context(), filter, page, perPage)
+	} else {
+		items, err = c.repository.List(ctx.Request.Context(), filter)
+		total = int64(len(items))
+	}
 	if err != nil {
 		response.Error(ctx, 500, "failed to list agent runs")
 		return
 	}
-	response.OK(ctx, items)
+	response.JSON(ctx, http.StatusOK, ListResponse{Status: http.StatusOK, Data: items, Meta: map[string]any{"page": page, "per_page": perPage, "total": total}})
 }
 
 // Aggregate returns usage and cost grouped by wave, worker, and issue.
@@ -174,7 +189,14 @@ func (c *Controller) Aggregate(ctx *gin.Context) {
 }
 
 func requestFilter(ctx *gin.Context) (Filter, error) {
-	filter := Filter{RepositoryID: ctx.Query("repository_id"), Wave: ctx.Query("wave")}
+	filter := Filter{RepositoryID: ctx.Query("repository_id"), Wave: ctx.Query("wave"), Harness: ctx.Query("harness"), Model: ctx.Query("model")}
+	if raw := ctx.Query("pr_number"); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n < 1 {
+			return Filter{}, fmt.Errorf("invalid pr_number")
+		}
+		filter.PRNumber = n
+	}
 	if raw := ctx.Query("issue_number"); raw != "" {
 		issue, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || issue < 1 {
@@ -182,5 +204,35 @@ func requestFilter(ctx *gin.Context) (Filter, error) {
 		}
 		filter.IssueNumber = issue
 	}
+	for name, dst := range map[string]**time.Time{"started_after": &filter.StartedAfter, "started_before": &filter.StartedBefore} {
+		if raw := ctx.Query(name); raw != "" {
+			t, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				return Filter{}, fmt.Errorf("invalid %s", name)
+			}
+			*dst = &t
+		}
+	}
+	if filter.StartedAfter != nil && filter.StartedBefore != nil && filter.StartedAfter.After(*filter.StartedBefore) {
+		return Filter{}, fmt.Errorf("started_after must not be after started_before")
+	}
 	return filter, nil
+}
+
+func parsePagination(ctx *gin.Context) (int, int, error) {
+	page, per := 1, 50
+	var err error
+	if raw := ctx.Query("page"); raw != "" {
+		page, err = strconv.Atoi(raw)
+		if err != nil || page < 1 {
+			return 0, 0, fmt.Errorf("invalid page")
+		}
+	}
+	if raw := ctx.Query("per_page"); raw != "" {
+		per, err = strconv.Atoi(raw)
+		if err != nil || per < 1 || per > 100 {
+			return 0, 0, fmt.Errorf("invalid per_page")
+		}
+	}
+	return page, per, nil
 }
