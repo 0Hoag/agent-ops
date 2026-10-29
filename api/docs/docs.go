@@ -1514,6 +1514,22 @@ const docTemplate = `{
                 }
             }
         },
+        "/metrics": {
+            "get": {
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "Prometheus service metrics",
+                "responses": {
+                    "200": {
+                        "description": "Prometheus exposition format",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/readyz": {
             "get": {
                 "produces": [

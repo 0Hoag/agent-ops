@@ -1,11 +1,12 @@
 package metrics
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestScrapeHasBoundedRequestLabelsAndValues(t *testing.T) {

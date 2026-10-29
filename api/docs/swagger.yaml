@@ -1648,6 +1648,16 @@ paths:
           schema:
             $ref: '#/definitions/response.SuccessResponse'
       summary: Process health
+  /metrics:
+    get:
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Prometheus exposition format
+          schema:
+            type: string
+      summary: Prometheus service metrics
   /readyz:
     get:
       produces:

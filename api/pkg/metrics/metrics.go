@@ -2,13 +2,14 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Clock func() time.Time
@@ -79,6 +80,12 @@ func (m *Metrics) SetQueueDepth(repository string, depth int) {
 	m.queues[repository] = depth
 	m.mu.Unlock()
 }
+
+// Handler serves process-level metrics in Prometheus exposition format.
+// @Summary Prometheus service metrics
+// @Produce plain
+// @Success 200 {string} string "Prometheus exposition format"
+// @Router /metrics [get]
 func (m *Metrics) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
