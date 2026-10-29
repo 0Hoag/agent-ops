@@ -307,7 +307,7 @@ PY
 
 run_browser() {
   local control=${1:-0} run=${2:-baseline}
-  local args=(--config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line --timeout=60000)
+  local args=(--config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line --timeout=60000 --trace=retain-on-failure)
   if [[ "$run" == baseline || "$run" == restored ]]; then args+=(--grep-invert='pricing versions'); fi
   if [[ "$run" == no-session ]]; then args+=(--grep='renders seeded issue'); fi
   if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_CONTROL_NO_SESSION="$control" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-$run" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test "${args[@]}" 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
@@ -347,7 +347,7 @@ if ! run_browser 0 restored; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1
 fi
-if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-pricing" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --grep='pricing versions' --reporter=line --timeout=60000 2>&1 | tee "$ARTIFACT_DIR/pricing-browser.log"; then
+if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-pricing" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --grep='pricing versions' --reporter=line --timeout=60000 --trace=retain-on-failure 2>&1 | tee "$ARTIFACT_DIR/pricing-browser.log"; then
   log "pricing acceptance failed; inspect $ARTIFACT_DIR/pricing-browser.log"
   exit 1
 fi
