@@ -145,8 +145,7 @@ INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_t
 INSERT INTO agent_run_price_versions (id,organization_id,model,effective_date,input_per_million,cached_input_per_million,cache_write_per_million,output_per_million,reasoning_per_million) VALUES
 ('d0000000-0000-4000-8000-000000000023','d0000000-0000-4000-8000-000000000011','acceptance-model','2025-01-01',1.25,0,0,0,0),
 ('d0000000-0000-4000-8000-000000000024','d0000000-0000-4000-8000-000000000011','acceptance-subscription','2025-01-01',2.5,0,0,0,0),
-('d0000000-0000-4000-8000-000000000025','d0000000-0000-4000-8000-000000000011','acceptance-model','2027-01-03',3,0,0,0,0),
-('d0000000-0000-4000-8000-000000000026','d0000000-0000-4000-8000-000000000011','acceptance-model','2027-01-05',4,0,0,0,0);
+('d0000000-0000-4000-8000-000000000025','d0000000-0000-4000-8000-000000000011','acceptance-model','2027-01-05',3,0,0,0,0);
 SQL
 
 run_count=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT count(*) FROM agent_runs WHERE id IN ('d0000000-0000-4000-8000-000000000021','d0000000-0000-4000-8000-000000000022')")
