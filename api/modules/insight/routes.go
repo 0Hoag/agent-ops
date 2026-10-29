@@ -8,4 +8,5 @@ func NewRoutes(controller *Controller) *Routes { return &Routes{controller: cont
 func (r *Routes) Register(group *gin.RouterGroup) {
 	group.GET("/insights", r.controller.Get)
 	group.GET("/insights/analytics", r.controller.Analytics)
+	group.GET("/insights/delivery", r.controller.Delivery)
 }

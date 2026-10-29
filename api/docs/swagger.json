@@ -663,6 +663,57 @@
                 }
             }
         },
+        "/api/v1/insights/delivery": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get delivery quality analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD), max 366 days",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.DeliveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/organization-invitations/accept": {
             "post": {
                 "consumes": [
@@ -2036,6 +2087,75 @@
                 }
             }
         },
+        "insight.DeliveryCostMetric": {
+            "type": "object",
+            "properties": {
+                "actual_cost_usd": {
+                    "type": "number"
+                },
+                "cost_per_item_usd": {
+                    "type": "number"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "eligible": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.DeliveryHistory": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "type": "boolean"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.DeliveryResponse": {
+            "type": "object",
+            "properties": {
+                "closed_issues": {
+                    "$ref": "#/definitions/insight.DeliveryCostMetric"
+                },
+                "first_ci_success": {
+                    "$ref": "#/definitions/insight.FirstCIMetric"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "harness_comparison": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.HarnessMetric"
+                    }
+                },
+                "history": {
+                    "$ref": "#/definitions/insight.DeliveryHistory"
+                },
+                "issue_to_merge_lead_time": {
+                    "$ref": "#/definitions/insight.LeadTimeMetric"
+                },
+                "merged_prs": {
+                    "$ref": "#/definitions/insight.DeliveryCostMetric"
+                },
+                "send_back": {
+                    "$ref": "#/definitions/insight.SendBackMetric"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
         "insight.Envelope": {
             "type": "object",
             "properties": {
@@ -2087,6 +2207,32 @@
                 }
             }
         },
+        "insight.HarnessMetric": {
+            "type": "object",
+            "properties": {
+                "changed_lines": {
+                    "type": "integer"
+                },
+                "cost_per_changed_line_usd": {
+                    "type": "number"
+                },
+                "eligible": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "harness": {
+                    "type": "string"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
         "insight.History": {
             "type": "object",
             "properties": {
@@ -2095,6 +2241,20 @@
                 },
                 "reason": {
                     "type": "string"
+                }
+            }
+        },
+        "insight.LeadTimeMetric": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "integer"
+                },
+                "median_seconds": {
+                    "type": "number"
+                },
+                "unavailable": {
+                    "type": "integer"
                 }
             }
         },

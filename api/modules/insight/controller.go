@@ -75,3 +75,36 @@ func (c *Controller) Analytics(ctx *gin.Context) {
 	}
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
 }
+
+// Delivery returns organization-scoped delivery quality and normalized comparison metrics.
+// @Summary Get delivery quality analytics
+// @Produce json
+// @Param repository_id query string false "Repository UUID" format(uuid)
+// @Param from query string true "Inclusive UTC start date (YYYY-MM-DD)"
+// @Param to query string true "Inclusive UTC end date (YYYY-MM-DD), max 366 days"
+// @Success 200 {object} DeliveryResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/insights/delivery [get]
+func (c *Controller) Delivery(ctx *gin.Context) {
+	from, err := time.Parse("2006-01-02", ctx.Query("from"))
+	if err != nil {
+		response.BadRequest(ctx, "from must be YYYY-MM-DD")
+		return
+	}
+	to, err := time.Parse("2006-01-02", ctx.Query("to"))
+	if err != nil {
+		response.BadRequest(ctx, "to must be YYYY-MM-DD")
+		return
+	}
+	data, err := c.repository.Delivery(ctx.Request.Context(), DeliveryFilter{RepositoryID: ctx.Query("repository_id"), From: &from, To: &to})
+	if err != nil {
+		if err.Error() == "invalid delivery date range" {
+			response.BadRequest(ctx, err.Error())
+			return
+		}
+		response.Error(ctx, 500, "failed to build delivery analytics")
+		return
+	}
+	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}

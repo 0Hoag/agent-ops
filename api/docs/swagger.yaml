@@ -365,6 +365,51 @@ definitions:
       median_seconds:
         type: number
     type: object
+  insight.DeliveryCostMetric:
+    properties:
+      actual_cost_usd:
+        type: number
+      cost_per_item_usd:
+        type: number
+      count:
+        type: integer
+      eligible:
+        type: integer
+      equivalent_cost_usd:
+        type: number
+      unavailable:
+        type: integer
+    type: object
+  insight.DeliveryHistory:
+    properties:
+      complete:
+        type: boolean
+      unavailable:
+        type: integer
+    type: object
+  insight.DeliveryResponse:
+    properties:
+      closed_issues:
+        $ref: '#/definitions/insight.DeliveryCostMetric'
+      first_ci_success:
+        $ref: '#/definitions/insight.FirstCIMetric'
+      from:
+        type: string
+      harness_comparison:
+        items:
+          $ref: '#/definitions/insight.HarnessMetric'
+        type: array
+      history:
+        $ref: '#/definitions/insight.DeliveryHistory'
+      issue_to_merge_lead_time:
+        $ref: '#/definitions/insight.LeadTimeMetric'
+      merged_prs:
+        $ref: '#/definitions/insight.DeliveryCostMetric'
+      send_back:
+        $ref: '#/definitions/insight.SendBackMetric'
+      to:
+        type: string
+    type: object
   insight.Envelope:
     properties:
       data:
@@ -398,12 +443,38 @@ definitions:
       successful:
         type: integer
     type: object
+  insight.HarnessMetric:
+    properties:
+      changed_lines:
+        type: integer
+      cost_per_changed_line_usd:
+        type: number
+      eligible:
+        type: integer
+      equivalent_cost_usd:
+        type: number
+      harness:
+        type: string
+      runs:
+        type: integer
+      unavailable:
+        type: integer
+    type: object
   insight.History:
     properties:
       complete:
         type: boolean
       reason:
         type: string
+    type: object
+  insight.LeadTimeMetric:
+    properties:
+      completed:
+        type: integer
+      median_seconds:
+        type: number
+      unavailable:
+        type: integer
     type: object
   insight.Response:
     properties:
@@ -1029,6 +1100,40 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get cost and cache analytics
+  /api/v1/insights/delivery:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        type: string
+      - description: Inclusive UTC start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Inclusive UTC end date (YYYY-MM-DD), max 366 days
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.DeliveryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get delivery quality analytics
   /api/v1/organization-invitations/accept:
     post:
       consumes:
