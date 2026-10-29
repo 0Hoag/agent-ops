@@ -88,9 +88,9 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(newPrice).toBeTruthy();
   const ownPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: occupiedDate.slice(0, 10) });
   await expect(ownPriceRow).toHaveCount(1);
-  const occupiedRow = existingPrices.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith(occupiedDate));
+  const occupiedRow = existingPrices.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith('2027-01-03'));
   expect(occupiedRow).toBeTruthy();
-  const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model' } });
+  const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model', effective_date: '2027-01-03T00:00:00Z' } });
   expect([400, 409]).toContain(occupiedPairProbe.status());
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied model/date control)', status: occupiedPairProbe.status(), body: await occupiedPairProbe.json() });
   await ownPriceRow.getByRole('button', { name: 'Edit' }).click();
@@ -111,7 +111,7 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(recoveredResponse.status()).toBe(200);
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser PATCH recovery)', status: recoveredResponse.status(), body: await recoveredResponse.json() });
   await expect(page.getByText(model, { exact: true })).toBeVisible();
-  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: newDate });
+  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: secondDate });
   await expect(recoveredPriceRow).toHaveCount(1);
   await recoveredPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
