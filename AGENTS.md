@@ -79,7 +79,14 @@ One pass:
    **Real defects discovered while running become a new issue**, never an inline fix: a bug, a test that
    cannot fail, a security or data-loss risk, an acceptance criterion a merged PR missed. Label it
    `found-by:agent`, put it in a later wave. "Would be nice to also have" is **not** an issue: skip it.
-3. **Finish open PRs: spot-check, do not redo the work.** For each PR whose worker has finished:
+3. **Finish open PRs: spot-check, do not redo the work.**
+   **`scripts/autopilot.sh` already squash-merges, without tokens, every non-critical PR whose CI is fully green** (the
+   per-PR `PR gate` job enforces `Closes #n`, a test for every product change, and "tests fail without the change"; see
+   `scripts/ci/pr-gate.sh`). Do not review or merge those. Your job in this step is only PRs the script left:
+   red CI (read the failing job log tail once, send back once with that error), merge conflicts, no `Closes #n`, and
+   **CRITICAL** PRs (`api/main.go`, `api/pkg/{auth,middleware,database,crypto}/`, `.github/workflows/`, `scripts/ci/`,
+   autopilot scripts, destructive migrations per `scripts/ci/classify-migration.sh`): review the diff, then merge.
+   The rules below apply to those. For each PR whose worker has finished:
    - The **PR body must carry the evidence**: gate commands with output, smoke result, the failing-control
      proof for new tests. Missing evidence = send back (cheap), do not produce it yourself.
    - CI green on the exact head, `Closes #n`, no out-of-scope files (`gh pr diff --name-only`).
@@ -96,7 +103,7 @@ One pass:
      `Closes #n`, or a failing check you re-ran yourself.
 4. **Dispatch.** If fewer than **2 workers** are running (`pgrep -f run-worker`; cap 2, owner 29/10: 3 heated the machine and delivered little), start the next unblocked
    sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
-   and commands; every brief says "commit and push after every finished issue". Start **detached** so it survives this pass:
+   and commands; every brief says "commit and push after every finished issue". Every brief also says: run `make ci` in `api/` (or the client gate) once before opening the PR, not after every edit. Start **detached** so it survives this pass:
    `scripts/spawn.sh .agent-runs/<wave>.log scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md`
    (plain `nohup … &` is killed when the pass ends). Harness: **OpenCode for every `area:client` wave**
    (Codex's sandbox cannot write the client worktree's git dir, run Chromium or `rm -f`; owner 26/10, W7r r7-r9 never

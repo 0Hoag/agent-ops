@@ -35,6 +35,8 @@ test-coverage:
 ci:
 	@echo "→ fmt"
 	@test -z "$$($(GOCMD) fmt ./...)" || { echo "gofmt changes detected"; exit 1; }
+	@echo "→ go.mod tidy"
+	@$(GOCMD) mod tidy -diff
 	@echo "→ vet"
 	@$(GOCMD) vet ./...
 	@echo "→ lint"

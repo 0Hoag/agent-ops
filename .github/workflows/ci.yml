@@ -24,13 +24,19 @@ jobs:
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+        working-directory: api
+      - name: go.mod is tidy
+        run: go mod tidy -diff
+        working-directory: api
       - run: go vet ./...
         working-directory: api
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
           working-directory: api
-      - run: go test ./...
+      - run: go test -race -count=1 ./...
         working-directory: api
       - run: go build ./...
         working-directory: api
@@ -48,3 +54,34 @@ jobs:
           node-version: 24
       - run: corepack enable && corepack prepare pnpm@11.21.0 --activate
       - run: bash scripts/check-api-contract.sh
+
+  vulncheck:
+    name: Vulnerabilities (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        working-directory: api
+
+  pr-gate:
+    name: PR gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - name: Closes #n, tests for product code, tests fail without the change
+        run: bash scripts/ci/pr-gate.sh "${{ github.event.pull_request.base.sha }}" go api
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}

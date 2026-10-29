@@ -47,6 +47,42 @@ fingerprint() {
 base=
 pre=
 
+# Risk classes follow controlplane's classify:risk idea. CRITICAL = trust root, CI/automation, destructive migration:
+# never script-merged; the coordinator reviews those. Everything else is merged by the script once CI is green.
+CRITICAL_PATHS='^(api/main\.go|api/pkg/(auth|middleware|database|crypto)/|\.github/workflows/|scripts/(ci/|autopilot\.sh|spawn\.sh|heavy\.sh))'
+is_critical() {
+  local r=$1 n=$2 sha=$3 f files tmp
+  files=$(gh pr view "$n" -R "$r" --json files --jq '.files[].path' 2>/dev/null) || return 0
+  grep -Eq "$CRITICAL_PATHS" <<<"$files" && return 0
+  tmp=$(mktemp -d)
+  for f in $(grep -E '^api/migrations/.*\.sql$' <<<"$files" || true); do
+    gh api -H "Accept: application/vnd.github.raw" "repos/$r/contents/$f?ref=$sha" > "$tmp/$(basename "$f")" 2>/dev/null || { rm -rf "$tmp"; return 0; }
+  done
+  if ls "$tmp"/*.sql > /dev/null 2>&1 && ! bash scripts/ci/classify-migration.sh "$tmp"/*.sql > /dev/null; then rm -rf "$tmp"; return 0; fi
+  rm -rf "$tmp"; return 1
+}
+
+# Deterministic merge, no tokens: squash-merge every open PR whose CI is fully green (>=1 check, none pending or
+# failed), whose body has `Closes #n`, that no worker is still pushing to (branch name in a running process),
+# that has been quiet for 3 min and carries no `hold` label. The head SHA is pinned. Prints one line per merge.
+merge_ready() {
+  local r n sha branch
+  for r in $REPOS; do
+    gh pr list -R "$r" --json number,headRefOid,headRefName,isDraft,updatedAt,body,labels,statusCheckRollup --jq '
+      .[] | select(.isDraft | not) | select([.labels[].name] | index("hold") | not)
+      | select((.statusCheckRollup | length) > 0 and all(.statusCheckRollup[]; (.conclusion // "") as $c | $c == "SUCCESS" or $c == "SKIPPED" or $c == "NEUTRAL"))
+      | select(.body | test("(?i)(closes|fixes|resolves) +(0Hoag/[a-z-]+)?#[0-9]+"))
+      | select((now - (.updatedAt | fromdateiso8601)) > 180)
+      | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null |
+    while read -r n sha branch; do
+      pgrep -f -- "$branch" > /dev/null && continue
+      is_critical "$r" "$n" "$sha" && continue
+      gh pr merge "$n" -R "$r" --squash --match-head-commit "$sha" > /dev/null 2>&1 && echo "  merged $r#$n by script"
+    done
+  done
+}
+MERGE_EVERY=${MERGE_EVERY:-300}
+
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
 # When the timer ends with no worker running and GitHub unchanged since the last pass, a pass would only
@@ -61,6 +97,9 @@ wait_for_event() {
       sleep "$poll"
       waited=$((waited + poll))
       [ -e .agent-runs/STOP ] && return
+      if [ $((waited % MERGE_EVERY)) -lt "$poll" ] && [ -n "$(merge_ready | tee /dev/stderr)" ]; then
+        echo "  merged by script, next pass now"; return
+      fi
       if [ "$(results_stamp)" != "$stamp" ]; then echo "  worker result written, next pass now"; return; fi
       for pid in $pids; do
         kill -0 "$pid" 2>/dev/null || { echo "  worker $pid ended, next pass now"; return; }
@@ -77,6 +116,7 @@ wait_for_event() {
 while true; do
   ts=$(date +%Y%m%d-%H%M%S)
   echo "[$ts] pass start"
+  merge_ready
   pre=$(results_stamp)
   attach=()
   if curl -s -o /dev/null -m 2 "$web"; then attach=(--attach "$web" --dir "$PWD"); echo "  on web UI $web"; fi
