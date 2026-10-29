@@ -82,6 +82,7 @@ type openCodeRecord struct {
 	Timestamp int64  `json:"timestamp"`
 	SessionID string `json:"sessionID"`
 	Part      struct {
+		Tool   string `json:"tool"`
 		Tokens struct {
 			Input     int64 `json:"input"`
 			Output    int64 `json:"output"`
@@ -125,7 +126,7 @@ func ParseOpenCode(r io.Reader) ([]Session, error) {
 		s.Usage.CachedInput += t.Cache.Read
 		s.Usage.CacheWrite += t.Cache.Write
 		ts := addUnixMillisValue(v.Timestamp)
-		s.Steps = append(s.Steps, Step{Started: ts, Ended: ts, Usage: Usage{Input: t.Input, CachedInput: t.Cache.Read, CacheWrite: t.Cache.Write, Output: t.Output, Reasoning: t.Reasoning}, CacheHit: t.Cache.Read > 0})
+		s.Steps = append(s.Steps, Step{Started: ts, Ended: ts, Usage: Usage{Input: t.Input, CachedInput: t.Cache.Read, CacheWrite: t.Cache.Write, Output: t.Output, Reasoning: t.Reasoning}, ToolName: strings.TrimSpace(v.Part.Tool), CacheHit: t.Cache.Read > 0})
 		if v.Timestamp != 0 {
 			addUnixMillis(s, v.Timestamp)
 		}
