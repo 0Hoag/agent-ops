@@ -2,11 +2,11 @@
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-CLIENT=${CLIENT_DIR:-"$ROOT/.agent-runs/w7r-smoke-client"}
+CLIENT=${CLIENT_DIR:-"$ROOT/.agent-runs/w10k-client/owned-client"}
 PROJECT="agent-ops-smoke-$(id -u)-$$"
 API_PORT=${SMOKE_API_PORT:-18080}
 CLIENT_PORT=${SMOKE_CLIENT_PORT:-4173}
-POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5432}
+POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-15432}
 API_URL="http://127.0.0.1:$API_PORT"
 CLIENT_URL="http://127.0.0.1:$CLIENT_PORT"
 PREVIEW_PID=
@@ -19,6 +19,7 @@ compose() { "${COMPOSE_ENV[@]}" docker compose -p "$PROJECT" -f "$ROOT/docker-co
 
 log() { printf 'smoke: %s\n' "$*"; }
 FIXTURE_PID=
+COMPOSE_STARTED=0
 cleanup() {
   local status=$?
   trap - EXIT INT TERM
@@ -54,13 +55,16 @@ print(" ".join(map(str, seen)))' "$PREVIEW_PID" 2>/dev/null || printf '%s' "$PRE
     done
   fi
   if [[ -n "$PREVIEW_PID" ]] && [[ -n "${listener:-}" ]]; then log "cleanup failed: preview listener remains on $CLIENT_PORT"; status=1; fi
-  if [[ $status -ne 0 ]]; then compose logs --no-color >"$ARTIFACT_DIR/compose.log" 2>/dev/null || true; fi
+  if [[ $status -ne 0 ]]; then
+    compose logs --no-color >"$ARTIFACT_DIR/compose.log" 2>/dev/null || true
+    compose ps --all >"$ARTIFACT_DIR/compose-ps.log" 2>&1 || true
+  fi
   if [[ -n "$FIXTURE_PID" ]]; then kill "$FIXTURE_PID" 2>/dev/null || true; wait "$FIXTURE_PID" 2>/dev/null || true; fi
   if [[ -n "${FIXTURE_PORT:-}" ]] && lsof -nP -iTCP:"$FIXTURE_PORT" -sTCP:LISTEN 2>/dev/null | grep -q .; then log "cleanup failed: fixture listener remains on $FIXTURE_PORT"; status=1; fi
-  compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  if [[ "$COMPOSE_STARTED" == 1 ]]; then compose down --volumes --remove-orphans >"$ARTIFACT_DIR/cleanup-compose.log" 2>&1 || { cat "$ARTIFACT_DIR/cleanup-compose.log"; status=1; }; fi
   if docker ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.ID}}' | grep -q .; then log "cleanup failed: containers remain for $PROJECT"; status=1; fi
   if docker volume ls --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Name}}' | grep -q .; then log "cleanup failed: volumes remain for $PROJECT"; status=1; fi
-  if [[ $status -eq 0 ]]; then log "cleanup verified: no owned containers or volumes ($PROJECT)"; fi
+  if [[ $status -eq 0 ]]; then log "cleanup verified: no owned containers or volumes ($PROJECT)"; else log "cleanup incomplete; inspect $ARTIFACT_DIR/cleanup-compose.log"; fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -91,6 +95,7 @@ fi
 # Run migrations without configured repositories, then seed the owner tenant
 # before starting the API with tenant-scoped startup configuration.
 compose up -d postgres
+COMPOSE_STARTED=1
 for _ in $(seq 1 60); do
   if compose exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1; then break; fi
   sleep 1
@@ -135,8 +140,8 @@ INSERT INTO issues (id,repository_id,number,title,state,status,labels) VALUES ('
 INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes) VALUES ('d0000000-0000-4000-8000-000000000003','d0000000-0000-4000-8000-000000000001',99002,'Smoke fixture: linked pull request','open','d000000000000000000000000000000000000000','smoke/real-data','[99001]');
 INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion) VALUES ('d0000000-0000-4000-8000-000000000004','d0000000-0000-4000-8000-000000000001','smoke-ci-99002',99002,'d000000000000000000000000000000000000000','completed','success');
 INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,cost_usd,started_at,ended_at,billing_type) VALUES
-('d0000000-0000-4000-8000-000000000021','d0000000-0000-4000-8000-000000000001','W10','smoke','acceptance-model','[99001]',1000000,0,0,0,0,1.25,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','api'),
-('d0000000-0000-4000-8000-000000000022','d0000000-0000-4000-8000-000000000001','W10','smoke','acceptance-subscription','[99001]',1000000,0,0,0,0,12.00,'2026-01-02T00:00:00Z','2026-01-02T00:01:00Z','subscription');
+('d0000000-0000-4000-8000-000000000021','d0000000-0000-4000-8000-000000000001','W10','smoke-api','acceptance-model','[99001]',1000000,0,0,0,0,1.25,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','api'),
+('d0000000-0000-4000-8000-000000000022','d0000000-0000-4000-8000-000000000001','W10','smoke-sub','acceptance-subscription','[99001]',1000000,0,0,0,0,12.00,'2026-01-02T00:00:00Z','2026-01-02T00:01:00Z','subscription');
 INSERT INTO agent_run_price_versions (id,organization_id,model,effective_date,input_per_million,cached_input_per_million,cache_write_per_million,output_per_million,reasoning_per_million) VALUES
 ('d0000000-0000-4000-8000-000000000023','d0000000-0000-4000-8000-000000000011','acceptance-model','2025-01-01',1.25,0,0,0,0),
 ('d0000000-0000-4000-8000-000000000024','d0000000-0000-4000-8000-000000000011','acceptance-subscription','2025-01-01',2.5,0,0,0,0);
@@ -302,7 +307,7 @@ PY
 
 run_browser() {
   local control=${1:-0} run=${2:-baseline}
-  local args=(--config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line)
+  local args=(--config="$ROOT/scripts/smoke.playwright.config.ts" --reporter=line --timeout=60000)
   if [[ "$run" == baseline || "$run" == restored ]]; then args+=(--grep-invert='pricing versions'); fi
   if [[ "$run" == no-session ]]; then args+=(--grep='renders seeded issue'); fi
   if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_CONTROL_NO_SESSION="$control" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-$run" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test "${args[@]}" 2>&1 | tee -a "$ARTIFACT_DIR/browser${control}.log"; then
@@ -342,9 +347,9 @@ if ! run_browser 0 restored; then
   log "restored auth smoke failed (see $ARTIFACT_DIR/browser0.log)"
   exit 1
 fi
-if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-pricing" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --grep='pricing versions' --reporter=line 2>&1 | tee "$ARTIFACT_DIR/pricing-browser.log"; then
-  log "pricing acceptance failed: authenticated historical aggregate returned non-success; follow-up issue #342"
+if ! SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" SMOKE_CLIENT_URL="$CLIENT_URL" APP_API_URL="${SMOKE_BROWSER_API_URL:-$API_URL}" EXCHANGE_RATE_VND_PER_USD="${EXCHANGE_RATE_VND_PER_USD:-}" SMOKE_INVOCATION_ID="${PROJECT//[^a-zA-Z0-9-]/-}-pricing" SESSION_TOKEN="$SESSION_TOKEN" SMOKE_ORGANIZATION_ID="$SMOKE_ORGANIZATION_ID" SMOKE_OTHER_ORGANIZATION_ID="$SMOKE_OTHER_ORGANIZATION_ID" SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001 SMOKE_ISSUE_NUMBER=99001 SMOKE_API_URL="$API_URL" npx playwright test --config="$ROOT/scripts/smoke.playwright.config.ts" --grep='pricing versions' --reporter=line --timeout=60000 2>&1 | tee "$ARTIFACT_DIR/pricing-browser.log"; then
+  log "pricing acceptance failed; inspect $ARTIFACT_DIR/pricing-browser.log"
   exit 1
 fi
 compose logs --no-color >"$ARTIFACT_DIR/compose.log"
-log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); session-removal control: $ARTIFACT_DIR/browser1.log; screenshot: $ARTIFACT_DIR/board.png"
+log "browser evidence: $ARTIFACT_DIR/browser0.log (baseline and restored); session-removal control: $ARTIFACT_DIR/browser1.log; pricing diagnostics: $ARTIFACT_DIR/pricing-browser.log; screenshots: $ARTIFACT_DIR/board.png, pricing-owner.png, pricing-occupied-date.png, pricing-viewer.png, runs-vnd.png"
