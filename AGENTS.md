@@ -109,8 +109,17 @@ One pass:
    **Run budget (owner 29/10: 65% of worker tokens went into 2nd+ runs of the same wave):** a wave gets at most
    **2 worker runs** (first + one RESUME). After that: CI green and the feature works -> merge; otherwise mark the
    issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave.
-   **Acceptance scope:** live smoke or browser evidence is required only in the dedicated smoke/e2e waves (WS-d, W8e,
-   W16) and for client pages. Backend feature PRs need CI + unit/integration tests; do not ask them for live smoke.
+   **Correctness without evidence churn (owner 29/10: output must be right, not just green).** Every PR that adds or
+   changes product code must pass these cheap, deterministic checks; they replace live-smoke asks on ordinary PRs:
+   1. Each changed product file has a test in the same PR (`gh pr diff --name-only`); no test = send back.
+   2. **Fails before, passes after:** the coordinator checks out the PR's new test files onto `origin/main` in a
+      scratch worktree and runs that one test command: it must fail there and pass on the PR head. This is one of
+      the 2 re-run checks and is mandatory for `feat`/`fix` PRs.
+   3. CI green on the exact head, including contract-drift; the diff stays inside the issue's paths.
+   Live smoke or browser evidence is required only in the smoke/e2e waves (WS-d, W8e, W16) and for client pages.
+   **Light machine:** workers run targeted checks while developing (one package: `go test ./internal/x/...`, one
+   vitest file) and the full gate once before the PR; CI is the authoritative full gate. Browser, `docker compose`
+   and full builds go through `scripts/heavy.sh <command>` (one at a time, low priority). Put this in every brief.
    A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
    **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
    restart that worker on the same branch in a later pass after the reset time.
