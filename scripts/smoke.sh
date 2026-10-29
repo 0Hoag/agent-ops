@@ -78,8 +78,8 @@ if [[ ! -d "$CLIENT/.git" ]]; then
   git clone https://github.com/0Hoag/agent-ops-client.git "$CLIENT"
 else
   [[ -z "$(git -C "$CLIENT" status --porcelain --untracked-files=all | grep -vE '^\?\? (test-results/|dist/)' || true)" ]] || { log "client checkout has user changes; refusing to update"; exit 1; }
-  git -C "$CLIENT" fetch origin main
-  git -C "$CLIENT" merge --ff-only origin/main
+  git -C "$CLIENT" fetch origin reviews/development
+  git -C "$CLIENT" merge --ff-only origin/reviews/development
 fi
 EXPECTED_CLIENT_SHA=${SMOKE_EXPECTED_CLIENT_SHA:-}
 if [[ -n "$EXPECTED_CLIENT_SHA" && "$(git -C "$CLIENT" rev-parse HEAD)" != "$EXPECTED_CLIENT_SHA" ]]; then

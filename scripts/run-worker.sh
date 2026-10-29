@@ -18,9 +18,9 @@ wt="$root/../$(basename "$root")-wt/$branch"
 git_common_dir=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
 mkdir -p "$root/.agent-runs"
 
-git -C "$root" fetch origin main
+git -C "$root" fetch origin reviews/development
 if [ ! -d "$wt" ]; then
-  git -C "$root" worktree add "$wt" -b "$branch" origin/main
+  git -C "$root" worktree add "$wt" -b "$branch" origin/reviews/development
 fi
 # Common objects/refs and this worktree's index/HEAD live outside the worktree.
 # Codex protects the linked Git directory separately, so grant both explicitly.

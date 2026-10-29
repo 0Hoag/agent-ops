@@ -39,6 +39,7 @@ fingerprint() {
   local r
   for r in $REPOS; do
     gh api "repos/$r/commits/main" --jq .sha || return 1
+    gh api "repos/$r/commits/reviews%2Fdevelopment" --jq .sha || return 1
     gh pr list -R "$r" --json number,updatedAt,headRefOid --jq '.[] | "\(.number) \(.updatedAt) \(.headRefOid)"' || return 1
     gh issue list -R "$r" --state open --limit 500 --json number,labels \
       --jq '[.[] | select(all(.labels[]; .name != "status-board")) | .number] | sort | join(",")' || return 1
@@ -62,22 +63,31 @@ is_critical() {
   rm -rf "$tmp"; return 1
 }
 
-# Deterministic merge, no tokens: squash-merge every open PR whose CI is fully green (>=1 check, none pending or
-# failed), whose body has `Closes #n`, that no worker is still pushing to (branch name in a running process),
-# that has been quiet for 3 min and carries no `hold` label. The head SHA is pinned. Prints one line per merge.
+# Deterministic merge, no tokens. Flow: feature branch -> PR -> reviews/development (squash) -> promotion PR
+# reviews/development -> main (merge commit, so the integration branch is never rewritten or deleted).
+# A PR is merged when CI is fully green (>=1 check, none pending or failed), no worker is still pushing to its
+# branch, it has been quiet for 3 min and has no `hold` label. Feature PRs also need `Closes #n` and must not be
+# CRITICAL; promotion PRs are exempt (their content was reviewed when it entered reviews/development).
+# After a feature merge the issues it names are closed (scripts/close-linked.sh). Prints one line per merge.
 merge_ready() {
-  local r n sha branch
+  local r n sha head base
   for r in $REPOS; do
-    gh pr list -R "$r" --json number,headRefOid,headRefName,isDraft,updatedAt,body,labels,statusCheckRollup --jq '
+    gh pr list -R "$r" --json number,headRefOid,headRefName,baseRefName,isDraft,updatedAt,body,labels,statusCheckRollup --jq '
       .[] | select(.isDraft | not) | select([.labels[].name] | index("hold") | not)
       | select((.statusCheckRollup | length) > 0 and all(.statusCheckRollup[]; (.conclusion // "") as $c | $c == "SUCCESS" or $c == "SKIPPED" or $c == "NEUTRAL"))
-      | select(.body | test("(?i)(closes|fixes|resolves) +(0Hoag/[a-z-]+)?#[0-9]+"))
       | select((now - (.updatedAt | fromdateiso8601)) > 180)
-      | "\(.number) \(.headRefOid) \(.headRefName)"' 2>/dev/null |
-    while read -r n sha branch; do
-      pgrep -f -- "$branch" > /dev/null && continue
-      is_critical "$r" "$n" "$sha" && continue
-      gh pr merge "$n" -R "$r" --squash --match-head-commit "$sha" > /dev/null 2>&1 && echo "  merged $r#$n by script"
+      | select((.baseRefName == "reviews/development" and (.body | test("(?i)(closes|fixes|resolves) +([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)?#[0-9]+")))
+               or (.baseRefName == "main" and .headRefName == "reviews/development"))
+      | "\(.number) \(.headRefOid) \(.headRefName) \(.baseRefName)"' 2>/dev/null |
+    while read -r n sha head base; do
+      if [ "$base" = main ]; then
+        gh pr merge "$n" -R "$r" --merge --match-head-commit "$sha" > /dev/null 2>&1 && echo "  promoted $r#$n to main by script"
+      else
+        pgrep -f -- "$head" > /dev/null && continue
+        is_critical "$r" "$n" "$sha" && continue
+        gh pr merge "$n" -R "$r" --squash --match-head-commit "$sha" > /dev/null 2>&1 \
+          && { echo "  merged $r#$n into reviews/development by script"; scripts/close-linked.sh "$r" "$n" | sed 's/^/    /'; }
+      fi
     done
   done
 }

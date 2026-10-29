@@ -20,7 +20,15 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
 
 ## Git
 
-- GitHub, dùng `gh`. Nhánh đích `main`, squash merge, ghim SHA (`gh pr merge --match-head-commit`).
+- GitHub, dùng `gh`. **Luồng nhánh (owner 29/10):** `feature branch → PR → reviews/development → PR promotion → main`.
+  - `reviews/development` là nhánh làm việc chính, **không bao giờ xóa, không force-push, không squash vào nó từ `main`**.
+    Worker tạo nhánh từ `origin/reviews/development`, mở PR `--base reviews/development`, squash merge, ghim SHA.
+  - `main` chỉ nhận **promotion PR** `reviews/development → main`, **merge commit** (`gh pr merge --merge`), khi xong một
+    tính năng hoặc một wave/epic lớn (project-sync đóng epic) và CI của `reviews/development` xanh. Tiêu đề
+    `release: <wave>`; body liệt kê PR đã vào. Không squash promotion PR (squash làm hai nhánh lệch nhau).
+  - GitHub chỉ tự đóng issue khi merge vào nhánh mặc định (`main`), nên sau khi merge vào `reviews/development` chạy
+    `scripts/close-linked.sh <owner/repo> <pr>` (script tự merge đã làm việc này).
+  - Cả hai nhánh được bảo vệ (cấm xóa và force-push).
 - Mỗi PR có `Closes #n` cho từng issue nó đóng. Commit theo Conventional Commits (`feat(api): …`, `feat(web): …`).
 - Trạng thái issue: `node scripts/issue-status.mjs <n> <todo|in progress|review|blocked|done>`, không thêm label trần.
 - Mỗi worker một worktree riêng (`scripts/run-worker.sh`); không làm trong checkout chính.
@@ -93,7 +101,7 @@ One pass:
    - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
    - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
-   - **Branch sweep, every pass (both repos):** delete every remote branch except `main` whose PR is merged or
+   - **Branch sweep, every pass (both repos):** delete every remote branch except `main` and `reviews/development` whose PR is merged or
      closed and that has no open PR: `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`. Do not rely on
      `--delete-branch` alone (it left #236/#238 behind); a branch with an open PR or a running worker is kept.
    - **At most 1 send-back per PR** (owner 29/10: too many send-backs, little delivered). On the 2nd review, if CI

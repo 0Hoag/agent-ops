@@ -17,9 +17,9 @@ root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
 mkdir -p "$root/.agent-runs"
 
-git -C "$root" fetch origin main
+git -C "$root" fetch origin reviews/development
 if [ ! -d "$wt" ]; then
-  git -C "$root" worktree add "$wt" -b "$branch" origin/main
+  git -C "$root" worktree add "$wt" -b "$branch" origin/reviews/development
 fi
 
 # Skip ~/.claude and ~/.agents skills: the GitHub/Codex orchestrator-workers skill comes from opencode.json.

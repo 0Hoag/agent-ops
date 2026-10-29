@@ -60,8 +60,8 @@ p.write_text(s)
 PY
 printf 'Deployment Compose source SHA: %s\n' "$COMPOSE_SOURCE_SHA"
 git clone https://github.com/0Hoag/agent-ops-client.git "$CLIENT"
-git -C "$CLIENT" fetch origin main
-git -C "$CLIENT" merge --ff-only origin/main
+git -C "$CLIENT" fetch origin reviews/development
+git -C "$CLIENT" merge --ff-only origin/reviews/development
 
 python3 - "$FIXTURES/ports" <<'PY'
 import socket, sys
