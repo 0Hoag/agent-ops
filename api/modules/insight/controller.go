@@ -3,6 +3,7 @@ package insight
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -36,6 +37,28 @@ func (c *Controller) Get(ctx *gin.Context) {
 	}
 	if err != nil {
 		response.Error(ctx, 500, "failed to build insights")
+		return
+	}
+	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}
+
+func (c *Controller) Analytics(ctx *gin.Context) {
+	group := ctx.DefaultQuery("group_by", "harness")
+	period := ctx.DefaultQuery("period", "daily")
+	from, err := time.Parse("2006-01-02", ctx.Query("from"))
+	if err != nil {
+		response.BadRequest(ctx, "from must be YYYY-MM-DD")
+		return
+	}
+	to, err := time.Parse("2006-01-02", ctx.Query("to"))
+	if err != nil {
+		response.BadRequest(ctx, "to must be YYYY-MM-DD")
+		return
+	}
+	f := AnalyticsFilter{RepositoryID: ctx.Query("repository_id"), GroupBy: group, Period: period, From: &from, To: &to}
+	data, err := c.repository.Analytics(ctx.Request.Context(), f)
+	if err != nil {
+		response.BadRequest(ctx, err.Error())
 		return
 	}
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
