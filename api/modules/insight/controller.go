@@ -42,6 +42,18 @@ func (c *Controller) Get(ctx *gin.Context) {
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
 }
 
+// Analytics returns daily or weekly cost and cache trends for the authenticated organization.
+// @Summary Get cost and cache analytics
+// @Produce json
+// @Param repository_id query string false "Repository UUID" format(uuid)
+// @Param group_by query string false "Grouping dimension" Enums(harness,model,wave,area) default(harness)
+// @Param period query string false "Bucket period" Enums(daily,weekly) default(daily)
+// @Param from query string true "Inclusive UTC start date (YYYY-MM-DD)"
+// @Param to query string true "Inclusive UTC end date (YYYY-MM-DD), max 366 days"
+// @Success 200 {object} AnalyticsResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/insights/analytics [get]
 func (c *Controller) Analytics(ctx *gin.Context) {
 	group := ctx.DefaultQuery("group_by", "harness")
 	period := ctx.DefaultQuery("period", "daily")

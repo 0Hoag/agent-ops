@@ -12,7 +12,7 @@ func TestAnalyticsCostRecomputesTokenCategories(t *testing.T) {
 	p := priceRow{InputPerMillion: 1, CachedInputPerMillion: 2, CacheWritePerMillion: 3, OutputPerMillion: 4, ReasoningPerMillion: 5}
 	// Independent fixture recomputation: each category is priced separately before summing.
 	expected := (100*1 + 200*2 + 50*3 + 300*4 + 25*5) / 1_000_000.0
-	require.Equal(t, expected, cost(run, p))
+	require.InDelta(t, expected, cost(run, p), 1e-15)
 }
 
 func TestAnalyticsPriceSelectionUsesHistoricalEffectiveDate(t *testing.T) {
