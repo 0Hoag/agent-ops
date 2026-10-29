@@ -92,6 +92,8 @@ merge_ready() {
   done
 }
 MERGE_EVERY=${MERGE_EVERY:-300}
+MIN_GAP=${MIN_GAP:-900}   # min seconds between passes; events (worker ended, GitHub changed) cannot wake sooner
+end=0
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
@@ -107,9 +109,7 @@ wait_for_event() {
       sleep "$poll"
       waited=$((waited + poll))
       [ -e .agent-runs/STOP ] && return
-      if [ $((waited % MERGE_EVERY)) -lt "$poll" ] && [ -n "$(merge_ready | tee /dev/stderr)" ]; then
-        echo "  merged by script, next pass now"; return
-      fi
+      [ $((waited % MERGE_EVERY)) -lt "$poll" ] && merge_ready > /dev/stderr
       if [ "$(results_stamp)" != "$stamp" ]; then echo "  worker result written, next pass now"; return; fi
       for pid in $pids; do
         kill -0 "$pid" 2>/dev/null || { echo "  worker $pid ended, next pass now"; return; }
@@ -154,5 +154,7 @@ while true; do
   fi
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
   base=$(fingerprint) || base=
+  end=$(date +%s)
   wait_for_event
+  gap=$((MIN_GAP - ($(date +%s) - end))); [ "$gap" -gt 0 ] && [ ! -e .agent-runs/STOP ] && { echo "  min gap: waiting ${gap}s"; sleep "$gap"; }
 done

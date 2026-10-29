@@ -123,7 +123,8 @@ One pass:
    acceptance evidence for an already merged PR.
    **Run budget (owner 29/10: 65% of worker tokens went into 2nd+ runs of the same wave):** a wave gets at most
    **2 worker runs** (first + one RESUME). After that: CI green and the feature works -> merge; otherwise mark the
-   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave.
+   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
+   (`scripts/spawn.sh` refuses a `-r3` wave name; put the leftover work in a new issue instead).
    **Correctness without evidence churn (owner 29/10: output must be right, not just green).** Every PR that adds or
    changes product code must pass these cheap, deterministic checks; they replace live-smoke asks on ordinary PRs:
    1. Each changed product file has a test in the same PR (`gh pr diff --name-only`); no test = send back.
