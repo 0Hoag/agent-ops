@@ -60,9 +60,9 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   await expect(page.getByRole('heading', { name: 'Model prices' })).toBeVisible();
   const suffix = (process.env.SMOKE_INVOCATION_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9-]/g, '-');
   const model = `smoke-${suffix}`;
-  const occupiedDate = '2027-01-05';
-  const newDate = '2027-01-06';
-  const secondDate = '2027-01-07';
+  const occupiedDate = '2027-01-01';
+  const newDate = '2027-01-04';
+  const secondDate = '2027-01-06';
   const draft = { model, effective_date: `${occupiedDate}T00:00:00Z`, input_per_million: 1, cached_input_per_million: 0.2, cache_write_per_million: 0.3, output_per_million: 2, reasoning_per_million: 0.4 };
   await page.getByLabel('Model').fill(model);
   await page.getByLabel('Effective date').fill(occupiedDate);
@@ -88,9 +88,9 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(newPrice).toBeTruthy();
   const ownPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: occupiedDate.slice(0, 10) });
   await expect(ownPriceRow).toHaveCount(1);
-  const occupiedRow = existingPrices.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith('2027-01-05'));
+  const occupiedRow = existingPrices.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith(occupiedDate));
   expect(occupiedRow).toBeTruthy();
-  const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model', effective_date: '2027-01-05T00:00:00Z' } });
+  const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model' } });
   expect([400, 409]).toContain(occupiedPairProbe.status());
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied model/date control)', status: occupiedPairProbe.status(), body: await occupiedPairProbe.json() });
   await ownPriceRow.getByRole('button', { name: 'Edit' }).click();
@@ -111,7 +111,7 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(recoveredResponse.status()).toBe(200);
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser PATCH recovery)', status: recoveredResponse.status(), body: await recoveredResponse.json() });
   await expect(page.getByText(model, { exact: true })).toBeVisible();
-  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: newDate });
+  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: secondDate });
   await expect(recoveredPriceRow).toHaveCount(1);
   await recoveredPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
