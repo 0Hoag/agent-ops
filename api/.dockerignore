@@ -1,0 +1,9 @@
+.git
+.github
+.agent-runs
+bin
+coverage.out
+coverage.html
+*.log
+Dockerfile*
+README.md
