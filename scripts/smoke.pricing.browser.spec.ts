@@ -83,12 +83,13 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(initialPriceResponse.status(), JSON.stringify(initialPriceBody)).toBe(200);
   expect(initialPriceBody.data.some((item: { model: string }) => item.model === model), JSON.stringify(initialPriceBody)).toBeTruthy();
   await expect(page.getByText(model, { exact: true })).toBeVisible();
-  const existingPrices = await request('/api/v1/agent-run-prices').then((response) => response.json());
-  const newPrice = existingPrices.data.find((item: { model: string }) => item.model === model);
+  const initialPricesResponse = await request('/api/v1/agent-run-prices');
+  const initialPricesBody = await initialPricesResponse.json();
+  const newPrice = initialPricesBody.data.find((item: { model: string }) => item.model === model);
   expect(newPrice).toBeTruthy();
   const ownPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: occupiedDate.slice(0, 10) });
   await expect(ownPriceRow).toHaveCount(1);
-  const occupiedRow = existingPrices.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith(occupiedDate));
+  const occupiedRow = initialPricesBody.data.find((item: { model: string; effective_date: string }) => item.model === 'acceptance-model' && item.effective_date.startsWith(occupiedDate));
   expect(occupiedRow).toBeTruthy();
   const occupiedPairProbe = await request('/api/v1/agent-run-prices', { method: 'POST', data: { ...draft, model: 'acceptance-model' } });
   expect([400, 409]).toContain(occupiedPairProbe.status());
@@ -100,8 +101,9 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   const rejectedPatch = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes(`/api/v1/agent-run-prices/${newPrice.id}`));
   await page.getByRole('button', { name: /save|update/i }).click();
   const rejectedResponse = await rejectedPatch;
-  expect([400, 409]).toContain(rejectedResponse.status());
-  responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied browser PATCH)', status: rejectedResponse.status(), body: await rejectedResponse.json() });
+  const rejectedBody = await rejectedResponse.json();
+  expect(rejectedResponse.status(), JSON.stringify({ request: rejectedResponse.request().postDataJSON(), response: rejectedBody, expectedID: newPrice.id, occupiedID: occupiedRow.id })).toBe(409);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied browser PATCH)', status: rejectedResponse.status(), body: rejectedBody });
   await expect(page.getByRole('alert')).toContainText('Unable to save price version. Check for a duplicate or invalid version.');
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/pricing-occupied-date.png`, fullPage: true });
   await page.getByLabel('Effective date').fill(newDate);
