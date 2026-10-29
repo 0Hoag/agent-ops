@@ -47,7 +47,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte)
 	if err != nil {
 		return fmt.Errorf("send notification: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	data, readErr := io.ReadAll(io.LimitReader(res.Body, 4096))
 	if readErr != nil {
 		return fmt.Errorf("read notification response: %w", readErr)

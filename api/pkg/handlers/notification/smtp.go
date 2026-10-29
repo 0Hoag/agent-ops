@@ -39,7 +39,7 @@ func (c Client) SendMail(host, port, username, password, from string, to []strin
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	read := func() error {
 		b := make([]byte, 512)
 		n, e := conn.Read(b)

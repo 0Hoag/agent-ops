@@ -20,6 +20,7 @@ func TestTelegramFixture(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		got = string(b)
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer srv.Close()
 	err := (Telegram{"tok", "chat", srv.URL, srv.Client()}).Notify(context.Background(), Message{Body: "hello"})
@@ -49,7 +50,7 @@ func TestSlackFailureFixture(t *testing.T) {
 			t.Errorf("path %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte("fixture failure"))
+		_, _ = w.Write([]byte("fixture failure"))
 	}))
 	defer srv.Close()
 	if err := (Slack{BaseURL: srv.URL + "/hook", Client: srv.Client()}).Notify(context.Background(), Message{Body: "x"}); err == nil || !strings.Contains(err.Error(), "502") {
