@@ -1,6 +1,12 @@
 import { expect, test } from 'playwright/test';
 
 test('renders seeded issue and linked PR/CI from the real API', async ({ page }) => {
+  if (process.env.SMOKE_CONTROL_NO_SESSION === '1') {
+    await page.goto('/board');
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => sessionStorage.getItem('agent-ops-token'))).toBeNull();
+    return;
+  }
   const apiResponses: string[] = [];
   const apiErrors: string[] = [];
   page.on('response', (response) => {
