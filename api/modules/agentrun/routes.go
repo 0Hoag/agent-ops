@@ -8,6 +8,9 @@ func NewRoutes(c *Controller) *Routes { return &Routes{controller: c} }
 func (r *Routes) Register(g *gin.RouterGroup) {
 	g.POST("/agent-runs", r.controller.Create)
 	g.GET("/agent-runs", r.controller.List)
+}
+
+func (r *Routes) RegisterAggregate(g *gin.RouterGroup) {
 	g.GET("/agent-runs/aggregate", r.controller.Aggregate)
 }
 
