@@ -80,7 +80,35 @@ func (r *Repository) ListPage(ctx context.Context, f Filter, page, perPage int) 
 	if err := q.Order("agent_runs.started_at DESC, agent_runs.id DESC").Offset((page - 1) * perPage).Limit(perPage).Find(&out).Error; err != nil {
 		return nil, 0, fmt.Errorf("list agent runs: %w", err)
 	}
+	if err := r.attachRelations(ctx, out); err != nil {
+		return nil, 0, fmt.Errorf("load run relations: %w", err)
+	}
 	return out, total, nil
+}
+
+func (r *Repository) attachRelations(ctx context.Context, runs []AgentRun) error {
+	for i := range runs {
+		var nums []int64
+		_ = json.Unmarshal(runs[i].IssueNumbers, &nums)
+		rel := &RunRelations{Issues: []RunIssue{}, PullRequests: []RunPullRequest{}, CI: []RunCI{}}
+		if len(nums) > 0 {
+			q := r.db.WithContext(ctx).Table("issues").Select("repository_id,number,title,state,status").Where("repository_id = ?", runs[i].RepositoryID)
+			q = q.Where("number IN ?", nums)
+			if err := q.Order("number ASC").Find(&rel.Issues).Error; err != nil {
+				return err
+			}
+		}
+		if runs[i].PRNumber != nil {
+			if err := r.db.WithContext(ctx).Table("pull_requests").Select("repository_id,number,title,state,head_sha").Where("repository_id = ? AND number = ?", runs[i].RepositoryID, *runs[i].PRNumber).Find(&rel.PullRequests).Error; err != nil {
+				return err
+			}
+			if err := r.db.WithContext(ctx).Table("pipeline_runs").Select("repository_id,external_id,pr_number,sha,status,conclusion").Where("repository_id = ? AND pr_number = ?", runs[i].RepositoryID, *runs[i].PRNumber).Order("started_at DESC NULLS LAST, external_id ASC").Find(&rel.CI).Error; err != nil {
+				return err
+			}
+		}
+		runs[i].Relations = rel
+	}
+	return nil
 }
 func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]Price) ([]Aggregate, error) {
 	runs, err := r.List(ctx, f)

@@ -119,7 +119,7 @@ const docTemplate = `{
                 "produces": [
                     "application/json"
                 ],
-                "summary": "List agent runs",
+                "summary": "List organization-scoped agent runs",
                 "parameters": [
                     {
                         "type": "string",
@@ -137,6 +137,48 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Issue number",
                         "name": "issue_number",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pull request number",
+                        "name": "pr_number",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Harness identity",
+                        "name": "harness",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model identity",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 lower bound",
+                        "name": "started_after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC3339 upper bound",
+                        "name": "started_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20, maximum 100)",
+                        "name": "per_page",
                         "in": "query"
                     }
                 ],
@@ -1418,6 +1460,9 @@ const docTemplate = `{
                 "reasoning_tokens": {
                     "type": "integer"
                 },
+                "relations": {
+                    "$ref": "#/definitions/agentrun.RunRelations"
+                },
                 "repository_id": {
                     "type": "string"
                 },
@@ -1621,6 +1666,92 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "agentrun.RunCI": {
+            "type": "object",
+            "properties": {
+                "conclusion": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "sha": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunIssue": {
+            "type": "object",
+            "properties": {
+                "number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunPullRequest": {
+            "type": "object",
+            "properties": {
+                "head_sha": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "agentrun.RunRelations": {
+            "type": "object",
+            "properties": {
+                "ci": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunCI"
+                    }
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunIssue"
+                    }
+                },
+                "pull_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/agentrun.RunPullRequest"
+                    }
                 }
             }
         },

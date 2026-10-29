@@ -7,9 +7,13 @@ type Routes struct{ controller *Controller }
 func NewRoutes(c *Controller) *Routes { return &Routes{controller: c} }
 func (r *Routes) Register(g *gin.RouterGroup) {
 	g.POST("/agent-runs", r.controller.Create)
+	g.POST("/agent-runs/:run_id/timeline", r.controller.IngestTimeline)
+}
+
+// RegisterPrivate exposes read operations only after organization middleware has set the tenant.
+func (r *Routes) RegisterPrivate(g *gin.RouterGroup) {
 	g.GET("/agent-runs", r.controller.List)
 	g.GET("/agent-runs/:run_id/timeline", r.controller.Timeline)
-	g.POST("/agent-runs/:run_id/timeline", r.controller.IngestTimeline)
 }
 
 func (r *Routes) RegisterAggregate(g *gin.RouterGroup) {

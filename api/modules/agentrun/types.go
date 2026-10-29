@@ -53,6 +53,34 @@ type ListResponse struct {
 	Meta   any        `json:"meta"`
 }
 
+type RunRelations struct {
+	Issues       []RunIssue       `json:"issues"`
+	PullRequests []RunPullRequest `json:"pull_requests"`
+	CI           []RunCI          `json:"ci"`
+}
+type RunIssue struct {
+	RepositoryID string `json:"repository_id"`
+	Number       int64  `json:"number"`
+	Title        string `json:"title"`
+	State        string `json:"state"`
+	Status       string `json:"status"`
+}
+type RunPullRequest struct {
+	RepositoryID string `json:"repository_id"`
+	Number       int64  `json:"number"`
+	Title        string `json:"title"`
+	State        string `json:"state"`
+	HeadSHA      string `json:"head_sha"`
+}
+type RunCI struct {
+	RepositoryID string `json:"repository_id"`
+	ExternalID   string `json:"external_id"`
+	PRNumber     *int64 `json:"pr_number,omitempty"`
+	SHA          string `json:"sha"`
+	Status       string `json:"status"`
+	Conclusion   string `json:"conclusion"`
+}
+
 type RunStep struct {
 	ID                string     `json:"id"`
 	RunID             string     `json:"run_id"`

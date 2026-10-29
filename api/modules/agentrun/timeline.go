@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -26,11 +27,19 @@ func (r *Repository) Steps(ctx context.Context, id string) ([]RunStep, error) {
 }
 func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunStep) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var run AgentRun
+		query := tx.Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("ar.id = ?", id)
+		if org := organizationFromContext(ctx); org != "" {
+			query = query.Where("repo.organization_id = ?", org)
+		}
+		if err := query.First(&run).Error; err != nil {
+			return gorm.ErrRecordNotFound
+		}
 		if err := tx.Exec("DELETE FROM agent_run_steps WHERE run_id = ?", id).Error; err != nil {
 			return err
 		}
 		for i := range steps {
-			steps[i].ID = uuid.NewString()
+			steps[i].ID = uuid.NewMD5(uuid.Nil, []byte(id+":"+strconv.Itoa(i))).String()
 			steps[i].RunID = id
 			steps[i].Sequence = i
 		}

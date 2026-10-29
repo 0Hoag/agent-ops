@@ -117,11 +117,18 @@ func (c *Controller) Create(ctx *gin.Context) {
 }
 
 // List returns runs filtered by repository, wave, and issue number.
-// @Summary List agent runs
+// @Summary List organization-scoped agent runs
 // @Produce json
 // @Param repository_id query string false "Repository UUID"
 // @Param wave query string false "Wave"
 // @Param issue_number query int false "Issue number"
+// @Param pr_number query int false "Pull request number"
+// @Param harness query string false "Harness identity"
+// @Param model query string false "Model identity"
+// @Param started_after query string false "RFC3339 lower bound"
+// @Param started_before query string false "RFC3339 upper bound"
+// @Param page query int false "Page number (default 1)"
+// @Param per_page query int false "Page size (default 20, maximum 100)"
 // @Success 200 {object} ListResponse
 // @Router /api/v1/agent-runs [get]
 func (c *Controller) List(ctx *gin.Context) {

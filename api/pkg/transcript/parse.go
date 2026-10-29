@@ -65,11 +65,14 @@ func ParseCodex(r io.Reader) ([]Session, error) {
 			s.Model = v.Model
 		}
 		addTime(s, v.Timestamp)
-		s.Usage.Input += v.Usage.Input
+		u := Usage{Input: v.Usage.Input, CachedInput: v.Usage.Cached, CacheWrite: v.Usage.CacheWrite, Output: v.Usage.Output, Reasoning: v.Usage.Reasoning}
+		s.Usage.Input += u.Input
 		s.Usage.CachedInput += v.Usage.Cached
 		s.Usage.CacheWrite += v.Usage.CacheWrite
 		s.Usage.Output += v.Usage.Output
 		s.Usage.Reasoning += v.Usage.Reasoning
+		t := parseTime(v.Timestamp)
+		s.Steps = append(s.Steps, Step{Started: t, Ended: t, Usage: u, CacheHit: u.CachedInput > 0})
 		return nil
 	})
 }
@@ -121,6 +124,8 @@ func ParseOpenCode(r io.Reader) ([]Session, error) {
 		s.Usage.Reasoning += t.Reasoning
 		s.Usage.CachedInput += t.Cache.Read
 		s.Usage.CacheWrite += t.Cache.Write
+		ts := addUnixMillisValue(v.Timestamp)
+		s.Steps = append(s.Steps, Step{Started: ts, Ended: ts, Usage: Usage{Input: t.Input, CachedInput: t.Cache.Read, CacheWrite: t.Cache.Write, Output: t.Output, Reasoning: t.Reasoning}, CacheHit: t.Cache.Read > 0})
 		if v.Timestamp != 0 {
 			addUnixMillis(s, v.Timestamp)
 		}
@@ -171,6 +176,8 @@ func ParseClaude(r io.Reader) ([]Session, error) {
 		addTime(s, v.Timestamp)
 		u := v.Message.Usage
 		s.Usage = Usage{s.Usage.Input + u.Input, s.Usage.CachedInput + u.Read, s.Usage.CacheWrite + u.Write, s.Usage.Output + u.Output, s.Usage.Reasoning + u.Reasoning}
+		t := parseTime(v.Timestamp)
+		s.Steps = append(s.Steps, Step{Started: t, Ended: t, Usage: Usage{Input: u.Input, CachedInput: u.Read, CacheWrite: u.Write, Output: u.Output, Reasoning: u.Reasoning}, CacheHit: u.Read > 0})
 		return nil
 	})
 }
@@ -223,11 +230,18 @@ func addTime(s *Session, raw string) {
 }
 
 func addUnixMillis(s *Session, millis int64) {
-	t := time.UnixMilli(millis)
+	t := addUnixMillisValue(millis)
 	if s.Started.IsZero() || t.Before(s.Started) {
 		s.Started = t
 	}
 	if t.After(s.Ended) {
 		s.Ended = t
 	}
+}
+func parseTime(raw string) time.Time { t, _ := time.Parse(time.RFC3339Nano, raw); return t }
+func addUnixMillisValue(millis int64) time.Time {
+	if millis == 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(millis)
 }

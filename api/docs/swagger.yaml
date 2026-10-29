@@ -32,6 +32,8 @@ definitions:
         type: integer
       reasoning_tokens:
         type: integer
+      relations:
+        $ref: '#/definitions/agentrun.RunRelations'
       repository_id:
         type: string
       session_id:
@@ -168,6 +170,62 @@ definitions:
         type: number
       updated_at:
         type: string
+    type: object
+  agentrun.RunCI:
+    properties:
+      conclusion:
+        type: string
+      external_id:
+        type: string
+      pr_number:
+        type: integer
+      repository_id:
+        type: string
+      sha:
+        type: string
+      status:
+        type: string
+    type: object
+  agentrun.RunIssue:
+    properties:
+      number:
+        type: integer
+      repository_id:
+        type: string
+      state:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  agentrun.RunPullRequest:
+    properties:
+      head_sha:
+        type: string
+      number:
+        type: integer
+      repository_id:
+        type: string
+      state:
+        type: string
+      title:
+        type: string
+    type: object
+  agentrun.RunRelations:
+    properties:
+      ci:
+        items:
+          $ref: '#/definitions/agentrun.RunCI'
+        type: array
+      issues:
+        items:
+          $ref: '#/definitions/agentrun.RunIssue'
+        type: array
+      pull_requests:
+        items:
+          $ref: '#/definitions/agentrun.RunPullRequest'
+        type: array
     type: object
   agentrun.RunStep:
     properties:
@@ -575,6 +633,34 @@ paths:
         in: query
         name: issue_number
         type: integer
+      - description: Pull request number
+        in: query
+        name: pr_number
+        type: integer
+      - description: Harness identity
+        in: query
+        name: harness
+        type: string
+      - description: Model identity
+        in: query
+        name: model
+        type: string
+      - description: RFC3339 lower bound
+        in: query
+        name: started_after
+        type: string
+      - description: RFC3339 upper bound
+        in: query
+        name: started_before
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, maximum 100)
+        in: query
+        name: per_page
+        type: integer
       produces:
       - application/json
       responses:
@@ -582,7 +668,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/agentrun.ListResponse'
-      summary: List agent runs
+      summary: List organization-scoped agent runs
     post:
       consumes:
       - application/json
