@@ -86,9 +86,12 @@ One pass:
    - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
    - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
-   - **At most 2 send-backs per PR.** On the 3rd review, if CI and gates are green, merge and file what is
-     still missing as `found-by:agent` follow-up issues.
-4. **Dispatch.** If fewer than **3 workers** are running (`pgrep -f run-worker`; cap 3, owner 24/10: speed over quota), start the next unblocked
+   - **At most 1 send-back per PR** (owner 29/10: too many send-backs, little delivered). On the 2nd review, if CI
+     and gates are green and the feature works, merge. Missing evidence is **not** a reason to send back twice and
+     **not** a reason for an evidence-only follow-up PR; file a `found-by:agent` issue only for a real defect (wrong
+     behaviour, a test that cannot fail). Send back at the 1st review only for: red CI, out-of-scope files, no
+     `Closes #n`, or a failing check you re-ran yourself.
+4. **Dispatch.** If fewer than **2 workers** are running (`pgrep -f run-worker`; cap 2, owner 29/10: 3 heated the machine and delivered little), start the next unblocked
    sub-waves (different directories only). English brief in `briefs/<wave>.md` with exact paths, line numbers
    and commands; every brief says "commit and push after every finished issue". Start **detached** so it survives this pass:
    `scripts/spawn.sh .agent-runs/<wave>.log scripts/run-worker*.sh <wave> <branch> briefs/<wave>.md`
@@ -96,6 +99,10 @@ One pass:
    (Codex's sandbox cannot write the client worktree's git dir, run Chromium or `rm -f`; owner 26/10, W7r r7-r9 never
    pushed); Codex only for backend waves. When restarting a client wave whose worktree has uncommitted work, the
    RESUME block names those files so the worker verifies and commits them instead of redoing them.
+   **Brief = deliverable first.** Each brief states the feature to ship and its "Done when" command, and asks for
+   evidence in the PR body in one fixed shape: gate output, one smoke or test result, one failing control. Prefer
+   waves that ship features (`feat`) over waves that only harden smoke/CI; never open a wave whose only goal is more
+   acceptance evidence for an already merged PR.
    A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
    **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
    restart that worker on the same branch in a later pass after the reset time.

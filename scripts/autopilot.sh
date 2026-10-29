@@ -5,7 +5,7 @@
 #
 #   scripts/autopilot.sh                 # pass every 10 min, or within 30 s after a worker ends
 #   INTERVAL=300 scripts/autopilot.sh    # every 5 min
-#   CAP=3 scripts/autopilot.sh           # with CAP workers running, timer passes are skipped (3 x INTERVAL max)
+#   CAP=2 scripts/autopilot.sh           # with CAP workers running, timer passes are skipped (3 x INTERVAL max)
 #   touch .agent-runs/STOP               # stop after the current pass
 #
 # If the OpenCode web server is up (scripts/opencode.sh web --port 4096), each pass runs on it
@@ -18,7 +18,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
-cap=${CAP:-3}   # keep equal to the worker cap in AGENTS.md → Dispatch
+cap=${CAP:-2}   # keep equal to the worker cap in AGENTS.md → Dispatch
 web=${WEB:-http://127.0.0.1:4096}
 dir=.agent-runs/coordinator
 mkdir -p "$dir"
@@ -91,6 +91,9 @@ while true; do
     | {input: (map(.input) | add), cached: (map(.cache.read) | add), output: (map(.output) | add)}' \
     "$dir/$ts.jsonl"
   head -3 "$dir/$ts.md"
+  for r in $REPOS; do
+    echo "  progress $r: $(gh pr list -R "$r" --state merged --search "merged:>=$(date -v-24H +%Y-%m-%dT%H:%M:%S)" --json number --jq length 2>/dev/null) merged/24h, $(gh issue list -R "$r" --state open --limit 500 --json number --jq length 2>/dev/null) open"
+  done
 
   if head -1 "$dir/$ts.md" | grep -q '^AUTOPILOT: STOP'; then
     echo "[$ts] coordinator asked to stop"; break
