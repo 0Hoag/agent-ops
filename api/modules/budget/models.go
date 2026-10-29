@@ -1,8 +1,9 @@
 package budget
 
 import (
-	"github.com/0Hoag/agent-ops/api/modules/store"
 	"time"
+
+	"github.com/0Hoag/agent-ops/api/modules/store"
 )
 
 type Budget struct {

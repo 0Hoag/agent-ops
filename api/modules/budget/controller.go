@@ -2,13 +2,14 @@ package budget
 
 import (
 	"errors"
+	"net/http"
+	"strings"
+
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"net/http"
-	"strings"
 )
 
 type Controller struct {
@@ -63,6 +64,15 @@ func (c *Controller) bind(ctx *gin.Context, org string, id string) (*Budget, boo
 	}
 	return v, true
 }
+
+// List returns budgets visible to the authenticated organization.
+// @Summary List budgets
+// @Tags budgets
+// @Produce json
+// @Success 200 {array} Budget
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 403 {object} response.ErrorResponse
+// @Router /api/v1/budgets [get]
 func (c *Controller) List(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, false)
 	if !ok {
@@ -75,6 +85,15 @@ func (c *Controller) List(ctx *gin.Context) {
 	}
 	response.OK(ctx, v)
 }
+
+// Get returns one budget in the authenticated organization.
+// @Summary Get budget
+// @Tags budgets
+// @Produce json
+// @Param budget_id path string true "Budget ID"
+// @Success 200 {object} Budget
+// @Failure 404 {object} response.ErrorResponse
+// @Router /api/v1/budgets/{budget_id} [get]
 func (c *Controller) Get(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, false)
 	if !ok {
@@ -91,6 +110,16 @@ func (c *Controller) Get(ctx *gin.Context) {
 	}
 	response.OK(ctx, v)
 }
+
+// Create persists an organization-scoped budget.
+// @Summary Create budget
+// @Tags budgets
+// @Accept json
+// @Produce json
+// @Param budget body Request true "Budget"
+// @Success 201 {object} Budget
+// @Failure 400 {object} response.ErrorResponse
+// @Router /api/v1/budgets [post]
 func (c *Controller) Create(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, true)
 	if !ok {
@@ -106,6 +135,17 @@ func (c *Controller) Create(ctx *gin.Context) {
 	}
 	response.Created(ctx, v)
 }
+
+// Update replaces the mutable fields of a budget.
+// @Summary Update budget
+// @Tags budgets
+// @Accept json
+// @Produce json
+// @Param budget_id path string true "Budget ID"
+// @Param budget body Request true "Budget"
+// @Success 200 {object} Budget
+// @Failure 404 {object} response.ErrorResponse
+// @Router /api/v1/budgets/{budget_id} [patch]
 func (c *Controller) Update(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, true)
 	if !ok {
@@ -124,6 +164,15 @@ func (c *Controller) Update(ctx *gin.Context) {
 	}
 	response.OK(ctx, v)
 }
+
+// Delete removes a budget in the authenticated organization.
+// @Summary Delete budget
+// @Tags budgets
+// @Produce json
+// @Param budget_id path string true "Budget ID"
+// @Success 200 {object} response.MessageResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Router /api/v1/budgets/{budget_id} [delete]
 func (c *Controller) Delete(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, true)
 	if !ok {
