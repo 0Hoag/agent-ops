@@ -32,6 +32,14 @@ func (r *Repository) IsConfiguredRepository(ctx context.Context, id string, name
 	return count == 1, err
 }
 func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
+	q := r.listQuery(ctx, f)
+	var out []AgentRun
+	if err := q.Order("started_at DESC").Find(&out).Error; err != nil {
+		return nil, fmt.Errorf("list agent runs: %w", err)
+	}
+	return out, nil
+}
+func (r *Repository) listQuery(ctx context.Context, f Filter) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&AgentRun{})
 	if organization := organizationFromContext(ctx); organization != "" {
 		q = q.Joins("JOIN repositories ON repositories.id = agent_runs.repository_id").Where("repositories.organization_id = ?", organization)
@@ -45,11 +53,62 @@ func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
 	if f.IssueNumber != 0 {
 		q = q.Where("issue_numbers @> ?::jsonb", fmt.Sprintf("[%d]", f.IssueNumber))
 	}
-	var out []AgentRun
-	if err := q.Order("started_at DESC").Find(&out).Error; err != nil {
-		return nil, fmt.Errorf("list agent runs: %w", err)
+	if f.Harness != "" {
+		q = q.Where("harness = ?", f.Harness)
 	}
-	return out, nil
+	if f.Model != "" {
+		q = q.Where("model = ?", f.Model)
+	}
+	if f.PRNumber != 0 {
+		q = q.Where("pr_number = ?", f.PRNumber)
+	}
+	if f.StartedAfter != nil {
+		q = q.Where("started_at >= ?", *f.StartedAfter)
+	}
+	if f.StartedBefore != nil {
+		q = q.Where("started_at <= ?", *f.StartedBefore)
+	}
+	return q
+}
+func (r *Repository) ListPage(ctx context.Context, f Filter, page, perPage int) ([]AgentRun, int64, error) {
+	q := r.listQuery(ctx, f)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count agent runs: %w", err)
+	}
+	var out []AgentRun
+	if err := q.Order("agent_runs.started_at DESC, agent_runs.id DESC").Offset((page - 1) * perPage).Limit(perPage).Find(&out).Error; err != nil {
+		return nil, 0, fmt.Errorf("list agent runs: %w", err)
+	}
+	if err := r.attachRelations(ctx, out); err != nil {
+		return nil, 0, fmt.Errorf("load run relations: %w", err)
+	}
+	return out, total, nil
+}
+
+func (r *Repository) attachRelations(ctx context.Context, runs []AgentRun) error {
+	for i := range runs {
+		var nums []int64
+		_ = json.Unmarshal(runs[i].IssueNumbers, &nums)
+		rel := &RunRelations{Issues: []RunIssue{}, PullRequests: []RunPullRequest{}, CI: []RunCI{}}
+		if len(nums) > 0 {
+			q := r.db.WithContext(ctx).Table("issues").Select("repository_id,number,title,state,status").Where("repository_id = ?", runs[i].RepositoryID)
+			q = q.Where("number IN ?", nums)
+			if err := q.Order("number ASC").Find(&rel.Issues).Error; err != nil {
+				return err
+			}
+		}
+		if runs[i].PRNumber != nil {
+			if err := r.db.WithContext(ctx).Table("pull_requests").Select("repository_id,number,title,state,head_sha").Where("repository_id = ? AND number = ?", runs[i].RepositoryID, *runs[i].PRNumber).Find(&rel.PullRequests).Error; err != nil {
+				return err
+			}
+			if err := r.db.WithContext(ctx).Table("pipeline_runs").Select("repository_id,external_id,pr_number,sha,status,conclusion").Where("repository_id = ? AND pr_number = ?", runs[i].RepositoryID, *runs[i].PRNumber).Order("started_at DESC NULLS LAST, external_id ASC").Find(&rel.CI).Error; err != nil {
+				return err
+			}
+		}
+		runs[i].Relations = rel
+	}
+	return nil
 }
 func (r *Repository) Aggregate(ctx context.Context, f Filter, prices map[string]Price) ([]Aggregate, error) {
 	runs, err := r.List(ctx, f)
