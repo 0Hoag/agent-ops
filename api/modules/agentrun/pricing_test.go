@@ -161,11 +161,12 @@ func (m pricingMemberships) Membership(context.Context, string, string) (*organi
 }
 
 type pricingRepo struct {
-	prices  []PriceVersion
-	created bool
-	updated bool
-	org     string
-	id      string
+	prices       []PriceVersion
+	updatedPrice PriceVersion
+	created      bool
+	updated      bool
+	org          string
+	id           string
 }
 
 type duplicatePricingRepo struct{ calls int }
@@ -193,8 +194,9 @@ func (p *pricingRepo) CreatePrice(_ context.Context, price *PriceVersion) error 
 	p.prices = append(p.prices, *price)
 	return nil
 }
-func (p *pricingRepo) UpdatePrice(_ context.Context, org, id string, _ *PriceVersion) error {
+func (p *pricingRepo) UpdatePrice(_ context.Context, org, id string, price *PriceVersion) error {
 	p.org, p.id = org, id
+	p.updatedPrice = *price
 	p.updated = true
 	return nil
 }
@@ -276,6 +278,62 @@ func TestPriceControllerOwnerAndAdminCanWrite(t *testing.T) {
 			require.Equal(t, "org-a", string(repo.prices[0].OrganizationID))
 		})
 	}
+}
+
+func TestPriceControllerDateOnlyCreateAndPatchPersistUTCDate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dateOnlyBody := `{"model":"model-a","effective_date":"2027-01-01","input_per_million":1,"cached_input_per_million":1,"cache_write_per_million":1,"output_per_million":1,"reasoning_per_million":1}`
+	repo := &pricingRepo{}
+	r := gin.New()
+	c := NewPriceController(repo, pricingMemberships{role: "admin"})
+	r.POST("/", func(ctx *gin.Context) {
+		ctx.Set("organization_id", "org-a")
+		ctx.Set("account_id", "acct-a")
+		c.Create(ctx)
+	})
+	r.PATCH("/:price_id", func(ctx *gin.Context) {
+		ctx.Set("organization_id", "org-a")
+		ctx.Set("account_id", "acct-a")
+		c.Update(ctx)
+	})
+	post := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(dateOnlyBody))
+	post.Header.Set("Content-Type", "application/json")
+	postResponse := httptest.NewRecorder()
+	r.ServeHTTP(postResponse, post)
+	require.Equal(t, http.StatusCreated, postResponse.Code)
+	require.Len(t, repo.prices, 1)
+	require.Equal(t, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), repo.prices[0].EffectiveDate)
+
+	patch := httptest.NewRequest(http.MethodPatch, "/price-1", strings.NewReader(dateOnlyBody))
+	patch.Header.Set("Content-Type", "application/json")
+	patchResponse := httptest.NewRecorder()
+	r.ServeHTTP(patchResponse, patch)
+	require.Equal(t, http.StatusOK, patchResponse.Code)
+	require.Equal(t, "org-a", repo.org)
+	require.Equal(t, "price-1", repo.id)
+	require.Equal(t, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), repo.updatedPrice.EffectiveDate)
+}
+
+func TestPriceControllerRejectsMalformedOrImpossibleDate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &pricingRepo{}
+	r := gin.New()
+	r.POST("/", func(ctx *gin.Context) {
+		ctx.Set("organization_id", "org-a")
+		ctx.Set("account_id", "acct-a")
+		NewPriceController(repo, pricingMemberships{role: "admin"}).Create(ctx)
+	})
+	for _, date := range []string{"2027-02-29", "2027-1-01", "2027-01-01T01:00:00Z"} {
+		t.Run(date, func(t *testing.T) {
+			body := `{"model":"model-a","effective_date":"` + date + `","input_per_million":1}`
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			res := httptest.NewRecorder()
+			r.ServeHTTP(res, req)
+			require.Equal(t, http.StatusBadRequest, res.Code)
+		})
+	}
+	require.False(t, repo.created)
 }
 
 func TestPriceControllerDuplicateVersionReturnsConflict(t *testing.T) {
