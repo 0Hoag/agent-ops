@@ -60,12 +60,12 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   await expect(page.getByRole('heading', { name: 'Model prices' })).toBeVisible();
   const suffix = (process.env.SMOKE_INVOCATION_ID || `${Date.now()}`).replace(/[^a-zA-Z0-9-]/g, '-');
   const model = `smoke-${suffix}`;
-  const occupiedDate = '2027-01-01T00:00:00Z';
+  const occupiedDate = '2027-01-01';
   const newDate = '2027-01-02';
   const secondDate = '2027-01-03';
-  const draft = { model, effective_date: occupiedDate, input_per_million: 1, cached_input_per_million: 0.2, cache_write_per_million: 0.3, output_per_million: 2, reasoning_per_million: 0.4 };
+  const draft = { model, effective_date: `${occupiedDate}T00:00:00Z`, input_per_million: 1, cached_input_per_million: 0.2, cache_write_per_million: 0.3, output_per_million: 2, reasoning_per_million: 0.4 };
   await page.getByLabel('Model').fill(model);
-  await page.getByLabel('Effective date').fill(occupiedDate.slice(0, 10));
+  await page.getByLabel('Effective date').fill(occupiedDate);
   await page.getByRole('spinbutton', { name: 'input per million', exact: true }).fill('1');
   await page.getByRole('spinbutton', { name: 'cached input per million', exact: true }).fill('0.2');
   await page.getByRole('spinbutton', { name: 'cache write per million', exact: true }).fill('0.3');
