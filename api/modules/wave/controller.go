@@ -49,6 +49,12 @@ func (c *Controller) access(ctx *gin.Context, write bool) (string, bool) {
 	}
 	return org, true
 }
+
+// @Summary List organization waves
+// @Produce json
+// @Success 200 {object} listResponse
+// @Failure 401,403 {object} response.ErrorResponse
+// @Router /api/v1/waves [get]
 func (c *Controller) List(ctx *gin.Context) {
 	org, ok := c.access(ctx, false)
 	if !ok {
@@ -62,6 +68,13 @@ func (c *Controller) List(ctx *gin.Context) {
 	}
 	response.JSON(ctx, http.StatusOK, listResponse{rows, p.ToResponse(total)})
 }
+
+// @Summary Get organization wave
+// @Produce json
+// @Param wave_id path string true "Wave UUID"
+// @Success 200 {object} response.SuccessResponse
+// @Failure 401,403,404 {object} response.ErrorResponse
+// @Router /api/v1/waves/{wave_id} [get]
 func (c *Controller) Get(ctx *gin.Context) {
 	org, ok := c.access(ctx, false)
 	if !ok {
@@ -78,6 +91,14 @@ func (c *Controller) Get(ctx *gin.Context) {
 	}
 	response.OK(ctx, row)
 }
+
+// @Summary Create organization wave
+// @Accept json
+// @Produce json
+// @Param request body request true "Wave template brief"
+// @Success 201 {object} response.SuccessResponse
+// @Failure 400,401,403 {object} response.ErrorResponse
+// @Router /api/v1/waves [post]
 func (c *Controller) Create(ctx *gin.Context) {
 	org, ok := c.access(ctx, true)
 	if !ok {
@@ -95,6 +116,15 @@ func (c *Controller) Create(ctx *gin.Context) {
 	}
 	response.Created(ctx, row)
 }
+
+// @Summary Update organization wave
+// @Accept json
+// @Produce json
+// @Param wave_id path string true "Wave UUID"
+// @Param request body request true "Wave template brief and state"
+// @Success 200 {object} response.SuccessResponse
+// @Failure 400,401,403,404 {object} response.ErrorResponse
+// @Router /api/v1/waves/{wave_id} [patch]
 func (c *Controller) Update(ctx *gin.Context) {
 	org, ok := c.access(ctx, true)
 	if !ok {
@@ -120,6 +150,13 @@ func (c *Controller) Update(ctx *gin.Context) {
 	}
 	response.OK(ctx, row)
 }
+
+// @Summary Delete organization wave
+// @Produce json
+// @Param wave_id path string true "Wave UUID"
+// @Success 204 {object} response.MessageResponse
+// @Failure 401,403,404 {object} response.ErrorResponse
+// @Router /api/v1/waves/{wave_id} [delete]
 func (c *Controller) Delete(ctx *gin.Context) {
 	org, ok := c.access(ctx, true)
 	if !ok {

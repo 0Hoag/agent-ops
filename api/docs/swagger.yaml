@@ -561,6 +561,15 @@ definitions:
     required:
     - role
     type: object
+  pagination.PaginatorResponse:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
   repositorysettings.CreateRequest:
     properties:
       backfill_token:
@@ -671,6 +680,41 @@ definitions:
       data: {}
       status:
         type: integer
+    type: object
+  wave.Wave:
+    properties:
+      brief:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      organization_id:
+        type: string
+      state:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  wave.listResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/wave.Wave'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
+  wave.request:
+    properties:
+      brief:
+        type: string
+      name:
+        type: string
+      state:
+        type: string
     type: object
 host: localhost:8080
 info:
@@ -1593,6 +1637,148 @@ paths:
       security:
       - BearerAuth: []
       summary: Update repository settings
+  /api/v1/waves:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/wave.listResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List organization waves
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Wave template brief
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/wave.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create organization wave
+  /api/v1/waves/{wave_id}:
+    delete:
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete organization wave
+    get:
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get organization wave
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      - description: Wave template brief and state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/wave.request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update organization wave
   /api/v1/webhooks/{provider}:
     post:
       consumes:
