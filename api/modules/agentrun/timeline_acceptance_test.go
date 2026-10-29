@@ -10,9 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type timelineFixtureRepository struct {
@@ -99,4 +103,47 @@ func TestTimelineIngestIsRepeatableAndDoesNotReturnSensitiveFields(t *testing.T)
 	req.Header.Set("X-Agent-Run-Token", "token")
 	r.ServeHTTP(res, req)
 	require.Equal(t, firstID, repo.steps[0].ID)
+}
+
+func TestTimelineStepIdentitySurvivesReplacementAndDeletion(t *testing.T) {
+	first := RunStep{InputTokens: 3, OutputTokens: 5, ToolName: "shell", CacheHit: true}
+	second := RunStep{InputTokens: 8, OutputTokens: 13, ToolName: "test"}
+	firstID := uuid.NewMD5(uuid.Nil, []byte("run-1:"+timelineStepFingerprint(first)+":0"))
+	secondID := uuid.NewMD5(uuid.Nil, []byte("run-1:"+timelineStepFingerprint(second)+":0"))
+
+	// A replacement may delete the first item and reorder the survivor; its
+	// persisted identity must remain content-stable instead of sequence-based.
+	replacement := []RunStep{second, first}
+	gotSecond := uuid.NewMD5(uuid.Nil, []byte("run-1:"+timelineStepFingerprint(replacement[0])+":0"))
+	gotFirst := uuid.NewMD5(uuid.Nil, []byte("run-1:"+timelineStepFingerprint(replacement[1])+":0"))
+	require.Equal(t, secondID, gotSecond)
+	require.Equal(t, firstID, gotFirst)
+	require.NotEqual(t, firstID, uuid.NewMD5(uuid.Nil, []byte("run-1:0")))
+}
+
+func TestTimelineStepCostUsesEveryHistoricalCounter(t *testing.T) {
+	step := RunStep{InputTokens: 100, CachedInputTokens: 20, CacheWriteTokens: 10, OutputTokens: 30, ReasoningTokens: 5}
+	price := Price{InputPerMillion: 1, CachedInputPerMillion: 2, CacheWritePerMillion: 3, OutputPerMillion: 4, ReasoningPerMillion: 5}
+	require.InDelta(t, 0.0001+0.00004+0.00003+0.00012+0.000025, stepCost(step, price), 1e-12)
+}
+
+func TestRepositoryReplaceStepsUsesPersistedStableIdentity(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
+	require.NoError(t, err)
+	repo := NewRepository(db)
+	runID := "a1000000-0000-0000-0000-000000000001"
+	orgID := "b1000000-0000-0000-0000-000000000001"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT .* FROM agent_runs ar JOIN repositories repo ON repo\.id = ar\.repository_id WHERE ar\.id = \$1 AND repo\.organization_id = \$2 ORDER BY .* LIMIT \$3`).WithArgs(runID, orgID, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "started_at", "ended_at", "billing_type"}).AddRow(runID, orgID, "W", "worker", "model", []byte("[]"), time.Now(), time.Now(), "api"))
+	mock.ExpectExec(`DELETE FROM agent_run_steps WHERE run_id = \$1`).WithArgs(runID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "agent_run_steps"`).WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectCommit()
+	steps := []RunStep{{InputTokens: 3, ToolName: "shell"}, {InputTokens: 8, ToolName: "test"}}
+	require.NoError(t, repo.ReplaceSteps(WithOrganization(context.Background(), orgID), runID, steps))
+	require.NotEqual(t, uuid.NewMD5(uuid.Nil, []byte(runID+":0")), steps[0].ID)
+	require.Equal(t, uuid.NewMD5(uuid.Nil, []byte(runID+":"+timelineStepFingerprint(steps[0])+":0")), uuid.MustParse(steps[0].ID))
+	require.NoError(t, mock.ExpectationsWereMet())
 }
