@@ -86,11 +86,13 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   const existingPrices = await request('/api/v1/agent-run-prices').then((response) => response.json());
   const newPrice = existingPrices.data.find((item: { model: string }) => item.model === model);
   expect(newPrice).toBeTruthy();
+  const ownPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: occupiedDate.slice(0, 10) });
+  await expect(ownPriceRow).toHaveCount(1);
   const occupiedDraft = { ...draft, effective_date: `${newDate}T00:00:00Z` };
   const occupiedCreate = await request('/api/v1/agent-run-prices', { method: 'POST', data: occupiedDraft });
   expect(occupiedCreate.status()).toBe(201);
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (occupied model/date)', status: occupiedCreate.status(), body: await occupiedCreate.json() });
-  await page.getByRole('button', { name: 'Edit' }).first().click();
+  await ownPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
   await page.getByLabel('Effective date').fill(occupiedDate);
   await page.getByRole('spinbutton', { name: 'output per million', exact: true }).fill('3');
@@ -108,7 +110,9 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   expect(recoveredResponse.status()).toBe(200);
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser PATCH recovery)', status: recoveredResponse.status(), body: await recoveredResponse.json() });
   await expect(page.getByText(model, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Edit' }).last().click();
+  const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: newDate });
+  await expect(recoveredPriceRow).toHaveCount(1);
+  await recoveredPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
   await page.getByLabel('Effective date').fill(secondDate);
   await page.getByRole('spinbutton', { name: 'output per million', exact: true }).fill('3');
