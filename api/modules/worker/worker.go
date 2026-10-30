@@ -69,6 +69,11 @@ func (e *Executor) loop() {
 func (e *Executor) execute(j *Job) {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.mu.Lock()
+	if j.State == "cancelled" {
+		e.mu.Unlock()
+		cancel()
+		return
+	}
 	j.cancel = cancel
 	j.State = "running"
 	e.mu.Unlock()
@@ -115,11 +120,27 @@ func (e *Executor) Get(id string) (*Job, error) {
 	copy := *j
 	return &copy, nil
 }
-func (e *Executor) Stop(id string) error {
+func (e *Executor) GetForOrganization(id, organizationID string) (*Job, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	j, ok := e.jobs[id]
-	if !ok {
+	if !ok || j.Request.OrganizationID != organizationID {
+		return nil, ErrNotFound
+	}
+	copy := *j
+	return &copy, nil
+}
+func (e *Executor) Stop(id string) error {
+	return e.stopJob(id, "")
+}
+func (e *Executor) StopForOrganization(id, organizationID string) error {
+	return e.stopJob(id, organizationID)
+}
+func (e *Executor) stopJob(id, organizationID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	j, ok := e.jobs[id]
+	if !ok || (organizationID != "" && j.Request.OrganizationID != organizationID) {
 		return ErrNotFound
 	}
 	if j.cancel != nil {
