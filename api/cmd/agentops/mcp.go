@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -36,8 +37,8 @@ type mcpError struct {
 }
 
 type mcpServer struct {
-	apiURL, token string
-	client        *http.Client
+	apiURL, token, fiveMinutesPath string
+	client                         *http.Client
 }
 
 func runMCP(args []string, in io.Reader, out io.Writer, client *http.Client) error {
@@ -45,6 +46,7 @@ func runMCP(args []string, in io.Reader, out io.Writer, client *http.Client) err
 	fs.SetOutput(io.Discard)
 	apiURL := fs.String("api-url", env("AGENTOPS_API_URL", "http://127.0.0.1:8080"), "authenticated API base URL")
 	token := fs.String("token", env("AGENTOPS_API_TOKEN", ""), "selected-organization JWT")
+	fiveMinutesPath := fs.String("five-minutes", env("AGENTOPS_FIVE_MINUTES_PATH", "FIVE-MINUTES.md"), "local FIVE-MINUTES.md path")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("invalid mcp flags")
 	}
@@ -57,7 +59,7 @@ func runMCP(args []string, in io.Reader, out io.Writer, client *http.Client) err
 	if strings.TrimSpace(*token) == "" {
 		return fmt.Errorf("--token or AGENTOPS_API_TOKEN is required")
 	}
-	return (&mcpServer{strings.TrimRight(*apiURL, "/"), *token, client}).serve(context.Background(), in, out)
+	return (&mcpServer{strings.TrimRight(*apiURL, "/"), *token, *fiveMinutesPath, client}).serve(context.Background(), in, out)
 }
 
 func (s *mcpServer) serve(ctx context.Context, in io.Reader, out io.Writer) error {
@@ -102,6 +104,8 @@ func (s *mcpServer) handle(ctx context.Context, req mcpRequest) (mcpResponse, bo
 		resp.Result = map[string]any{"tools": []map[string]any{
 			{"name": "list_issues", "description": "List issues for a repository", "inputSchema": map[string]any{"type": "object", "required": []string{"repository_id"}, "properties": map[string]any{"repository_id": map[string]string{"type": "string"}, "page": map[string]string{"type": "integer"}, "per_page": map[string]string{"type": "integer"}}}},
 			{"name": "wave_status", "description": "Get an organization wave", "inputSchema": map[string]any{"type": "object", "required": []string{"wave_id"}, "properties": map[string]any{"wave_id": map[string]string{"type": "string"}}}},
+			{"name": "my_costs", "description": "Read authenticated agent-run costs", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"repository_id": map[string]string{"type": "string"}, "wave": map[string]string{"type": "string"}, "issue_number": map[string]string{"type": "integer"}}}},
+			{"name": "similar_failures", "description": "Find matching local and authenticated failure evidence", "inputSchema": map[string]any{"type": "object", "required": []string{"query", "repository_id"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "repository_id": map[string]string{"type": "string"}}}},
 		}}
 	case "tools/call":
 		result, err := s.callTool(ctx, req.Params)
@@ -148,6 +152,38 @@ func (s *mcpServer) callTool(ctx context.Context, raw json.RawMessage) (any, err
 			return nil, err
 		}
 		path = "/api/v1/waves/" + url.PathEscape(id)
+	case "my_costs":
+		q := url.Values{}
+		for _, key := range []string{"repository_id", "wave"} {
+			if _, ok := p.Arguments[key]; ok {
+				value, err := stringArg(p.Arguments, key)
+				if err != nil {
+					return nil, err
+				}
+				q.Set(key, value)
+			}
+		}
+		if value, ok := p.Arguments["issue_number"]; ok {
+			n, err := integerArg(value, "issue_number")
+			if err != nil {
+				return nil, err
+			}
+			q.Set("issue_number", strconv.Itoa(n))
+		}
+		path = "/api/v1/agent-runs/aggregate"
+		if encoded := q.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+	case "similar_failures":
+		query, err := stringArg(p.Arguments, "query")
+		if err != nil {
+			return nil, err
+		}
+		repo, err := stringArg(p.Arguments, "repository_id")
+		if err != nil {
+			return nil, err
+		}
+		return s.similarFailures(ctx, query, repo)
 	default:
 		return nil, fmt.Errorf("unknown tool %q", p.Name)
 	}
@@ -178,6 +214,93 @@ func (s *mcpServer) callTool(ctx context.Context, raw json.RawMessage) (any, err
 	}
 	return map[string]any{"content": []map[string]any{{"type": "text", "text": string(value)}}}, nil
 }
+
+func (s *mcpServer) similarFailures(ctx context.Context, query, repositoryID string) (any, error) {
+	content, err := os.ReadFile(s.fiveMinutesPath)
+	if err != nil {
+		return nil, fmt.Errorf("read FIVE-MINUTES.md: %w", err)
+	}
+	history, err := s.getJSON(ctx, "/api/v1/insights?repository_id="+url.QueryEscape(repositoryID))
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(history, &payload); err != nil {
+		return nil, fmt.Errorf("upstream API returned invalid JSON")
+	}
+	result := map[string]any{"local_sections": matchingSections(string(content), query), "history": matchingHistory(payload, query)}
+	encoded, _ := json.Marshal(result)
+	return map[string]any{"content": []map[string]any{{"type": "text", "text": string(encoded)}}}, nil
+}
+
+func (s *mcpServer) getJSON(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream API returned HTTP %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return body, nil
+}
+
+func matchingSections(markdown, query string) []map[string]string {
+	needle := strings.ToLower(query)
+	var matches []map[string]string
+	var heading, content string
+	flush := func() {
+		if heading != "" && strings.Contains(strings.ToLower(content), needle) {
+			matches = append(matches, map[string]string{"section": heading, "content": content})
+		}
+	}
+	for _, line := range strings.Split(markdown, "\n") {
+		if strings.HasPrefix(line, "#") {
+			flush()
+			heading, content = line, line+"\n"
+			continue
+		}
+		if heading != "" {
+			content += line + "\n"
+		}
+	}
+	flush()
+	return matches
+}
+
+func matchingHistory(payload map[string]any, query string) []any {
+	data, _ := payload["data"].(map[string]any)
+	needle := strings.ToLower(query)
+	var matches []any
+	for _, key := range []string{"suggestions", "send_back"} {
+		value, ok := data[key]
+		if !ok {
+			continue
+		}
+		if items, ok := value.([]any); ok {
+			for _, item := range items {
+				if strings.Contains(strings.ToLower(string(mustJSON(item))), needle) {
+					matches = append(matches, item)
+				}
+			}
+		} else if strings.Contains(strings.ToLower(string(mustJSON(value))), needle) {
+			matches = append(matches, value)
+		}
+	}
+	return matches
+}
+
+func mustJSON(value any) []byte { encoded, _ := json.Marshal(value); return encoded }
 
 func stringArg(args map[string]json.RawMessage, name string) (string, error) {
 	v, ok := args[name]
