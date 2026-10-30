@@ -53,7 +53,9 @@ func (c *Controller) access(ctx *gin.Context, actions ...string) (string, bool) 
 		if len(actions) > 0 {
 			action = actions[0]
 		}
-		c.record(ctx, org, action, "", "", "role_rejected")
+		if !c.record(ctx, org, action, "", "", "role_rejected") {
+			return "", false
+		}
 		response.Forbidden(ctx, "worker lifecycle requires owner or admin")
 		return "", false
 	}
