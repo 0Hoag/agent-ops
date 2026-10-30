@@ -109,8 +109,11 @@ func run(args []string) error {
 	if args[0] == "watch" {
 		return runWatch(args[1:])
 	}
+	if args[0] == "mcp" {
+		return runMCP(args[1:], os.Stdin, os.Stdout, http.DefaultClient)
+	}
 	if args[0] != "push" {
-		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file>")
+		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file> | mcp")
 	}
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)

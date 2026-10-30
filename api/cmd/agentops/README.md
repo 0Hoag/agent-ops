@@ -1,5 +1,16 @@
 # agentops watch
 
+## agentops mcp
+
+`agentops mcp` serves the MCP JSON-RPC protocol over stdin/stdout. It exposes `list_issues` and `wave_status` through the authenticated API.
+
+```bash
+AGENTOPS_API_URL=http://127.0.0.1:8080 AGENTOPS_API_TOKEN=selected-organization-jwt \
+  go run ./cmd/agentops mcp
+```
+
+The token is sent only as an `Authorization: Bearer` header to the configured API URL and is never written to stdout.
+
 `agentops watch` recursively polls a Claude projects directory for `.jsonl` transcripts and submits changed
 Claude sessions through the same authenticated agent-run API used by `push`.
 
