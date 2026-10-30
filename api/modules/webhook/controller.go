@@ -66,6 +66,10 @@ func (controller *Controller) Handle(c *gin.Context) {
 		if errors.Is(err, ErrCandidateMismatch) {
 			continue
 		}
+		if errors.Is(err, ErrRateLimited) {
+			response.Error(c, http.StatusTooManyRequests, "webhook rate limit exceeded")
+			return
+		}
 		if err == nil {
 			accepted = true
 			break
