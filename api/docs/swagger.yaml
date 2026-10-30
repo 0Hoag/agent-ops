@@ -332,6 +332,44 @@ definitions:
       meta:
         $ref: '#/definitions/board.ListMeta'
     type: object
+  budget.Budget:
+    properties:
+      created_at:
+        type: string
+      ends_at:
+        type: string
+      id:
+        type: string
+      organization_id:
+        type: string
+      repository_id:
+        type: string
+      starts_at:
+        type: string
+      token_limit:
+        type: integer
+      updated_at:
+        type: string
+      usd_limit:
+        type: number
+      wave:
+        type: string
+    type: object
+  budget.Request:
+    properties:
+      ends_at:
+        type: string
+      repository_id:
+        type: string
+      starts_at:
+        type: string
+      token_limit:
+        type: integer
+      usd_limit:
+        type: number
+      wave:
+        type: string
+    type: object
   insight.AnalyticsBucket:
     properties:
       actual_cost_usd:
@@ -1079,6 +1117,124 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Board invalidation websocket handshake
+  /api/v1/budgets:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/budget.Budget'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List budgets
+      tags:
+      - budgets
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Budget
+        in: body
+        name: budget
+        required: true
+        schema:
+          $ref: '#/definitions/budget.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create budget
+      tags:
+      - budgets
+  /api/v1/budgets/{budget_id}:
+    delete:
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete budget
+      tags:
+      - budgets
+    get:
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get budget
+      tags:
+      - budgets
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      - description: Budget
+        in: body
+        name: budget
+        required: true
+        schema:
+          $ref: '#/definitions/budget.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update budget
+      tags:
+      - budgets
   /api/v1/insights:
     get:
       parameters:

@@ -10,9 +10,9 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/docs"
 	"github.com/0Hoag/agent-ops/api/modules/account"
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
-	"github.com/0Hoag/agent-ops/api/modules/alert"
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
+	"github.com/0Hoag/agent-ops/api/modules/budget"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/repositorysettings"
@@ -120,7 +120,7 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	}
 	agentrun.RegisterPriceRoutes(private, agentrun.NewPriceController(agentrun.NewRepository(gormDB), organization.NewRepository(gormDB)))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)
-	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB))).Register(private)
+	budget.NewRoutes(budget.NewController(budget.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
 	prices := map[string]agentrun.Price{}
 	for model, raw := range cfg.AgentRunModelPrices {

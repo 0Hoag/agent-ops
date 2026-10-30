@@ -31,7 +31,7 @@ worker_pids() { pgrep -f 'scripts/run-worker' | sort | tr '\n' ' '; }
 RUN_DIRS=${RUN_DIRS:-".agent-runs $HOME/agent-ops-client/.agent-runs"}
 results_stamp() { local d; for d in $RUN_DIRS; do stat -f '%N %m' "$d"/*.md 2>/dev/null; done | shasum; }
 
-# GitHub fingerprint (gh calls only, no tokens): main SHA, open PRs with head SHA and update time, open issue
+# GitHub fingerprint (gh calls only, no tokens): main SHA, open PRs with head SHA, update time and check results, latest dev CI run, open issue
 # numbers (status-board excluded: the coordinator rewrites it every pass). Taken right after a pass, so the
 # pass's own changes are the baseline; any later difference (owner or CI activity, new PR) is news.
 REPOS=${REPOS:-"0Hoag/agent-ops 0Hoag/agent-ops-client"}
@@ -40,7 +40,9 @@ fingerprint() {
   for r in $REPOS; do
     gh api "repos/$r/commits/main" --jq .sha || return 1
     gh api "repos/$r/commits/reviews%2Fdevelopment" --jq .sha || return 1
-    gh pr list -R "$r" --json number,updatedAt,headRefOid --jq '.[] | "\(.number) \(.updatedAt) \(.headRefOid)"' || return 1
+    gh pr list -R "$r" --json number,updatedAt,headRefOid,statusCheckRollup \
+      --jq '.[] | "\(.number) \(.updatedAt) \(.headRefOid) \([.statusCheckRollup[] | .conclusion // .status] | join(","))"' || return 1
+    gh run list -R "$r" --branch reviews/development --limit 1 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion)"' || return 1
     gh issue list -R "$r" --state open --limit 500 --json number,labels \
       --jq '[.[] | select(all(.labels[]; .name != "status-board")) | .number] | sort | join(",")' || return 1
   done | shasum
@@ -92,6 +94,8 @@ merge_ready() {
   done
 }
 MERGE_EVERY=${MERGE_EVERY:-300}
+MIN_GAP=${MIN_GAP:-900}   # min seconds between passes; events (worker ended, GitHub changed) cannot wake sooner
+end=0
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
@@ -107,9 +111,7 @@ wait_for_event() {
       sleep "$poll"
       waited=$((waited + poll))
       [ -e .agent-runs/STOP ] && return
-      if [ $((waited % MERGE_EVERY)) -lt "$poll" ] && [ -n "$(merge_ready | tee /dev/stderr)" ]; then
-        echo "  merged by script, next pass now"; return
-      fi
+      [ $((waited % MERGE_EVERY)) -lt "$poll" ] && merge_ready > /dev/stderr
       if [ "$(results_stamp)" != "$stamp" ]; then echo "  worker result written, next pass now"; return; fi
       for pid in $pids; do
         kill -0 "$pid" 2>/dev/null || { echo "  worker $pid ended, next pass now"; return; }
@@ -154,5 +156,7 @@ while true; do
   fi
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
   base=$(fingerprint) || base=
+  end=$(date +%s)
   wait_for_event
+  gap=$((MIN_GAP - ($(date +%s) - end))); [ "$gap" -gt 0 ] && [ ! -e .agent-runs/STOP ] && { echo "  min gap: waiting ${gap}s"; sleep "$gap"; }
 done
