@@ -18,6 +18,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/repositorysettings"
 	"github.com/0Hoag/agent-ops/api/modules/store"
+	"github.com/0Hoag/agent-ops/api/modules/wave"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
@@ -122,6 +123,7 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	agentrun.RegisterPriceRoutes(private, agentrun.NewPriceController(agentrun.NewRepository(gormDB), organization.NewRepository(gormDB)))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)
 	budget.NewRoutes(budget.NewController(budget.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
+	wave.NewRoutes(wave.NewController(wave.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
 	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB))).Register(private)
 	prices := map[string]agentrun.Price{}
