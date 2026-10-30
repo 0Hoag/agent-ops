@@ -25,6 +25,8 @@ curl http://localhost:8080/readyz
 
 The Compose environment is used by the Postgres container; it is not automatically loaded into a host process. The `.env` file is loaded by the API, so `make dev` must be run from `api/`.
 
+Worker lifecycle execution is configured with `WORKER_SCRIPT_ROOTS` and `WORKER_WORKTREE_ROOTS`. Both are comma-separated permitted roots. `WORKER_SCRIPTS_JSON` maps allowlisted script names to executable paths; lifecycle requests pass validated wave, branch, brief, and worktree arguments directly to the selected executable and never invoke a shell.
+
 If port 5432 is busy, choose another host port and use the same port in `DATABASE_URL`:
 
 ```sh
