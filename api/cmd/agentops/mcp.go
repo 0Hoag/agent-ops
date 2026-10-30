@@ -161,10 +161,13 @@ func (s *mcpServer) callTool(ctx context.Context, raw json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 	body, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
 	if readErr != nil {
 		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("upstream API returned HTTP %s: %s", resp.Status, strings.TrimSpace(string(body)))
