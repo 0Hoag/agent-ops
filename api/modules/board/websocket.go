@@ -18,11 +18,18 @@ type subscriber struct {
 	ch   chan Invalidation
 }
 type Hub struct {
-	mu   sync.Mutex
-	subs map[string]map[*subscriber]struct{}
+	mu       sync.Mutex
+	subs     map[string]map[*subscriber]struct{}
+	observer QueueObserver
 }
+type QueueObserver interface{ SetQueueDepth(string, int) }
 
 func NewHub() *Hub { return &Hub{subs: make(map[string]map[*subscriber]struct{})} }
+func (h *Hub) SetQueueObserver(observer QueueObserver) {
+	h.mu.Lock()
+	h.observer = observer
+	h.mu.Unlock()
+}
 
 // SubscriberCount reports the currently registered subscribers for a repository.
 // It lets callers coordinate with the asynchronous websocket handshake without
@@ -45,6 +52,7 @@ func (h *Hub) Publish(repositoryID string) {
 			_ = sub.conn.Close()
 		}
 	}
+	h.observeQueuesLocked(repositoryID)
 }
 
 // Handle upgrades the request to a board invalidation websocket.
@@ -71,6 +79,7 @@ func (h *Hub) Handle(ctx *gin.Context) {
 		h.subs[repositoryID] = make(map[*subscriber]struct{})
 	}
 	h.subs[repositoryID][sub] = struct{}{}
+	h.observeQueuesLocked(repositoryID)
 	h.mu.Unlock()
 	done := make(chan struct{})
 	go func() {
@@ -85,6 +94,9 @@ func (h *Hub) Handle(ctx *gin.Context) {
 	for {
 		select {
 		case event := <-sub.ch:
+			h.mu.Lock()
+			h.observeQueuesLocked(repositoryID)
+			h.mu.Unlock()
 			if err := conn.WriteJSON(event); err != nil {
 				return
 			}
@@ -105,4 +117,15 @@ func (h *Hub) removeLocked(repositoryID string, sub *subscriber) {
 			delete(h.subs, repositoryID)
 		}
 	}
+	h.observeQueuesLocked(repositoryID)
+}
+func (h *Hub) observeQueuesLocked(repositoryID string) {
+	if h.observer == nil {
+		return
+	}
+	depth := 0
+	for sub := range h.subs[repositoryID] {
+		depth += len(sub.ch)
+	}
+	h.observer.SetQueueDepth(repositoryID, depth)
 }

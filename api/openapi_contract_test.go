@@ -69,6 +69,9 @@ func TestOpenAPI(t *testing.T) {
 					require.NoError(t, json.Unmarshal(schema, &schemaValue))
 					responseRefs := make([]string, 0)
 					collectSchemaRefs(schemaValue, &responseRefs)
+					if method == http.MethodGet && path == "/metrics" {
+						continue // Prometheus exposition is a plain-text scalar, not a JSON definition.
+					}
 					require.NotEmptyf(t, responseRefs, "missing response schema reference for registered route %s %s response %s", method, path, code)
 					for _, ref := range responseRefs {
 						assertDefinitionResolves(t, document.Definitions, ref, method, path, make(map[string]bool))
