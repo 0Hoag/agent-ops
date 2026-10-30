@@ -782,13 +782,6 @@ definitions:
       state:
         type: string
     type: object
-  worker.logMessage:
-    properties:
-      line:
-        type: string
-      type:
-        type: string
-    type: object
   worker.request:
     properties:
       branch:
@@ -2093,7 +2086,7 @@ paths:
         "101":
           description: Switching Protocols
           schema:
-            $ref: '#/definitions/worker.logMessage'
+            type: string
         "401":
           description: Unauthorized
           schema:

@@ -2048,7 +2048,7 @@
                     "101": {
                         "description": "Switching Protocols",
                         "schema": {
-                            "$ref": "#/definitions/worker.logMessage"
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -3330,17 +3330,6 @@
                     "type": "string"
                 },
                 "state": {
-                    "type": "string"
-                }
-            }
-        },
-        "worker.logMessage": {
-            "type": "object",
-            "properties": {
-                "line": {
-                    "type": "string"
-                },
-                "type": {
                     "type": "string"
                 }
             }

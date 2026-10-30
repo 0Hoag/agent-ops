@@ -17,7 +17,7 @@ type logMessage struct {
 // @Summary Worker job log websocket
 // @Produce json
 // @Param worker_id path string true "Worker job ID"
-// @Success 101 {object} logMessage "Switching Protocols"
+// @Success 101 {string} string "Switching Protocols"
 // @Failure 401,403,404 {object} response.ErrorResponse
 // @Router /api/v1/workers/{worker_id}/logs [get]
 func (c *Controller) Logs(ctx *gin.Context) {
