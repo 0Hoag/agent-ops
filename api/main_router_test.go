@@ -100,6 +100,9 @@ func TestProductionRouterAuthenticatedRepositoryRoutesCoexist(t *testing.T) {
 		http.MethodGet + " /api/v1/board",
 		http.MethodGet + " /api/v1/board/ws",
 		http.MethodGet + " /api/v1/agent-runs/aggregate",
+		http.MethodPost + " /api/v1/workers/start",
+		http.MethodPost + " /api/v1/workers/restart",
+		http.MethodPost + " /api/v1/workers/:worker_id/stop",
 	} {
 		require.Truef(t, paths[route], "missing production route %s", route)
 	}
