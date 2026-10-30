@@ -40,16 +40,7 @@ host process.
 
 ## Run everything locally
 
-Prerequisites: Docker with Compose and a sibling client checkout. From the repository root, start the complete persistent local stack (four commands):
-
-```sh
-export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
-docker compose config
-docker compose up --build -d
-curl -f http://localhost:${SMOKE_CLIENT_PORT:-4173}/healthz && curl -f http://localhost:${SMOKE_CLIENT_PORT:-4173}/readyz
-```
-
-Open `http://localhost:4173` for the board and runs dashboard. The client proxies `/api/*`, `/healthz`, and `/readyz` to the API over the Compose network; the browser never receives the agent-run write token. Set `CLIENT_DIR` to the client source directory, `SMOKE_CLIENT_PORT` for the client host port (default 4173), `SMOKE_API_PORT` for direct API access (default 18080), and `POSTGRES_HOST_PORT` for Postgres (default 5432). Postgres credentials are development-only defaults in Compose. Data persists in the named `agent_ops_postgres` volume; stop with `docker compose down` (do not add `-v` to preserve data).
+See the [local installation and adoption guide](docs/install.md) for exact prerequisites, sibling checkouts, locally generated `JWT_SECRET` and `REPOSITORY_ENCRYPTION_KEY`, `CLIENT_DIR`, persistent Compose startup, health/readiness checks, account and organization bootstrap, provider setup, transcript reporting, and upgrade/rollback safety. The defaults are local/development only; do not use them as a production deployment recipe.
 
 ## Browser smoke test
 
