@@ -45,6 +45,38 @@ func TestLifecycleUsesAllowlistedExecutableAndCancels(t *testing.T) {
 	t.Fatal("worker was not cancelled")
 }
 
+func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
+	e, err := New(Config{QueueSize: 1, Concurrency: 1, ScriptRoots: []string{"/tmp"}, WorktreeRoots: []string{"/tmp"}, Scripts: map[string]string{"fake": "/tmp/fake"}})
+	require.NoError(t, err)
+	defer e.Close()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	e.run = func(context.Context, Request) error {
+		close(started)
+		<-release
+		return nil
+	}
+
+	job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
+	require.NoError(t, err)
+	<-started
+	for i := 0; i < 1000; i++ {
+		require.Equal(t, "queued", job.State)
+	}
+	close(release)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		stored, getErr := e.Get(job.ID)
+		require.NoError(t, getErr)
+		if stored.State == "succeeded" {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("worker did not finish")
+}
+
 type testMemberships struct{ role string }
 
 type auditSink struct{ entries []*ActionAudit }

@@ -108,7 +108,10 @@ func (e *Executor) Enqueue(req Request) (*Job, error) {
 	e.mu.Unlock()
 	select {
 	case e.queue <- j:
-		return j, nil
+		e.mu.Lock()
+		snapshot := *j
+		e.mu.Unlock()
+		return &snapshot, nil
 	default:
 		e.mu.Lock()
 		delete(e.jobs, j.ID)
