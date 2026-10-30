@@ -4,22 +4,22 @@ This proof runs the real `agentops mcp` server against a disposable PostgreSQL d
 
 ## Prerequisites
 
-Install Docker Compose, Go, `curl`, `jq`, `openssl`, Python 3, and OpenCode with an authenticated model provider. Run from the repository root. The script chooses loopback ports and creates only a project-scoped Compose fixture.
+Install Docker Compose, Go, `curl`, `jq`, `openssl`, Python 3, and OpenCode with an authenticated model provider. Run from the repository root. The script chooses loopback ports and creates only a project-scoped Compose fixture. OpenCode uses disposable XDG directories beneath the canonical artifact directory; any private auth copy is removed during cleanup.
 
 ## Run
 
 ```sh
 bash -n scripts/smoke-mcp.sh
-scripts/smoke-mcp.sh
+scripts/heavy.sh bash scripts/smoke-mcp.sh
 ```
 
-The script seeds an organization, repository, issue, wave, agent-run row, and local failure note. It writes redacted evidence to `.agent-runs/W15e-opencode-mcp-integration/`: `session.jsonl`, `summary.txt`, `control.txt`, `source-sha.txt`, and `cleanup.txt`. The disposable JWT and API binary are removed by the exit trap and are never committed.
+The script seeds an organization, repository, issue, wave, agent-run row, and local failure note. It writes redacted evidence to `/Users/zeross/agent-ops/.agent-runs/W15f-artifacts/`: `session.jsonl`, `summary.txt`, `control.txt`, `source-sha.txt`, and `cleanup.txt`. The disposable JWT, API binary, and private OpenCode runtime copy are removed by the exit trap and are never committed.
 
 The OpenCode config is generated under that evidence directory and is not the root `opencode.json`. The session is instructed to use MCP only; hand-written JSON-RPC calls are not a substitute for this run.
 
 ## Failing control and cleanup
 
-The restored assertions require the four known seeded values. The negative control searches for an absent seeded issue and must exit non-zero; `control.txt` records that rejection before the normal assertions are accepted. The exit trap stops the owned API process, removes only the uniquely named Compose project, deletes its volumes, and records that no owned containers or volumes remain.
+The restored assertions require four successful structured tool results, one each for `list_issues`, `wave_status`, `my_costs`, and `similar_failures`, with their known seeded values. Prompt-only strings and failed tool results are regression fixtures and must exit non-zero. The exit trap stops the owned API process, removes only the uniquely named Compose project, deletes its volumes, removes private runtime credentials, and records that no owned containers or volumes remain.
 
 To remove an interrupted fixture, use only its recorded project name:
 
