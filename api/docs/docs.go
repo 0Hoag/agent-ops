@@ -2054,7 +2054,7 @@ const docTemplate = `{
                     "101": {
                         "description": "Switching Protocols",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/worker.logMessage"
                         }
                     },
                     "401": {
@@ -3336,6 +3336,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "worker.logMessage": {
+            "type": "object",
+            "properties": {
+                "line": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
