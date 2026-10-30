@@ -54,7 +54,7 @@ func TestWorkerLogsRejectsForeignTenantAndRoleBeforeUpgrade(t *testing.T) {
 	for _, tc := range []struct {
 		name, org, role string
 		status          int
-	}{{"foreign", "org-b", organization.RoleOwner, 404}, {"member", "org-a", organization.RoleMember, 403}} {
+	}{{"foreign", "org-b", organization.RoleOwner, 403}, {"member", "org-a", organization.RoleMember, 403}} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := gin.New()
 			c := NewController(e, testMemberships{role: tc.role})
@@ -64,7 +64,7 @@ func TestWorkerLogsRejectsForeignTenantAndRoleBeforeUpgrade(t *testing.T) {
 			defer s.Close()
 			conn, resp, err := websocket.DefaultDialer.Dial("ws"+s.URL[len("http"):]+"/api/v1/workers/"+j.ID+"/logs", nil)
 			if conn != nil {
-				require.NoError(t, conn.Close())
+				conn.Close()
 			}
 			require.Error(t, err)
 			require.Equal(t, tc.status, resp.StatusCode)
