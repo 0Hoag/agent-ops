@@ -126,7 +126,7 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	budget.NewRoutes(budget.NewController(budget.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
 	wave.NewRoutes(wave.NewController(wave.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
 	if execution, err := worker.New(worker.Config{QueueSize: cfg.WorkerQueueSize, Concurrency: cfg.WorkerConcurrency, ScriptRoots: cfg.WorkerScriptRoots, WorktreeRoots: cfg.WorkerWorktreeRoots, Scripts: cfg.WorkerScripts}); err == nil {
-		worker.NewRoutes(worker.NewController(execution, organization.NewRepository(gormDB))).Register(private)
+		worker.NewRoutes(worker.NewController(execution, organization.NewRepository(gormDB), worker.NewAuditRepository(gormDB))).Register(private)
 	}
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
 	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB))).Register(private)
