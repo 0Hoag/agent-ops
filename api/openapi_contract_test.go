@@ -58,7 +58,7 @@ func TestOpenAPI(t *testing.T) {
 				require.NoError(t, json.Unmarshal(raw, &responses))
 				require.NotEmptyf(t, responses, "empty responses map for registered route %s %s", method, path)
 				for code, response := range responses {
-					if method == http.MethodGet && (path == "/api/v1/ws" || path == "/api/v1/board/ws") && code == "101" {
+					if method == http.MethodGet && (path == "/api/v1/ws" || path == "/api/v1/board/ws" || path == "/api/v1/workers/:worker_id/logs") && code == "101" {
 						continue
 					}
 					var responseObject map[string]json.RawMessage

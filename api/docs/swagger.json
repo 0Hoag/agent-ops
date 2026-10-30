@@ -2029,6 +2029,49 @@
                 }
             }
         },
+        "/api/v1/workers/{worker_id}/logs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Worker job log websocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker job ID",
+                        "name": "worker_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/workers/{worker_id}/stop": {
             "post": {
                 "produces": [
