@@ -123,7 +123,18 @@ One pass:
    acceptance evidence for an already merged PR.
    **Run budget (owner 29/10: 65% of worker tokens went into 2nd+ runs of the same wave):** a wave gets at most
    **2 worker runs** (first + one RESUME). After that: CI green and the feature works -> merge; otherwise mark the
-   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave.
+   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
+   (`scripts/spawn.sh` refuses a `-r3` wave name; put the leftover work in a new issue instead).
+   **Red PRs are work, not a wait state.** Every pass, for each open PR with a failed check and no worker on its branch
+   (`pgrep -f <branch>`), dispatch ONE fix worker on that branch unless the PR is CRITICAL. A CI-fix run is **exempt
+   from the run budget** (owner 30/10: the budget deadlocked three red PRs, nothing ran): brief it narrowly, no new
+   scope: "rebase on origin/reviews/development, make only the failing check green, push", one fix run per PR head SHA.
+   Likewise act, do not just report: PR with a conflict -> fix worker rebases it; PR missing `Closes #n` -> add it with
+   `gh pr edit --body`. Do not leave `status:blocked` issues idle behind a red PR.
+   **Contract drift (`Client contract drift` red, "update the committed API snapshot"):** `scripts/check-api-contract.sh`
+   pins `CLIENT_SHA` to a commit of `agent-ops-client`. An API PR that changes routes needs the matching client
+   contract PR merged first, then a pin bump in the API PR to that client `reviews/development` SHA (the SHA that
+   contains this PR's contract and no later one). Merge API PRs one at a time; the next one rebases and bumps again.
    **Correctness without evidence churn (owner 29/10: output must be right, not just green).** Every PR that adds or
    changes product code must pass these cheap, deterministic checks; they replace live-smoke asks on ordinary PRs:
    1. Each changed product file has a test in the same PR (`gh pr diff --name-only`); no test = send back.

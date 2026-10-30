@@ -8,6 +8,12 @@ set -euo pipefail
 
 log=$1
 shift
+# Run budget: a wave runs at most MAX_RUN times (<wave>, <wave>-r2). A -r3 is refused: split the remainder into a new issue.
+for a in "$@"; do
+  if [[ $a =~ -r([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -gt "${MAX_RUN:-2}" ]; then
+    echo "refused: $a exceeds run budget ${MAX_RUN:-2}; open a follow-up issue for what is left" >&2; exit 1
+  fi
+done
 mkdir -p "$(dirname "$log")"
 python3 -c 'import os, sys
 os.setsid()

@@ -22,6 +22,7 @@ type Service struct {
 	registry     ProviderRegistry
 	publisher    Publisher
 	sealer       *appcrypto.Sealer
+	limiter      *RateLimiter
 }
 
 type ProviderRegistry interface {
@@ -33,7 +34,7 @@ func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
 }
 
 func NewServiceWithPublisher(db *gorm.DB, registry ProviderRegistry, publisher Publisher) *Service {
-	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher}
+	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher, limiter: NewRateLimiter(defaultRateLimit, defaultRateWindow, defaultRateEntries, nil)}
 }
 
 func NewServiceWithPublisherAndSealer(db *gorm.DB, registry ProviderRegistry, publisher Publisher, sealer *appcrypto.Sealer) *Service {
@@ -112,6 +113,7 @@ func (service *Service) persistVerified(ctx context.Context, provider, configure
 }
 
 var ErrCandidateMismatch = errors.New("webhook candidate mismatch")
+var ErrRateLimited = errors.New("webhook rate limit exceeded")
 
 func (service *Service) persistEvent(ctx context.Context, provider, configuredRepository string, event scm.Event, payload []byte) (bool, error) {
 	if !strings.EqualFold(event.Repository, configuredRepository) {
@@ -127,6 +129,9 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 		repo, lookupErr := st.Repositories.GetByName(ctx, provider, configuredRepository)
 		if lookupErr != nil {
 			return ErrRejected
+		}
+		if service.limiter != nil && !service.limiter.Allow(repo.ID) {
+			return ErrRateLimited
 		}
 		id := store.NewUUID()
 		created, createErr := st.WebhookEvents.CreateIfNew(ctx, &store.WebhookEvent{ID: id, RepositoryID: repo.ID, Provider: provider, EventType: event.EventType, DeliveryID: event.DeliveryID, Payload: store.JSONB(payload), ReceivedAt: event.ReceivedAt})
