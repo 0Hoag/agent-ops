@@ -29,6 +29,7 @@ type Job struct {
 	State   string
 	Err     error
 	cancel  context.CancelFunc
+	logs    *logStream
 }
 type Runner func(context.Context, Request) error
 
@@ -96,6 +97,9 @@ func (e *Executor) execute(j *Job) {
 		j.State = "succeeded"
 	}
 	j.cancel = nil
+	if j.logs != nil {
+		j.logs.close()
+	}
 }
 func (e *Executor) Enqueue(req Request) (*Job, error) {
 	if err := e.validate(req); err != nil {
@@ -103,7 +107,7 @@ func (e *Executor) Enqueue(req Request) (*Job, error) {
 	}
 	e.mu.Lock()
 	e.next++
-	j := &Job{ID: fmt.Sprintf("worker-%d", e.next), Request: req, State: "queued"}
+	j := &Job{ID: fmt.Sprintf("worker-%d", e.next), Request: req, State: "queued", logs: newLogStream()}
 	e.jobs[j.ID] = j
 	e.mu.Unlock()
 	select {
@@ -164,6 +168,31 @@ func (e *Executor) stopJob(id, organizationID string) error {
 	return nil
 }
 func (e *Executor) Close() { e.once.Do(func() { close(e.stop) }) }
+
+func (e *Executor) SubscribeLogs(id, organizationID string) ([]string, <-chan string, func(), error) {
+	e.mu.Lock()
+	j, ok := e.jobs[id]
+	if !ok || j.Request.OrganizationID != organizationID {
+		e.mu.Unlock()
+		return nil, nil, nil, ErrNotFound
+	}
+	stream := j.logs
+	e.mu.Unlock()
+	history, ch, unsubscribe := stream.subscribe()
+	return history, ch, unsubscribe, nil
+}
+
+func (e *Executor) LogSubscriberCount(id string) int {
+	e.mu.Lock()
+	j := e.jobs[id]
+	e.mu.Unlock()
+	if j == nil || j.logs == nil {
+		return 0
+	}
+	j.logs.mu.Lock()
+	defer j.logs.mu.Unlock()
+	return len(j.logs.subs)
+}
 func (e *Executor) validate(r Request) error {
 	if strings.TrimSpace(r.OrganizationID) == "" || !validPart(r.Wave) || !validBranch(r.Branch) || strings.TrimSpace(r.Brief) == "" {
 		return fmt.Errorf("%w: missing or malformed worker arguments", ErrInvalid)
@@ -209,10 +238,27 @@ func insideAny(path string, roots []string) bool {
 	return false
 }
 func (e *Executor) runProcess(ctx context.Context, r Request) error {
+	e.mu.Lock()
+	var logs *logStream
+	for _, j := range e.jobs {
+		if j.Request == r && j.State == "running" {
+			logs = j.logs
+			break
+		}
+	}
+	e.mu.Unlock()
+	return e.runProcessWithLogs(ctx, r, logs)
+}
+
+func (e *Executor) runProcessWithLogs(ctx context.Context, r Request, logs *logStream) error {
 	script := e.resolve(e.cfg.Scripts[r.Script])
 	brief := e.resolve(r.Brief)
 	cmd := exec.CommandContext(ctx, script, r.Wave, r.Branch, brief)
 	cmd.Dir = e.wd
+	if logs != nil {
+		cmd.Stdout = logs
+		cmd.Stderr = logs
+	}
 	return cmd.Run()
 }
 
