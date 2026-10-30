@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,7 @@ type Executor struct {
 	queue chan *Job
 	stop  chan struct{}
 	once  sync.Once
+	wd    string
 }
 
 func New(cfg Config) (*Executor, error) {
@@ -49,7 +51,11 @@ func New(cfg Config) (*Executor, error) {
 	if cfg.Concurrency < 1 {
 		cfg.Concurrency = 1
 	}
-	e := &Executor{cfg: cfg, jobs: map[string]*Job{}, queue: make(chan *Job, cfg.QueueSize), stop: make(chan struct{})}
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get worker process directory: %w", err)
+	}
+	e := &Executor{cfg: cfg, jobs: map[string]*Job{}, queue: make(chan *Job, cfg.QueueSize), stop: make(chan struct{}), wd: wd}
 	e.run = e.runProcess
 	for i := 0; i < cfg.Concurrency; i++ {
 		go e.loop()
@@ -156,10 +162,11 @@ func (e *Executor) stopJob(id, organizationID string) error {
 }
 func (e *Executor) Close() { e.once.Do(func() { close(e.stop) }) }
 func (e *Executor) validate(r Request) error {
-	if strings.TrimSpace(r.OrganizationID) == "" || !validPart(r.Wave) || !validPart(r.Branch) || strings.TrimSpace(r.Brief) == "" {
+	if strings.TrimSpace(r.OrganizationID) == "" || !validPart(r.Wave) || !validBranch(r.Branch) || strings.TrimSpace(r.Brief) == "" {
 		return fmt.Errorf("%w: missing or malformed worker arguments", ErrInvalid)
 	}
 	script, ok := e.cfg.Scripts[r.Script]
+	script = e.resolve(script)
 	if !ok || !insideAny(script, e.cfg.ScriptRoots) {
 		return fmt.Errorf("%w: script is not allowlisted", ErrInvalid)
 	}
@@ -170,6 +177,17 @@ func (e *Executor) validate(r Request) error {
 }
 func validPart(s string) bool {
 	return s != "" && filepath.Base(s) == s && !strings.ContainsAny(s, "\\/$;&|`\n\r\t")
+}
+func validBranch(s string) bool {
+	if s == "" || strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") || strings.Contains(s, "//") || strings.ContainsAny(s, "\\;&|`\n\r\t?*[~^:") {
+		return false
+	}
+	for _, part := range strings.Split(s, "/") {
+		if part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return !strings.Contains(s, "..") && !strings.Contains(s, "@{") && !strings.HasPrefix(s, "-")
 }
 func insideAny(path string, roots []string) bool {
 	p, err := filepath.Abs(path)
@@ -188,8 +206,16 @@ func insideAny(path string, roots []string) bool {
 	return false
 }
 func (e *Executor) runProcess(ctx context.Context, r Request) error {
-	script := e.cfg.Scripts[r.Script]
-	cmd := exec.CommandContext(ctx, script, r.Wave, r.Branch, r.Brief, r.Worktree)
-	cmd.Dir = r.Worktree
+	script := e.resolve(e.cfg.Scripts[r.Script])
+	brief := e.resolve(r.Brief)
+	cmd := exec.CommandContext(ctx, script, r.Wave, r.Branch, brief)
+	cmd.Dir = e.wd
 	return cmd.Run()
+}
+
+func (e *Executor) resolve(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(e.wd, path)
 }
