@@ -126,8 +126,11 @@ One pass:
    issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
    (`scripts/spawn.sh` refuses a `-r3` wave name; put the leftover work in a new issue instead).
    **Red PRs are work, not a wait state.** Every pass, for each open PR with a failed check and no worker on its branch
-   (`pgrep -f <branch>`), dispatch ONE fix worker on that branch (counts as a run of the wave) unless the PR is
-   CRITICAL or the run budget is spent. Do not leave `status:blocked` issues idle behind a red PR.
+   (`pgrep -f <branch>`), dispatch ONE fix worker on that branch unless the PR is CRITICAL. A CI-fix run is **exempt
+   from the run budget** (owner 30/10: the budget deadlocked three red PRs, nothing ran): brief it narrowly, no new
+   scope: "rebase on origin/reviews/development, make only the failing check green, push", one fix run per PR head SHA.
+   Likewise act, do not just report: PR with a conflict -> fix worker rebases it; PR missing `Closes #n` -> add it with
+   `gh pr edit --body`. Do not leave `status:blocked` issues idle behind a red PR.
    **Contract drift (`Client contract drift` red, "update the committed API snapshot"):** `scripts/check-api-contract.sh`
    pins `CLIENT_SHA` to a commit of `agent-ops-client`. An API PR that changes routes needs the matching client
    contract PR merged first, then a pin bump in the API PR to that client `reviews/development` SHA (the SHA that
