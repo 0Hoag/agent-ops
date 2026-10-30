@@ -1,5 +1,7 @@
 # agentops watch
 
+For a real local OpenCode proof using all four tools, see [MCP integration](../../../docs/mcp.md).
+
 ## agentops mcp
 
 `agentops mcp` serves the MCP JSON-RPC protocol over stdin/stdout. It exposes `list_issues`, `wave_status`, `my_costs`, and `similar_failures` through the authenticated API.
