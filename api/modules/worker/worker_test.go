@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
+	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -86,6 +89,13 @@ func (s *auditSink) Create(_ context.Context, audit *ActionAudit) error {
 	return nil
 }
 
+type failingAuditSink struct{ attempts int }
+
+func (s *failingAuditSink) Create(context.Context, *ActionAudit) error {
+	s.attempts++
+	return errors.New("audit unavailable")
+}
+
 func (m testMemberships) Membership(context.Context, string, string) (*organization.Membership, error) {
 	return &organization.Membership{Role: m.role}, nil
 }
@@ -148,6 +158,35 @@ func TestControllerRecordsAcceptedAndRejectedActions(t *testing.T) {
 	c.Start(ctx)
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Equal(t, "rejected", sink.entries[1].Outcome)
+}
+
+func TestControllerRoleRejectionAuditFailureReturnsOneJSONError(t *testing.T) {
+	requestBody := `{"wave":"W14","branch":"feat/a","brief":"brief","worktree":"/tmp","script":"fake"}`
+	for _, role := range []string{organization.RoleMember, organization.RoleViewer} {
+		t.Run(role, func(t *testing.T) {
+			e, err := New(Config{QueueSize: 1, ScriptRoots: []string{"/tmp"}, WorktreeRoots: []string{"/tmp"}, Scripts: map[string]string{"fake": "/tmp/fake"}})
+			require.NoError(t, err)
+			defer e.Close()
+			sink := &failingAuditSink{}
+			c := NewController(e, testMemberships{role: role}, sink)
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = httptest.NewRequest("POST", "/workers/start", strings.NewReader(requestBody))
+			ctx.Set("organization_id", "org-a")
+			ctx.Set("account_id", "actor-a")
+
+			c.Start(ctx)
+
+			require.Equal(t, http.StatusInternalServerError, w.Code)
+			var got response.ErrorResponse
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got), "response must contain one valid JSON document: %q", w.Body.String())
+			require.Equal(t, http.StatusInternalServerError, got.Status)
+			require.Equal(t, "failed to record worker action", got.Message)
+			require.Equal(t, 1, sink.attempts)
+			_, err = e.Get("worker-1")
+			require.ErrorIs(t, err, ErrNotFound)
+		})
+	}
 }
 
 func TestCancelledQueuedJobIsSkippedAndSaturationIsDeterministic(t *testing.T) {
