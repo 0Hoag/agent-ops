@@ -350,6 +350,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/alerts/history": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List alert history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.HistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "consumes": [
@@ -2331,6 +2367,49 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/agentrun.RunStep"
                     }
+                }
+            }
+        },
+        "alert.HistoryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/alert.Occurrence"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/pagination.PaginatorResponse"
+                }
+            }
+        },
+        "alert.Occurrence": {
+            "type": "object",
+            "properties": {
+                "alertKey": {
+                    "type": "string"
+                },
+                "detectedAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "organizationID": {
+                    "type": "string"
+                },
+                "repository": {
+                    "type": "string"
+                },
+                "rule": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
                 }
             }
         },
