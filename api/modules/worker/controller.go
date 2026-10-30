@@ -89,10 +89,11 @@ func (c *Controller) submit(ctx *gin.Context, action string) {
 // @Success 200 {object} response.MessageResponse
 // @Router /api/v1/workers/{worker_id}/stop [post]
 func (c *Controller) Stop(ctx *gin.Context) {
-	if _, ok := c.access(ctx); !ok {
+	org, ok := c.access(ctx)
+	if !ok {
 		return
 	}
-	if err := c.executor.Stop(ctx.Param("worker_id")); err != nil {
+	if err := c.executor.StopForOrganization(ctx.Param("worker_id"), org); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(ctx, "worker not found")
 		} else {
@@ -110,10 +111,11 @@ func (c *Controller) Stop(ctx *gin.Context) {
 // @Failure 401,403,404 {object} response.ErrorResponse
 // @Router /api/v1/workers/{worker_id} [get]
 func (c *Controller) Get(ctx *gin.Context) {
-	if _, ok := c.access(ctx); !ok {
+	org, ok := c.access(ctx)
+	if !ok {
 		return
 	}
-	j, err := c.executor.Get(ctx.Param("worker_id"))
+	j, err := c.executor.GetForOrganization(ctx.Param("worker_id"), org)
 	if errors.Is(err, ErrNotFound) {
 		response.NotFound(ctx, "worker not found")
 		return
