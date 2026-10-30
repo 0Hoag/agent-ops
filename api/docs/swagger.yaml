@@ -263,6 +263,34 @@ definitions:
           $ref: '#/definitions/agentrun.RunStep'
         type: array
     type: object
+  alert.HistoryResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/alert.Occurrence'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
+  alert.Occurrence:
+    properties:
+      alertKey:
+        type: string
+      detectedAt:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      organizationID:
+        type: string
+      repository:
+        type: string
+      rule:
+        type: string
+      subject:
+        type: string
+    type: object
   auth.LoginRequest:
     properties:
       email:
@@ -599,6 +627,15 @@ definitions:
     required:
     - role
     type: object
+  pagination.PaginatorResponse:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
   repositorysettings.CreateRequest:
     properties:
       backfill_token:
@@ -927,6 +964,29 @@ paths:
           schema:
             $ref: '#/definitions/agentrun.AggregateResponse'
       summary: Aggregate agent runs
+  /api/v1/alerts/history:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/alert.HistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List alert history
   /api/v1/auth/login:
     post:
       consumes:
