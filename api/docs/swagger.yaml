@@ -782,6 +782,19 @@ definitions:
       state:
         type: string
     type: object
+  worker.request:
+    properties:
+      branch:
+        type: string
+      brief:
+        type: string
+      script:
+        type: string
+      wave:
+        type: string
+      worktree:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -2031,6 +2044,88 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Ingest provider webhook
+  /api/v1/workers/{worker_id}:
+    get:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get worker job
+  /api/v1/workers/{worker_id}/stop:
+    post:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+      summary: Stop worker
+  /api/v1/workers/restart:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Worker request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/worker.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: Restart worker
+  /api/v1/workers/start:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Worker request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/worker.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: Start worker
   /healthz:
     get:
       produces:
