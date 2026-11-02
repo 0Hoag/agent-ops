@@ -782,6 +782,36 @@ definitions:
       state:
         type: string
     type: object
+  worker.ActionAudit:
+    properties:
+      action:
+        type: string
+      actorID:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      jobID:
+        type: string
+      occurredAt:
+        type: string
+      organizationID:
+        type: string
+      outcome:
+        type: string
+      wave:
+        type: string
+    type: object
+  worker.AuditHistoryResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/worker.ActionAudit'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
   worker.request:
     properties:
       branch:
@@ -2116,6 +2146,33 @@ paths:
           schema:
             $ref: '#/definitions/response.MessageResponse'
       summary: Stop worker
+  /api/v1/workers/audit-history:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/worker.AuditHistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List worker action audit history
   /api/v1/workers/restart:
     post:
       consumes:

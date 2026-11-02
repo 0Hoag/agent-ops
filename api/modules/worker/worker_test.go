@@ -84,10 +84,34 @@ type testMemberships struct{ role string }
 
 type auditSink struct{ entries []*ActionAudit }
 
+type auditReader struct {
+	rows []ActionAudit
+}
+
+func (r auditReader) List(_ context.Context, org string, page, perPage int) ([]ActionAudit, int64, error) {
+	var rows []ActionAudit
+	for _, row := range r.rows {
+		if row.OrganizationID == org {
+			rows = append(rows, row)
+		}
+	}
+	start := (page - 1) * perPage
+	if start > len(rows) {
+		start = len(rows)
+	}
+	end := start + perPage
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end], int64(len(rows)), nil
+}
+
 func (s *auditSink) Create(_ context.Context, audit *ActionAudit) error {
 	s.entries = append(s.entries, audit)
 	return nil
 }
+
+func (r auditReader) Create(context.Context, *ActionAudit) error { return nil }
 
 type failingAuditSink struct{ attempts int }
 
@@ -187,6 +211,41 @@ func TestControllerRoleRejectionAuditFailureReturnsOneJSONError(t *testing.T) {
 			require.ErrorIs(t, err, ErrNotFound)
 		})
 	}
+}
+
+func TestAuditHistoryIsTenantScopedPaginatedAndRoleProtected(t *testing.T) {
+	reader := auditReader{rows: []ActionAudit{
+		{OrganizationID: "org-a", ActorID: "actor-1", Action: "start"},
+		{OrganizationID: "org-a", ActorID: "actor-2", Action: "stop"},
+		{OrganizationID: "org-b", ActorID: "actor-b", Action: "restart"},
+	}}
+	c := NewController(nil, testMemberships{role: organization.RoleOwner}, reader)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest("GET", "/workers/audit-history?page=2&per_page=1", nil)
+	ctx.Set("organization_id", "org-a")
+	ctx.Set("account_id", "owner-a")
+	c.AuditHistory(ctx)
+	require.Equal(t, http.StatusOK, w.Code)
+	var got struct {
+		Data []ActionAudit `json:"data"`
+		Meta struct {
+			Total int64 `json:"total"`
+		} `json:"meta"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.Len(t, got.Data, 1)
+	require.Equal(t, "actor-2", got.Data[0].ActorID)
+	require.Equal(t, int64(2), got.Meta.Total)
+
+	c = NewController(nil, testMemberships{role: organization.RoleMember}, reader)
+	w = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest("GET", "/workers/audit-history", nil)
+	ctx.Set("organization_id", "org-a")
+	ctx.Set("account_id", "member-a")
+	c.AuditHistory(ctx)
+	require.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestCancelledQueuedJobIsSkippedAndSaturationIsDeterministic(t *testing.T) {

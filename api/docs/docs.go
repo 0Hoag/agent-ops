@@ -1932,6 +1932,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/workers/audit-history": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List worker action audit history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/worker.AuditHistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/workers/restart": {
             "post": {
                 "consumes": [
@@ -3337,6 +3379,52 @@ const docTemplate = `{
                 },
                 "state": {
                     "type": "string"
+                }
+            }
+        },
+        "worker.ActionAudit": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actorID": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "jobID": {
+                    "type": "string"
+                },
+                "occurredAt": {
+                    "type": "string"
+                },
+                "organizationID": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "wave": {
+                    "type": "string"
+                }
+            }
+        },
+        "worker.AuditHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/worker.ActionAudit"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/pagination.PaginatorResponse"
                 }
             }
         },
