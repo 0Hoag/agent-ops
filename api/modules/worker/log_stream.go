@@ -1,9 +1,6 @@
 package worker
 
-import (
-	"strings"
-	"sync"
-)
+import "sync"
 
 const logHistoryLimit = 256
 const logSubscriberBuffer = 32
@@ -12,31 +9,100 @@ type logStream struct {
 	mu      sync.Mutex
 	history []string
 	subs    map[chan string]struct{}
+	pending string
 	closed  bool
+}
+
+type logWriter struct {
+	stream  *logStream
+	pending string
+}
+
+func newLogWriter(stream *logStream) *logWriter { return &logWriter{stream: stream} }
+
+func (w *logWriter) Write(p []byte) (int, error) {
+	w.pending += string(p)
+	for {
+		idx := -1
+		for i, b := range w.pending {
+			if b == '\n' {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		line := w.pending[:idx]
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		w.pending = w.pending[idx+1:]
+		w.stream.mu.Lock()
+		w.stream.publish(line)
+		w.stream.mu.Unlock()
+	}
+	return len(p), nil
+}
+
+func (w *logWriter) close() {
+	if w.pending == "" {
+		return
+	}
+	w.stream.mu.Lock()
+	w.stream.publish(w.pending)
+	w.stream.mu.Unlock()
+	w.pending = ""
 }
 
 func newLogStream() *logStream { return &logStream{subs: make(map[chan string]struct{})} }
 
 func (s *logStream) Write(p []byte) (int, error) {
-	lines := strings.Split(strings.ReplaceAll(string(p), "\r\n", "\n"), "\n")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, line := range lines {
-		if line == "" || s.closed {
-			continue
-		}
-		if len(s.history) == logHistoryLimit {
-			s.history = s.history[1:]
-		}
-		s.history = append(s.history, line)
-		for ch := range s.subs {
-			select {
-			case ch <- line:
-			default:
+	if s.closed {
+		return len(p), nil
+	}
+	s.pending += string(p)
+	s.flushCompleteLines()
+	return len(p), nil
+}
+
+func (s *logStream) flushCompleteLines() {
+	for {
+		idx := -1
+		for i, b := range s.pending {
+			if b == '\n' {
+				idx = i
+				break
 			}
 		}
+		if idx < 0 {
+			return
+		}
+		line := s.pending[:idx]
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		s.pending = s.pending[idx+1:]
+		s.publish(line)
 	}
-	return len(p), nil
+}
+
+func (s *logStream) publish(line string) {
+	if line == "" || s.closed {
+		return
+	}
+	if len(s.history) == logHistoryLimit {
+		s.history = s.history[1:]
+	}
+	s.history = append(s.history, line)
+	for ch := range s.subs {
+		select {
+		case ch <- line:
+		default:
+		}
+	}
 }
 
 func (s *logStream) subscribe() ([]string, <-chan string, func()) {
@@ -65,6 +131,11 @@ func (s *logStream) close() {
 	defer s.mu.Unlock()
 	if s.closed {
 		return
+	}
+	s.flushCompleteLines()
+	if s.pending != "" {
+		s.publish(s.pending)
+		s.pending = ""
 	}
 	s.closed = true
 	for ch := range s.subs {
