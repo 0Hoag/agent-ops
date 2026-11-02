@@ -10,6 +10,7 @@ func (r *Routes) Register(g *gin.RouterGroup) {
 	w.POST("/start", r.controller.Start)
 	w.POST("/restart", r.controller.Restart)
 	w.POST("/:worker_id/stop", r.controller.Stop)
+	w.GET("/audit-history", r.controller.AuditHistory)
 	w.GET("/:worker_id", r.controller.Get)
 	w.GET("/:worker_id/logs", r.controller.Logs)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/store"
+	"github.com/0Hoag/agent-ops/api/pkg/pagination"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +21,7 @@ type Controller struct {
 	executor      *Executor
 	organizations Memberships
 	audits        AuditRepository
+	auditReader   AuditReader
 	now           func() time.Time
 }
 
@@ -28,7 +30,8 @@ func NewController(e *Executor, o Memberships, audits ...AuditRepository) *Contr
 	if len(audits) > 0 {
 		a = audits[0]
 	}
-	return &Controller{executor: e, organizations: o, audits: a, now: time.Now}
+	reader, _ := a.(AuditReader)
+	return &Controller{executor: e, organizations: o, audits: a, auditReader: reader, now: time.Now}
 }
 
 type request struct{ Wave, Branch, Brief, Worktree, Script string }
@@ -176,4 +179,29 @@ func (c *Controller) Get(ctx *gin.Context) {
 		return
 	}
 	response.OK(ctx, j)
+}
+
+// @Summary List worker action audit history
+// @Produce json
+// @Param page query int false "Page"
+// @Param per_page query int false "Items per page"
+// @Success 200 {object} AuditHistoryResponse
+// @Failure 401,403 {object} response.ErrorResponse
+// @Router /api/v1/workers/audit-history [get]
+func (c *Controller) AuditHistory(ctx *gin.Context) {
+	org, ok := c.access(ctx, "audit_history")
+	if !ok {
+		return
+	}
+	if c.auditReader == nil {
+		response.InternalError(ctx, "worker audit history unavailable")
+		return
+	}
+	p := pagination.Parse(ctx)
+	rows, total, err := c.auditReader.List(ctx.Request.Context(), org, p.Page, p.PerPage)
+	if err != nil {
+		response.InternalError(ctx, "failed to list worker action audits")
+		return
+	}
+	response.JSON(ctx, http.StatusOK, AuditHistoryResponse{Data: rows, Meta: p.ToResponse(total)})
 }
