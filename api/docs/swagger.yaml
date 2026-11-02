@@ -2072,6 +2072,34 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get worker job
+  /api/v1/workers/{worker_id}/logs:
+    get:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Worker job log websocket
   /api/v1/workers/{worker_id}/stop:
     post:
       parameters:
