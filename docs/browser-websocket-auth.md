@@ -4,7 +4,7 @@ Browser `WebSocket` constructors cannot set an `Authorization` header. The worke
 
 ```js
 const socket = new WebSocket(
-  `${apiOrigin}/api/v1/agent-runs/${runID}/logs?access_token=${encodeURIComponent(selectedOrganizationJWT)}`,
+  `${apiOrigin}/api/v1/workers/${workerID}/logs?access_token=${encodeURIComponent(selectedOrganizationJWT)}`,
 );
 ```
 

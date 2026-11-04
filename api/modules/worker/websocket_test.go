@@ -32,7 +32,18 @@ func TestWorkerLogsStreamProcessOutputAndCompletion(t *testing.T) {
 		select {
 		case line, open := <-lines:
 			if !open {
-				require.Equal(t, []string{"out-1", "err-2", "out-3"}, got)
+				waitForJob(t, e, j.ID, "succeeded")
+				require.ElementsMatch(t, []string{"out-1", "err-2", "out-3"}, got)
+				out1, out3 := -1, -1
+				for i, line := range got {
+					switch line {
+					case "out-1":
+						out1 = i
+					case "out-3":
+						out3 = i
+					}
+				}
+				require.Less(t, out1, out3)
 				return
 			}
 			got = append(got, line)

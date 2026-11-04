@@ -120,6 +120,9 @@ wait_for_event() {
     [ -n "$(worker_pids)" ] && return
     now=$(fingerprint) || now=$base
     [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }
+    # An issue marked "in progress" with no worker running means a worker died (network, crash): never idle on that.
+    stale=0; for r in $REPOS; do stale=$((stale + $(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null || echo 0))); done
+    [ "$stale" -gt 0 ] && { echo "  $stale issue(s) in progress but no worker: next pass now"; return; }
     echo "  idle: no worker, GitHub unchanged, skipping pass"
     waited=0
   done
