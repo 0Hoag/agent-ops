@@ -22,8 +22,8 @@ run=$root/.agent-runs/$wave
 
 prompt=$(printf 'WORKTREE: %s\nREMOTE: %s\n\n' "$wt" "$repo")
 prompt+=$(<"$brief")
-OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run --agent worker --dir "$wt" --format json --title "$wave" \
-  "$prompt" < /dev/null > "$run.jsonl"
+( cd "$wt" && OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run --agent worker --format json --title "$wave" \
+  "$prompt" < /dev/null > "$run.jsonl" )
 jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$run.jsonl" > "$run.md"
 jq -s '[.[] | select(.type=="step_finish") | .part.tokens] | {input:(map(.input)|add // 0), cached_input:(map(.cache.read)|add // 0), cache_write:(map(.cache.write)|add // 0), output:(map(.output)|add // 0), reasoning:(map(.reasoning)|add // 0)}' "$run.jsonl" > "$run.tokens.json"
 cat "$run.tokens.json"

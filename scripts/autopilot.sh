@@ -132,14 +132,13 @@ while true; do
   scripts/worktrees.sh --prune > "$dir/worktrees.txt" 2>&1
   scripts/branches.sh --delete > "$dir/branches.txt" 2>&1; scripts/audit.sh > "$dir/audit.txt" 2>&1   # no tokens; the pass reads the two files
   pre=$(results_stamp)
-  attach=()
-  if curl -s -o /dev/null -m 2 "$web"; then attach=(--attach "$web" --dir "$PWD"); echo "  on web UI $web"; fi
-  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run ${attach[@]+"${attach[@]}"} \
-    --command autopilot \
+  # opencode v2 dropped --command/--attach/--dir: the prompt carries the instruction, cwd is the repo root.
+  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
     --format json \
     --title "autopilot $ts" \
-    "single pass" < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
+    "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully first), then end your turn with the report format it describes. Do not sleep or wait for workers; the shell calls you again." < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
 
+  [ -s "$dir/$ts.err" ] && { echo "  opencode error:"; head -3 "$dir/$ts.err" | sed 's/^/    /'; }
   jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$dir/$ts.jsonl" > "$dir/$ts.md"
   jq -cs '[.[] | select(.type=="step_finish") | .part.tokens]
     | {input: (map(.input) | add), cached: (map(.cache.read) | add), output: (map(.output) | add)}' \

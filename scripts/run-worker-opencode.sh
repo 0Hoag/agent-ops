@@ -25,12 +25,12 @@ fi
 # Skip ~/.claude and ~/.agents skills: the GitHub/Codex orchestrator-workers skill comes from opencode.json.
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
-OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
+# opencode v2 has no --dir: run from the worktree.
+( cd "$wt" && OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
   --agent worker \
-  --dir "$wt" \
   --format json \
   --title "$wave" \
-  "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl"
+  "$(cat "$brief")" < /dev/null > "$root/.agent-runs/$wave.jsonl" )
 worker_status=$?
 set -e
 ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
