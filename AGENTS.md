@@ -101,9 +101,12 @@ One pass:
    - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
    - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
-   - **Branch sweep, every pass (both repos):** delete every remote branch except `main` and `reviews/development` whose PR is merged or
-     closed and that has no open PR: `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`. Do not rely on
-     `--delete-branch` alone (it left #236/#238 behind); a branch with an open PR or a running worker is kept.
+   - **Hygiene is scripted, you only read it.** Before each pass `autopilot.sh` runs `scripts/branches.sh --delete` (deletes
+     only branches whose tip is exactly a merged PR's head; never `main`/`reviews/development`/PR bases) and
+     `scripts/audit.sh` (missing/double status, no priority, blocked without a `Status:` note, closed issue still
+     labelled, PR naming no issue). Read `.agent-runs/coordinator/branches.txt` and `audit.txt`; empty = healthy.
+     `LATE` = commits pushed after a merged PR (lost work: open a new PR from that branch), `NO-PR` = unpublished work
+     (open a draft PR). Fix every audit line this pass; it is cheaper than the confusion it causes later.
    - **At most 1 send-back per PR** (owner 29/10: too many send-backs, little delivered). On the 2nd review, if CI
      and gates are green and the feature works, merge. Missing evidence is **not** a reason to send back twice and
      **not** a reason for an evidence-only follow-up PR; file a `found-by:agent` issue only for a real defect (wrong
@@ -149,7 +152,7 @@ One pass:
    A worker with no log change for 20 min: read its log tail, fix the brief, restart it.
    **Usage limit** in a worker log (usage/rate limit, quota, 429, "try again at"): not an owner question;
    restart that worker on the same branch in a later pass after the reset time.
-   **Restart brief = old brief + a RESUME block** built cheaply from `git log origin/main..<branch>`,
+   **Restart brief = old brief + a RESUME block** with five headings, DONE (merged/verified, how), IN FLIGHT (branch commits, uncommitted files, open PRs), NEXT (ordered, each with its command), BLOCKED ON, NOT COVERED built cheaply from `git log origin/main..<branch>`,
    `git status` in its worktree and the log tail: commits already on the branch, issues done, issues left
    (with files), last failing gate. Always a fresh worker session: the old one's cache has expired, so
    resuming it would resend its whole context.

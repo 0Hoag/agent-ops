@@ -129,6 +129,7 @@ while true; do
   ts=$(date +%Y%m%d-%H%M%S)
   echo "[$ts] pass start"
   merge_ready
+  scripts/branches.sh --delete > "$dir/branches.txt" 2>&1; scripts/audit.sh > "$dir/audit.txt" 2>&1   # no tokens; the pass reads the two files
   pre=$(results_stamp)
   attach=()
   if curl -s -o /dev/null -m 2 "$web"; then attach=(--attach "$web" --dir "$PWD"); echo "  on web UI $web"; fi

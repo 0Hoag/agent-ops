@@ -11,6 +11,8 @@ grep -oEi '(closes|fixes|resolves) +([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)?#[0-9]+' <
   target=$repo n=${ref#\#}
   if [[ $ref == */*#* ]]; then target=${ref%#*} n=${ref#*#}; fi
   state=$(gh issue view "$n" -R "$target" --json state --jq .state 2>/dev/null) || continue
-  [ "$state" = OPEN ] && gh issue close "$n" -R "$target" --reason completed \
-    --comment "Merged by $repo#$pr into reviews/development." > /dev/null && echo "closed $target#$n"
+  [ "$state" = OPEN ] || continue
+  gh issue close "$n" -R "$target" --reason completed --comment "Merged by $repo#$pr into reviews/development." > /dev/null || continue
+  gh issue edit "$n" -R "$target" --remove-label "status:todo,status:in progress,status:review,status:blocked" > /dev/null 2>&1
+  echo "closed $target#$n"
 done
