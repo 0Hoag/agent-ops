@@ -256,8 +256,11 @@ func (e *Executor) runProcessWithLogs(ctx context.Context, r Request, logs *logS
 	cmd := exec.CommandContext(ctx, script, r.Wave, r.Branch, brief)
 	cmd.Dir = e.wd
 	if logs != nil {
-		cmd.Stdout = logs
-		cmd.Stderr = logs
+		stdout, stderr := newLogWriter(logs), newLogWriter(logs)
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		defer stdout.close()
+		defer stderr.close()
 	}
 	return cmd.Run()
 }
