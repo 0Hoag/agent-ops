@@ -92,6 +92,7 @@ func TestProductionRouterAuthenticatedRepositoryRoutesCoexist(t *testing.T) {
 		paths[route.Method+" "+route.Path] = true
 	}
 	for _, route := range []string{
+		http.MethodGet + " /metrics",
 		http.MethodGet + " /api/v1/repositories",
 		http.MethodPost + " /api/v1/repositories",
 		http.MethodGet + " /api/v1/repositories/:repository_id",
