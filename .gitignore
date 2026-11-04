@@ -1,6 +1,6 @@
 # agent runs
 .agent-runs/
-briefs/
+/briefs/
 # deps / build
 node_modules/
 dist/
@@ -10,3 +10,4 @@ api/tmp/
 .env
 *.local
 .DS_Store
+.pnpm-store/
