@@ -27,6 +27,8 @@ type requestValue struct {
 	seconds float64
 }
 
+const unmatchedRoute = "unmatched"
+
 func New(now Clock) *Metrics {
 	if now == nil {
 		now = time.Now
@@ -41,7 +43,7 @@ func (m *Metrics) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r)
 		route := r.Pattern
 		if route == "" {
-			route = r.URL.Path
+			route = unmatchedRoute
 		}
 		m.observeRequest(r.Method, route, rw.status, m.now().Sub(started))
 	})
@@ -52,7 +54,7 @@ func (m *Metrics) GinMiddleware() gin.HandlerFunc {
 		c.Next()
 		route := c.FullPath()
 		if route == "" {
-			route = c.Request.URL.Path
+			route = unmatchedRoute
 		}
 		m.observeRequest(c.Request.Method, route, c.Writer.Status(), m.now().Sub(started))
 	}
@@ -104,7 +106,7 @@ func (m *Metrics) Exposition() string {
 	sort.Slice(keys, func(i, j int) bool { return fmt.Sprint(keys[i]) < fmt.Sprint(keys[j]) })
 	for _, k := range keys {
 		v := m.requests[k]
-		labels := fmt.Sprintf("method=\"%s\",route=\"%s\",status=\"%s\"", k.method, k.route, k.status)
+		labels := fmt.Sprintf("method=\"%s\",route=\"%s\",status=\"%s\"", prometheusLabelValue(k.method), prometheusLabelValue(k.route), prometheusLabelValue(k.status))
 		fmt.Fprintf(&b, "agent_ops_http_request_duration_seconds_count{%s} %d\nagent_ops_http_request_duration_seconds_sum{%s} %g\n", labels, v.count, labels, v.seconds)
 	}
 	b.WriteString("# TYPE agent_ops_webhook_lag_seconds summary\n")
@@ -114,7 +116,7 @@ func (m *Metrics) Exposition() string {
 	}
 	sort.Strings(providers)
 	for _, p := range providers {
-		fmt.Fprintf(&b, "agent_ops_webhook_lag_seconds_sum{provider=\"%s\"} %g\n", p, m.webhooks[p])
+		fmt.Fprintf(&b, "agent_ops_webhook_lag_seconds_sum{provider=\"%s\"} %g\n", prometheusLabelValue(p), m.webhooks[p])
 	}
 	b.WriteString("# TYPE agent_ops_websocket_queue_depth gauge\n")
 	depth := 0
@@ -123,6 +125,10 @@ func (m *Metrics) Exposition() string {
 	}
 	fmt.Fprintf(&b, "agent_ops_websocket_queue_depth %d\n", depth)
 	return b.String()
+}
+
+func prometheusLabelValue(value string) string {
+	return strings.NewReplacer(`\\`, `\\\\`, `"`, `\\"`, "\n", `\n`).Replace(value)
 }
 
 type statusWriter struct {
