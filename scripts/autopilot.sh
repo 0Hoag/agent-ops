@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Coordinator loop: the shell waits, the model only works.
-# Each pass is a fresh, short OpenCode session (`/autopilot` = one pass of AGENTS.md → Autopilot), then
+# Each pass is a fresh, short OpenCode session (`/autopilot` = one pass of docs/coordinator-loop.md), then
 # the shell sleeps. Workers run detached (scripts/spawn.sh) and outlive the pass.
 #
 #   scripts/autopilot.sh                 # pass every 10 min, or within 30 s after a worker ends
@@ -18,7 +18,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
-cap=${CAP:-2}   # keep equal to the worker cap in AGENTS.md → Dispatch
+cap=${CAP:-2}   # keep equal to the worker cap in docs/coordinator-loop.md → Dispatch
 web=${WEB:-http://127.0.0.1:4096}
 dir=.agent-runs/coordinator
 mkdir -p "$dir"
