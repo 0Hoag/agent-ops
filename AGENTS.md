@@ -101,7 +101,7 @@ One pass:
    - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
    - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
-   - **Hygiene is scripted, you only read it.** Before each pass `autopilot.sh` runs `scripts/branches.sh --delete` (deletes
+   - **Hygiene is scripted, you only read it.** Before each pass `autopilot.sh` runs `scripts/worktrees.sh --prune` and `scripts/branches.sh --delete` (deletes
      only branches whose tip is exactly a merged PR's head; never `main`/`reviews/development`/PR bases) and
      `scripts/audit.sh` (missing/double status, no priority, blocked without a `Status:` note, closed issue still
      labelled, PR naming no issue). Read `.agent-runs/coordinator/branches.txt` and `audit.txt`; empty = healthy.
@@ -120,6 +120,15 @@ One pass:
    (Codex's sandbox cannot write the client worktree's git dir, run Chromium or `rm -f`; owner 26/10, W7r r7-r9 never
    pushed); Codex only for backend waves. When restarting a client wave whose worktree has uncommitted work, the
    RESUME block names those files so the worker verifies and commits them instead of redoing them.
+   **One unit per worker, shared block first, worktree removed.** A brief covers one issue/wave; when done the worker
+   reports and stops (measured by the owner's team: per-item sub-agents averaged 0.42, one agent given a whole list
+   5.81). In a batch the shared rules block is identical to the byte and first (prompt-cache prefix); start one worker,
+   then the rest. The worker removes its worktree once the PR is open (`scripts/worktrees.sh --remove <path>`, refuses
+   dirty or unpushed); the pass runs `scripts/worktrees.sh --prune`. After a merge run
+   `scripts/check-landed.sh reviews/development <branch>` (silent = landed). Other roles: `docs/briefs/{reviewer,architect,verifier}.md`.
+   **Model per task:** mechanical runs (gates, summaries, list edits) -> the cheap worker model; code that can lose data,
+   conflict resolution, live verification, reviewer/architect briefs -> the coordinator model. Never accept a cheap
+   model's report as evidence: re-run its check.
    **Brief = deliverable first.** Each brief states the feature to ship and its "Done when" command, and asks for
    evidence in the PR body in one fixed shape: gate output, one smoke or test result, one failing control. Prefer
    waves that ship features (`feat`) over waves that only harden smoke/CI; never open a wave whose only goal is more

@@ -2,8 +2,8 @@
 // status:* label and adds the new one. GitHub labels are not exclusive, so adding
 // `status:review` alone leaves the issue with two states.
 //
-//   node scripts/issue-status.mjs <issue> <status> [--dry-run]
-//   node scripts/issue-status.mjs 12 "in progress"   # todo | in progress | review | blocked | done
+//   node scripts/issue-status.mjs <issue> <status> ["note"] [--dry-run]
+//   node scripts/issue-status.mjs 12 "in progress" "dispatched to W9, branch feat/x"   # posts `Status: <note>`; status is todo | in progress | review | blocked | done
 //
 // `done` closes the issue and removes all status:* labels. Needs `gh` (authenticated)
 // run inside the repo, or `-R owner/repo` in GH_ARGS.
@@ -19,7 +19,11 @@ const STATUSES = {
 const args = process.argv.slice(2)
 const dry = args.includes('--dry-run')
 const [issue, ...rest] = args.filter((a) => a !== '--dry-run')
-const status = rest.join(' ').trim().toLowerCase().replace(/[-_]+/g, ' ')
+const norm = (v) => v.trim().toLowerCase().replace(/[-_]+/g, ' ')
+// `in progress` may arrive as one quoted word or as two; anything after the status is the note.
+const two = rest.length > 1 && norm(`${rest[0]} ${rest[1]}`) in STATUSES
+const status = norm(two ? `${rest[0]} ${rest[1]}` : (rest[0] ?? ''))
+const note = rest.slice(two ? 2 : 1).join(' ')
 const done = status === 'done'
 
 if (!/^\d+$/.test(issue ?? '') || (!done && !(status in STATUSES))) {
@@ -57,6 +61,10 @@ if (edit.length > 3) {
         console.error(r.stderr)
         process.exit(1)
     }
+}
+if (note) {
+    const r = gh('issue', 'comment', issue, '--body', `Status: ${note}`)
+    if (r.status !== 0) console.error(r.stderr)
 }
 if (done) {
     const r = gh('issue', 'close', issue)
