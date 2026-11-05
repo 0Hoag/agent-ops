@@ -29,12 +29,13 @@ esac
 EOF
 chmod +x "$bin/gh"
 func=$(sed -n '/^merge_ready() {/,/^}/p' "$root/scripts/autopilot.sh")
-original=$(git show origin/reviews/development:scripts/autopilot.sh | sed -n '/^merge_ready() {/,/^}/p')
+original=$(sed -n '/^merge_ready() {/,/^}/p' "$root/scripts/tests/fixtures/autopilot-current-checks-broken.sh")
 run_case() {
   local case=$1 expect=$2 fn=$3
   rm -f "$tmp/merged"
   if env PATH="$bin:$PATH" REPOS=fixture/repo CASE="$case" MERGED="$tmp/merged" FIXTURE="$tmp/pr.json" bash -c '
     set -euo pipefail
+    cd "'"$root"'"
     is_critical(){ return 1; }; pgrep(){ return 1; }
     '"$fn"'
     merge_ready
@@ -47,7 +48,10 @@ if ! run_case stale-success false "$original"; then
   echo 'CONTROL FAIL: original selector accepted stale failure' >&2; exit 1
 fi
 echo 'CONTROL PASS: original selector rejects stale-check eligibility on identical fixture'
-run_case stale-success true "$func"
+if ! run_case stale-success true "$func"; then
+  echo 'ASSERT FAIL: production selector rejected current-check eligibility' >&2
+  exit 1
+fi
 echo 'PASS stale-check eligibility: current checks selected'
 for case in current-failure pending missing api-error malformed same-name-failure; do
   run_case "$case" false "$func"
