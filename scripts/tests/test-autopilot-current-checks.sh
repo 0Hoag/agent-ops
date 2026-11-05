@@ -18,6 +18,7 @@ case "$1 $2" in
     pending) printf '%s\n' '[{"name":"PR gate","workflow":"CI","state":"PENDING","bucket":"pending"}]' ;;
     missing) printf '%s\n' '[]' ;;
     api-error) exit 1 ;;
+    malformed) printf '%s\n' '[{"name":"PR gate","state":null}]' ;;
     same-name-failure) printf '%s\n' '[{"name":"PR gate","workflow":"CI","state":"SUCCESS"},{"name":"PR gate","workflow":"external","state":"FAILURE"}]' ;;
   esac ;;
   'pr view') printf '%s\n' 'Closes #413' ;;
@@ -48,7 +49,7 @@ fi
 echo 'CONTROL PASS: original selector rejects stale-check eligibility on identical fixture'
 run_case stale-success true "$func"
 echo 'PASS stale-check eligibility: current checks selected'
-for case in current-failure pending missing api-error same-name-failure; do
+for case in current-failure pending missing api-error malformed same-name-failure; do
   run_case "$case" false "$func"
   echo "PASS $case"
 done
