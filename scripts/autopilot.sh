@@ -43,8 +43,8 @@ fingerprint() {
     gh pr list -R "$r" --json number,updatedAt,headRefOid,statusCheckRollup \
       --jq '.[] | "\(.number) \(.updatedAt) \(.headRefOid) \([.statusCheckRollup[] | .conclusion // .status] | join(","))"' || return 1
     gh run list -R "$r" --branch reviews/development --limit 1 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion)"' || return 1
-    gh issue list -R "$r" --state open --limit 500 --json number,labels \
-      --jq '[.[] | select(all(.labels[]; .name != "status-board")) | .number] | sort | join(",")' || return 1
+    gh issue list -R "$r" --state open --limit 500 --json number,labels,title,body,updatedAt \
+      --jq '[.[] | select(all(.labels[]; .name != "status-board")) | {number,labels,title,body,updatedAt}] | sort_by(.number)' || return 1
   done | shasum
 }
 base=
@@ -118,13 +118,13 @@ wait_for_event() {
       done
     done
     [ -n "$(worker_pids)" ] && return
-    now=$(fingerprint) || now=$base
+    now=$(fingerprint) || { echo "  stalled: GitHub fingerprint failed; refusing to treat API error as idle"; return 2; }
     [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }
     # An issue marked "in progress" with no worker running means a worker died (network, crash): never idle on that.
     stale=0; for r in $REPOS; do stale=$((stale + $(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null || echo 0))); done
     [ "$stale" -gt 0 ] && { echo "  $stale issue(s) in progress but no worker: next pass now"; return; }
-    echo "  idle: no worker, GitHub unchanged, skipping pass"
-    waited=0
+    echo "  stalled: no worker, GitHub unchanged, no pending work"
+    return 2
   done
 }
 
@@ -161,6 +161,6 @@ while true; do
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
   base=$(fingerprint) || base=
   end=$(date +%s)
-  wait_for_event
+  wait_for_event || { rc=$?; [ "$rc" -eq 2 ] && { echo "[$ts] stalled; stopping"; break; }; }
   gap=$((MIN_GAP - ($(date +%s) - end))); [ "$gap" -gt 0 ] && [ ! -e .agent-runs/STOP ] && { echo "  min gap: waiting ${gap}s"; sleep "$gap"; }
 done

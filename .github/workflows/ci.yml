@@ -13,6 +13,13 @@ permissions:
   contents: read
 
 jobs:
+  shell-regression:
+    name: Shell regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/autopilot.sh scripts/spawn.sh && bash scripts/tests/test-autopilot-stalled.sh
+
   api:
     name: API
     runs-on: ubuntu-latest

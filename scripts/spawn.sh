@@ -8,6 +8,8 @@ set -euo pipefail
 
 log=$1
 shift
+# Keep existing arbitrary command interface; reject empty command before creating a detached process.
+[ "$#" -gt 0 ] || { echo "usage: spawn.sh <log> <command> [args...]" >&2; exit 2; }
 # Run budget: a wave runs at most MAX_RUN times (<wave>, <wave>-r2). A -r3 is refused: split the remainder into a new issue.
 for a in "$@"; do
   if [[ $a =~ -r([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -gt "${MAX_RUN:-2}" ]; then

@@ -7,6 +7,13 @@ session that does **one pass** and exits; the shell sleeps between passes (no to
 The **status board issue**, the issues and the PRs are the memory between passes: write there, not in chat.
 Run in a terminal: `scripts/autopilot.sh` (every 10 min) · stop: `touch .agent-runs/STOP`.
 
+The shell automatically waits for worker results or GitHub changes, including issue title/body/label/update
+changes. A failed GitHub fingerprint is explicit and never treated as unchanged. With no workers, no in-progress
+issues, and unchanged GitHub it emits `stalled` and exits rather than polling forever; pending/running work is not
+reported as completed. Recovery is coordinator-owned: assess the stable repo+issue/unit identity and authorize at
+most one narrow recovery; record the authorization externally before dispatch. Renaming a wave does not reset the
+run budget. The shell does not dispatch recovery, approve budgets, or infer completion.
+
 One pass:
 
 1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only
