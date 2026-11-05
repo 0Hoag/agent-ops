@@ -20,6 +20,11 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "$bin/gh"
+if jq -e 'all(.[]; (.conclusion // "") == "SUCCESS" or (.conclusion // "") == "SKIPPED" or (.conclusion // "") == "NEUTRAL")' \
+  <<< '[{"conclusion":"FAILURE"},{"conclusion":"SUCCESS"}]' >/dev/null 2>&1; then
+  echo 'original rollup selector unexpectedly accepted stale failure' >&2; exit 1
+fi
+echo 'CONTROL PASS: original selector rejects identical stale-failure fixture'
 func=$(sed -n '/^merge_ready() {/,/^}/p' "$root/scripts/autopilot.sh")
 run_case() {
   local case=$1 expect=$2
