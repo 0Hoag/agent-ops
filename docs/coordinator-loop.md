@@ -102,8 +102,10 @@ One pass:
    waves that ship features (`feat`) over waves that only harden smoke/CI; never open a wave whose only goal is more
    acceptance evidence for an already merged PR.
    **Run budget (owner 29/10: 65% of worker tokens went into 2nd+ runs of the same wave):** a wave gets at most
-   **2 worker runs** (first + one RESUME). After that: CI green and the feature works -> merge; otherwise mark the
-   issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
+   **2 worker runs** (first + one RESUME). After that: CI green -> merge (normal checks); if acceptance is still
+   unmet, open a `found-by:agent` issue with exactly the unmet part (`Split-of: #<original>` in its body) and move on
+   (owner 06/11: blocking green PRs on the budget stalled the loop). At most 2 splits per original feature; on the
+   3rd, or with CI red after the CI-fix run, mark the issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
    (`scripts/spawn.sh` refuses a `-r3` wave name; put the leftover work in a new issue instead).
    **Red PRs are work, not a wait state.** Every pass, for each open PR with a failed check and no worker on its branch
    (`pgrep -f <branch>`), dispatch ONE fix worker on that branch unless the PR is CRITICAL. A CI-fix run is **exempt
