@@ -11,9 +11,11 @@
 set -euo pipefail
 
 wave=$1 branch=$2 brief=$3
+root=$(git rev-parse --show-toplevel)
+. "$root/scripts/autopilot-state.sh"
+autopilot_preflight codex || exit 2
 worker=codex
 model=${AGENT_RUN_MODEL:-gpt-reserve}
-root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
 git_common_dir=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
 mkdir -p "$root/.agent-runs"

@@ -7,6 +7,40 @@ session that does **one pass** and exits; the shell sleeps between passes (no to
 The **status board issue**, the issues and the PRs are the memory between passes: write there, not in chat.
 Run in a terminal: `scripts/autopilot.sh` (every 10 min) · stop: `touch .agent-runs/STOP`.
 
+The shell automatically waits for worker results or GitHub changes, including issue title/body/label/update
+changes and comments. A failed GitHub fingerprint is an `API ERROR` (exit 2), never treated as unchanged. With no workers, no in-progress
+issues, no observed pending PR checks/development CI, and unchanged GitHub it emits `STALLED` (exit 2) rather than polling forever; pending/running work is not
+reported as completed. Recovery is coordinator-owned: assess the stable repo+issue/unit identity and authorize at
+most one narrow recovery; record the authorization externally before dispatch. Renaming a wave does not reset the
+run budget. The shell does not dispatch recovery, approve budgets, or infer completion.
+
+For the owner-authorized recovery, review the issue/unit and write a narrow brief with stop criteria first. Then
+dispatch using:
+
+```bash
+bash scripts/spawn.sh --recovery 0Hoag/agent-ops 408 unit-id /absolute/recovery-408.log scripts/run-worker.sh W408-r2 fix/408-r2 briefs/408-recovery.md
+```
+
+The wrapper atomically reserves one attempt per repository+issue under the canonical shared Git directory
+(`$(git rev-parse --git-common-dir)/recovery/`); changing worktree, CWD or unit cannot reset it. No state-directory
+override exists. Authorization and the two implementation attempts are coordinator accounting; the launcher enforces
+the single recovery reservation, written before executing the command, retained even on failure. Existing callers remain supported:
+`scripts/spawn.sh <log> <command> [args...]`. A reservation is durable even if its command fails, so validate the
+launcher/environment before invoking the guarded form. The guarded wrapper checks the launcher, Python, Git, gh and jq
+before reservation, plus Codex/OpenCode for the corresponding worker launcher. Direct worker preflight requires only its
+own harness (Codex does not require OpenCode). Optional `AUTOPILOT_REQUIRED_TOOLS` is a space-separated list of executable
+names checked by `autopilot_preflight`; `AUTOPILOT_PREFLIGHT_PROBE` is an executable absolute path run synchronously by
+that same helper. Declare environment requirements there (for example a browser probe that actually launches the required
+browser and exits nonzero if dependencies are missing). Tool/probe failures do not consume recovery. These variables are
+inherited by worker preflight; neither edits a manifest or global configuration. Empty/malformed final output stops safely. Only
+`AUTOPILOT: CONTINUE` or `AUTOPILOT: STOP ...` first lines are valid. Issue comments are included in the fingerprint
+along with labels/body/title. Stalled means no local worker/stale in-progress issue was found and the observed
+GitHub fingerprint was unchanged; it does not assert that all external/CI work is blocked. Fingerprint/status API
+errors stop with an explicit diagnostic. Live workers wait up to `INTERVAL` (`3 * INTERVAL` at `CAP`) before a heartbeat
+pass; observed queued/running PR checks or latest development CI wake a pass after `INTERVAL` rather than declaring
+idle completion. These are bounded waits, not a claim that CI will finish. Quota errors with no report retain the
+15-minute retry; malformed JSON or a nonempty malformed report still fails safely.
+
 One pass:
 
 1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only
