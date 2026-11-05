@@ -14,6 +14,17 @@ reported as completed. Recovery is coordinator-owned: assess the stable repo+iss
 most one narrow recovery; record the authorization externally before dispatch. Renaming a wave does not reset the
 run budget. The shell does not dispatch recovery, approve budgets, or infer completion.
 
+For the owner-authorized recovery, review the issue/unit and write a narrow brief with stop criteria first. Then
+dispatch using `scripts/spawn.sh --recovery 0Hoag/agent-ops 408 unit-id .agent-runs/recovery-408.log
+scripts/run-worker.sh W408-r2 fix/408-r2 briefs/408-recovery.md`. The wrapper atomically reserves one attempt per
+repository+issue in `.agent-runs/recovery/`; renaming a unit cannot reset it. Existing callers remain supported:
+`scripts/spawn.sh <log> <command> [args...]`. A reservation is durable even if its command fails, so validate the
+launcher/environment before invoking the guarded form. Empty/malformed final output stops safely. Only
+`AUTOPILOT: CONTINUE` or `AUTOPILOT: STOP ...` first lines are valid. Issue comments are included in the fingerprint
+along with labels/body/title. Stalled means no local worker/stale in-progress issue was found and the observed
+GitHub fingerprint was unchanged; it does not assert that all external/CI work is blocked. Fingerprint/status API
+errors stop with an explicit diagnostic.
+
 One pass:
 
 1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only

@@ -10,6 +10,17 @@ log=$1
 shift
 # Keep existing arbitrary command interface; reject empty command before creating a detached process.
 [ "$#" -gt 0 ] || { echo "usage: spawn.sh <log> <command> [args...]" >&2; exit 2; }
+# Optional guarded form: spawn.sh --recovery <repo> <issue> <unit> <log> <command> [args...]
+if [ "$1" = --recovery ]; then
+  [ "$#" -ge 6 ] || { echo 'usage: spawn.sh --recovery <repo> <issue> <unit> <log> <command> [args...]' >&2; exit 2; }
+  script_dir=$(cd "$(dirname "$0")" && pwd)
+  . "$script_dir/autopilot-state.sh"
+  repo=$2 issue=$3 unit=$4 log=$5
+  shift 5
+  # Resolve command availability before consuming the one-shot reservation.
+  command -v "$1" >/dev/null 2>&1 || { echo "preflight failed: missing launcher $1" >&2; exit 2; }
+  autopilot_reserve_recovery "$repo" "$issue" "$unit"
+fi
 # Run budget: a wave runs at most MAX_RUN times (<wave>, <wave>-r2). A -r3 is refused: split the remainder into a new issue.
 for a in "$@"; do
   if [[ $a =~ -r([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -gt "${MAX_RUN:-2}" ]; then

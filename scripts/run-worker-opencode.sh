@@ -11,9 +11,11 @@
 set -euo pipefail
 
 wave=$1 branch=$2 brief=$3
+root=$(git rev-parse --show-toplevel)
+. "$root/scripts/autopilot-state.sh"
+autopilot_preflight || exit 2
 worker=opencode
 model=${AGENT_RUN_MODEL:-openai/gpt-6-luna}
-root=$(git rev-parse --show-toplevel)
 wt="$root/../$(basename "$root")-wt/$branch"
 mkdir -p "$root/.agent-runs"
 

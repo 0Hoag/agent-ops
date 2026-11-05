@@ -16,6 +16,8 @@
 set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
+. scripts/autopilot-state.sh
+autopilot_preflight || exit 2
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
 cap=${CAP:-2}   # keep equal to the worker cap in docs/coordinator-loop.md → Dispatch
@@ -45,6 +47,8 @@ fingerprint() {
     gh run list -R "$r" --branch reviews/development --limit 1 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion)"' || return 1
     gh issue list -R "$r" --state open --limit 500 --json number,labels,title,body,updatedAt \
       --jq '[.[] | select(all(.labels[]; .name != "status-board")) | {number,labels,title,body,updatedAt}] | sort_by(.number)' || return 1
+    gh issue list -R "$r" --state open --limit 500 --json number,comments \
+      --jq '[.[] | select(all(.labels[]; .name != "status-board")) | {number,comments}] | sort_by(.number)' || return 1
   done | shasum
 }
 base=
@@ -118,10 +122,14 @@ wait_for_event() {
       done
     done
     [ -n "$(worker_pids)" ] && return
-    now=$(fingerprint) || { echo "  stalled: GitHub fingerprint failed; refusing to treat API error as idle"; return 2; }
+  now=$(fingerprint) || { echo "  stalled: GitHub fingerprint failed; refusing to treat API error as idle"; return 2; }
     [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }
     # An issue marked "in progress" with no worker running means a worker died (network, crash): never idle on that.
-    stale=0; for r in $REPOS; do stale=$((stale + $(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null || echo 0))); done
+    stale=0; for r in $REPOS; do
+      count=$(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null) || { echo "  stalled: GitHub issue status query failed for $r"; return 2; }
+      case "$count" in ''|*[!0-9]*) echo "  stalled: invalid issue status count for $r"; return 2 ;; esac
+      stale=$((stale + count))
+    done
     [ "$stale" -gt 0 ] && { echo "  $stale issue(s) in progress but no worker: next pass now"; return; }
     echo "  stalled: no worker, GitHub unchanged, no pending work"
     return 2
@@ -142,10 +150,14 @@ while true; do
     "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully first), then end your turn with the report format it describes. Do not sleep or wait for workers; the shell calls you again." < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
 
   [ -s "$dir/$ts.err" ] && { echo "  opencode error:"; head -3 "$dir/$ts.err" | sed 's/^/    /'; }
-  jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$dir/$ts.jsonl" > "$dir/$ts.md"
+  if ! jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$dir/$ts.jsonl" > "$dir/$ts.md"; then : > "$dir/$ts.md"; fi
   jq -cs '[.[] | select(.type=="step_finish") | .part.tokens]
     | {input: (map(.input) | add), cached: (map(.cache.read) | add), output: (map(.output) | add)}' \
     "$dir/$ts.jsonl"
+  if ! autopilot_validate_report "$dir/$ts.md"; then echo "[$ts] invalid final output; stopping safely"; exit 2; fi
+  case "$(head -1 "$dir/$ts.md")" in
+    'AUTOPILOT: STOP '*) echo "[$ts] coordinator asked to stop"; break ;;
+  esac
   head -3 "$dir/$ts.md"
   for r in $REPOS; do
     echo "  progress $r: $(gh pr list -R "$r" --state merged --search "merged:>=$(date -v-24H +%Y-%m-%dT%H:%M:%S)" --json number --jq length 2>/dev/null) merged/24h, $(gh issue list -R "$r" --state open --limit 500 --json number --jq length 2>/dev/null) open"
@@ -160,6 +172,7 @@ while true; do
   fi
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
   base=$(fingerprint) || base=
+  [ -n "$base" ] || { echo "[$ts] stalled: GitHub API fingerprint unavailable"; break; }
   end=$(date +%s)
   wait_for_event || { rc=$?; [ "$rc" -eq 2 ] && { echo "[$ts] stalled; stopping"; break; }; }
   gap=$((MIN_GAP - ($(date +%s) - end))); [ "$gap" -gt 0 ] && [ ! -e .agent-runs/STOP ] && { echo "  min gap: waiting ${gap}s"; sleep "$gap"; }
