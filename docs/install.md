@@ -58,11 +58,26 @@ Open `http://localhost:${SMOKE_CLIENT_PORT:-4173}` for the dashboard.
 
 ## First account and organization
 
-The current API has no public account-creation or password-reset endpoint. A
-local operator must therefore use an account provisioned by the supported
-development/bootstrap process for the environment, then use the API interfaces
-below. Do not claim that a fresh empty database can self-register through the
-web UI.
+The API has no public account-creation or password-reset endpoint. For a fresh
+database, create the first account from the running API container as a local
+operator. The command reads the password from stdin and never accepts it as a
+flag:
+
+```sh
+printf '%s\n' "$AGENTOPS_PASSWORD" | docker compose exec -T api \
+  /bootstrap-account --email "$AGENTOPS_EMAIL"
+```
+
+For production Compose, use the same command with `-f compose.prod.yml`:
+
+```sh
+printf '%s\n' "$AGENTOPS_PASSWORD" | docker compose -f compose.prod.yml exec -T api \
+  /bootstrap-account --email "$AGENTOPS_EMAIL"
+```
+
+Keep the password out of shell history where possible. These commands require
+the stack to be running and do not seed accounts automatically. Do not claim
+that a fresh empty database can self-register through the web UI.
 
 With an existing account, log in and keep the returned token out of shell
 history and logs:
