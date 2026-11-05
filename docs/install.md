@@ -1,8 +1,8 @@
 # Local installation and adoption
 
 This is the adoption entry point for the current tree. It describes a persistent
-local/development Compose stack, not a production deployment. Production Compose
-and clean-machine acceptance are separate deliverables.
+local/development Compose stack. The production-shaped local stack below is a
+separate option; it is not a hosted deployment or fresh-machine onboarding.
 
 ## Prerequisites
 
@@ -141,3 +141,25 @@ not run `docker compose down -v` unless intentionally deleting local data.
 
 The API container contract is linked from [api-container.md](api-container.md);
 this guide does not duplicate it.
+
+## Production Compose (local)
+
+This stack keeps PostgreSQL data in the named `agent_ops_production_postgres`
+volume, binds published ports to loopback, and runs the API and client as
+non-root containers. It expects the client checkout at the merged container
+revision, plus secrets supplied through the environment:
+
+```sh
+export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
+export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+export JWT_SECRET="$(openssl rand -hex 32)"
+export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+docker compose -f compose.prod.yml config --quiet
+docker compose -f compose.prod.yml up --build -d
+```
+
+The defaults publish the client on `18081`, the API on `18080`, and PostgreSQL
+on `15432`; override `PRODUCTION_CLIENT_PORT`, `PRODUCTION_API_PORT`, and
+`POSTGRES_HOST_PORT` for free loopback ports. The client routes `/api/` to
+`http://api:8080` and preserves the API path and websocket upgrade headers.
+Stop without deleting data with `docker compose -f compose.prod.yml down`.
