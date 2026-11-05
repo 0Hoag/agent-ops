@@ -18,7 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n scripts/autopilot.sh scripts/spawn.sh && bash scripts/tests/test-autopilot-stalled.sh
+      - name: Shell syntax and offline behavior (real jq)
+        run: |
+          for file in scripts/autopilot.sh scripts/autopilot-state.sh scripts/spawn.sh scripts/run-worker.sh scripts/run-worker-opencode.sh scripts/tests/test-autopilot-stalled.sh; do
+            bash -n "$file" || exit 1
+          done
+          bash scripts/tests/test-autopilot-stalled.sh
 
   api:
     name: API

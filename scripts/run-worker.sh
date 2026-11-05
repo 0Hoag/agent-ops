@@ -13,7 +13,7 @@ set -euo pipefail
 wave=$1 branch=$2 brief=$3
 root=$(git rev-parse --show-toplevel)
 . "$root/scripts/autopilot-state.sh"
-autopilot_preflight || exit 2
+autopilot_preflight codex || exit 2
 worker=codex
 model=${AGENT_RUN_MODEL:-gpt-reserve}
 wt="$root/../$(basename "$root")-wt/$branch"

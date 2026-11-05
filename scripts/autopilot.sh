@@ -17,7 +17,7 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 . scripts/autopilot-state.sh
-autopilot_preflight || exit 2
+autopilot_preflight opencode || exit 2
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
 cap=${CAP:-2}   # keep equal to the worker cap in docs/coordinator-loop.md → Dispatch
@@ -34,7 +34,7 @@ RUN_DIRS=${RUN_DIRS:-".agent-runs $HOME/agent-ops-client/.agent-runs"}
 results_stamp() { local d; for d in $RUN_DIRS; do stat -f '%N %m' "$d"/*.md 2>/dev/null; done | shasum; }
 
 # GitHub fingerprint (gh calls only, no tokens): main SHA, open PRs with head SHA, update time and check results, latest dev CI run, open issue
-# numbers (status-board excluded: the coordinator rewrites it every pass). Taken right after a pass, so the
+# content/comments (status-board excluded: the coordinator rewrites it every pass). Taken right after a pass, so the
 # pass's own changes are the baseline; any later difference (owner or CI activity, new PR) is news.
 REPOS=${REPOS:-"0Hoag/agent-ops 0Hoag/agent-ops-client"}
 fingerprint() {
@@ -47,12 +47,25 @@ fingerprint() {
     gh run list -R "$r" --branch reviews/development --limit 1 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion)"' || return 1
     gh issue list -R "$r" --state open --limit 500 --json number,labels,title,body,updatedAt \
       --jq '[.[] | select(all(.labels[]; .name != "status-board")) | {number,labels,title,body,updatedAt}] | sort_by(.number)' || return 1
-    gh issue list -R "$r" --state open --limit 500 --json number,comments \
+    gh issue list -R "$r" --state open --limit 500 --json number,labels,comments \
       --jq '[.[] | select(all(.labels[]; .name != "status-board")) | {number,comments}] | sort_by(.number)' || return 1
   done | shasum
 }
 base=
 pre=
+
+# Only observed running/queued CI counts as pending; absent checks do not.
+pending_ci() {
+  local r prs runs
+  for r in $REPOS; do
+    prs=$(gh pr list -R "$r" --json statusCheckRollup --jq '[.[].statusCheckRollup[] | select((.status == "QUEUED" or .status == "IN_PROGRESS" or .status == "PENDING") or .state == "PENDING")] | length') || return 2
+    runs=$(gh run list -R "$r" --branch reviews/development --limit 1 --json status --jq '[.[] | select(.status != "completed")] | length') || return 2
+    case "$prs" in ''|*[!0-9]*) return 2 ;; esac
+    case "$runs" in ''|*[!0-9]*) return 2 ;; esac
+    [ "$((prs + runs))" -eq 0 ] || return 0
+  done
+  return 1
+}
 
 # Risk classes follow controlplane's classify:risk idea. CRITICAL = trust root, CI/automation, destructive migration:
 # never script-merged; the coordinator reviews those. Everything else is merged by the script once CI is green.
@@ -103,8 +116,7 @@ end=0
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
-# When the timer ends with no worker running and GitHub unchanged since the last pass, a pass would only
-# report "nothing to do": keep waiting instead (a failed gh call counts as unchanged).
+# At the heartbeat, wake for live workers/CI; otherwise stop unchanged idle backlog.
 wait_for_event() {
   local pids stamp waited=0 limit=$interval now
   pids=$(worker_pids)
@@ -121,17 +133,20 @@ wait_for_event() {
         kill -0 "$pid" 2>/dev/null || { echo "  worker $pid ended, next pass now"; return; }
       done
     done
-    [ -n "$(worker_pids)" ] && return
-  now=$(fingerprint) || { echo "  stalled: GitHub fingerprint failed; refusing to treat API error as idle"; return 2; }
+    [ -n "$(worker_pids)" ] && { echo '  live worker: bounded heartbeat, next pass now'; return; }
+    now=$(fingerprint) || { echo "  API ERROR: GitHub fingerprint failed"; return 2; }
     [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }
+    pending_ci; rc=$?
+    [ "$rc" -ne 2 ] || { echo '  API ERROR: pending CI query failed'; return 2; }
+    [ "$rc" -ne 0 ] || { echo '  pending CI: bounded heartbeat, next pass now'; return; }
     # An issue marked "in progress" with no worker running means a worker died (network, crash): never idle on that.
     stale=0; for r in $REPOS; do
-      count=$(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null) || { echo "  stalled: GitHub issue status query failed for $r"; return 2; }
-      case "$count" in ''|*[!0-9]*) echo "  stalled: invalid issue status count for $r"; return 2 ;; esac
+      count=$(gh issue list -R "$r" --label "status:in progress" --state open --json number --jq length 2>/dev/null) || { echo "  API ERROR: GitHub issue status query failed for $r"; return 2; }
+      case "$count" in ''|*[!0-9]*) echo "  API ERROR: invalid issue status count for $r"; return 2 ;; esac
       stale=$((stale + count))
     done
     [ "$stale" -gt 0 ] && { echo "  $stale issue(s) in progress but no worker: next pass now"; return; }
-    echo "  stalled: no worker, GitHub unchanged, no pending work"
+    echo "  STALLED: no local worker or observed pending CI; GitHub unchanged; backlog needs review"
     return 2
   done
 }
@@ -150,7 +165,13 @@ while true; do
     "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully first), then end your turn with the report format it describes. Do not sleep or wait for workers; the shell calls you again." < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
 
   [ -s "$dir/$ts.err" ] && { echo "  opencode error:"; head -3 "$dir/$ts.err" | sed 's/^/    /'; }
-  if ! jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$dir/$ts.jsonl" > "$dir/$ts.md"; then : > "$dir/$ts.md"; fi
+  events_valid=1
+  if ! jq -rs '[.[] | select(.type=="text")] | last | .part.text // ""' "$dir/$ts.jsonl" > "$dir/$ts.md"; then events_valid=0; : > "$dir/$ts.md"; fi
+  [ -n "$(cat "$dir/$ts.md")" ] || : > "$dir/$ts.md"
+  if grep -qiE 'usage limit|rate limit|quota|429|try again' "$dir/$ts.err" "$dir/$ts.jsonl" 2>/dev/null \
+     && [ "$events_valid" -eq 1 ] && [ ! -s "$dir/$ts.md" ]; then
+    echo "[$ts] usage limit, waiting 15 min"; sleep 900; continue
+  fi
   jq -cs '[.[] | select(.type=="step_finish") | .part.tokens]
     | {input: (map(.input) | add), cached: (map(.cache.read) | add), output: (map(.output) | add)}' \
     "$dir/$ts.jsonl"
@@ -159,21 +180,14 @@ while true; do
     'AUTOPILOT: STOP '*) echo "[$ts] coordinator asked to stop"; break ;;
   esac
   head -3 "$dir/$ts.md"
+  since=$(date -u -v-24H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S)
   for r in $REPOS; do
-    echo "  progress $r: $(gh pr list -R "$r" --state merged --search "merged:>=$(date -v-24H +%Y-%m-%dT%H:%M:%S)" --json number --jq length 2>/dev/null) merged/24h, $(gh issue list -R "$r" --state open --limit 500 --json number --jq length 2>/dev/null) open"
+    echo "  progress $r: $(gh pr list -R "$r" --state merged --search "merged:>=$since" --json number --jq length 2>/dev/null) merged/24h, $(gh issue list -R "$r" --state open --limit 500 --json number --jq length 2>/dev/null) open"
   done
-
-  if head -1 "$dir/$ts.md" | grep -q '^AUTOPILOT: STOP'; then
-    echo "[$ts] coordinator asked to stop"; break
-  fi
-  if grep -qiE 'usage limit|rate limit|quota|429|try again' "$dir/$ts.err" "$dir/$ts.jsonl" 2>/dev/null \
-     && [ ! -s "$dir/$ts.md" ]; then
-    echo "[$ts] usage limit, waiting 15 min"; sleep 900; continue
-  fi
   [ -e .agent-runs/STOP ] && { echo "[$ts] STOP file found"; break; }
   base=$(fingerprint) || base=
-  [ -n "$base" ] || { echo "[$ts] stalled: GitHub API fingerprint unavailable"; break; }
+  [ -n "$base" ] || { echo "[$ts] API ERROR: GitHub fingerprint unavailable"; exit 2; }
   end=$(date +%s)
-  wait_for_event || { rc=$?; [ "$rc" -eq 2 ] && { echo "[$ts] stalled; stopping"; break; }; }
+  wait_for_event || exit "$?"
   gap=$((MIN_GAP - ($(date +%s) - end))); [ "$gap" -gt 0 ] && [ ! -e .agent-runs/STOP ] && { echo "  min gap: waiting ${gap}s"; sleep "$gap"; }
 done
