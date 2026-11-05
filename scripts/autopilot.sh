@@ -89,16 +89,24 @@ is_critical() {
 # CRITICAL; promotion PRs are exempt (their content was reviewed when it entered reviews/development).
 # After a feature merge the issues it names are closed (scripts/close-linked.sh). Prints one line per merge.
 merge_ready() {
-  local r n sha head base
+  local r n sha head base checks
   for r in $REPOS; do
     gh pr list -R "$r" --json number,headRefOid,headRefName,baseRefName,isDraft,updatedAt,body,labels,statusCheckRollup --jq '
       .[] | select(.isDraft | not) | select([.labels[].name] | index("hold") | not)
-      | select((.statusCheckRollup | length) > 0 and all(.statusCheckRollup[]; (.conclusion // "") as $c | $c == "SUCCESS" or $c == "SKIPPED" or $c == "NEUTRAL"))
       | select((now - (.updatedAt | fromdateiso8601)) > 180)
       | select((.baseRefName == "reviews/development" and (.body | test("(?i)(closes|fixes|resolves) +([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)?#[0-9]+")))
                or (.baseRefName == "main" and .headRefName == "reviews/development"))
       | "\(.number) \(.headRefOid) \(.headRefName) \(.baseRefName)"' 2>/dev/null |
     while read -r n sha head base; do
+      # statusCheckRollup includes superseded executions.  gh pr checks is the
+      # current-head view; evaluate every row so distinct workflows/providers
+      # with the same name cannot mask one another.  Any unreadable/API-error,
+      # empty, pending, or failed response is ineligible (fail closed).
+      checks=$(gh pr checks "$n" -R "$r" --json name,state,workflow,bucket 2>/dev/null) || continue
+      jq -e 'type == "array" and length > 0 and all(.[];
+        type == "object" and (.name | type == "string") and (.state | type == "string") and
+        (.state == "SUCCESS" or .state == "SKIPPED" or .state == "NEUTRAL"))' \
+        <<<"$checks" >/dev/null 2>&1 || continue
       if [ "$base" = main ]; then
         gh pr merge "$n" -R "$r" --merge --match-head-commit "$sha" > /dev/null 2>&1 && echo "  promoted $r#$n to main by script"
       else
