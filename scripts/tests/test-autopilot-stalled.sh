@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
     repo = tmp / 'repo'
     scripts = repo / 'scripts'
     scripts.mkdir(parents=True)
-    for name in ('autopilot.sh', 'autopilot-state.sh', 'spawn.sh'):
+    for name in ('autopilot.sh', 'autopilot-state.sh', 'spawn.sh', 'autopilot-snapshot.py'):
         shutil.copy2(source / 'scripts' / name, scripts / name)
     sp.run(['git', 'init', '-q', str(repo)], check=True)
     bin = tmp / 'bin'
@@ -31,6 +31,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
         path.chmod(0o755)
     for name in ('worktrees.sh', 'branches.sh', 'audit.sh'):
         executable(scripts / name, '#!/bin/sh\nexit 0\n')
+    executable(bin / 'ps', '#!/bin/sh\nexit 0\n')
     executable(bin / 'pgrep', '#!/bin/sh\n[ "$CASE" = worker ] && echo "$LIVE_PID"\n')
     executable(bin / 'sleep', '#!/bin/sh\necho "$1" >> "$SLEEPS"\n[ "$1" = 2 ] && touch "$WAKE"\n')
     executable(bin / 'opencode', '''#!/usr/bin/env python3
