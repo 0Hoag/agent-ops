@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
     for name in ('worktrees.sh', 'branches.sh', 'audit.sh'):
         executable(scripts / name, '#!/bin/sh\nexit 0\n')
     executable(bin / 'pgrep', '#!/bin/sh\n[ "$CASE" = worker ] && echo "$LIVE_PID"\n')
-    executable(bin / 'sleep', '#!/bin/sh\necho "$1" >> "$SLEEPS"\n')
+    executable(bin / 'sleep', '#!/bin/sh\necho "$1" >> "$SLEEPS"\n[ "$1" = 2 ] && touch "$WAKE"\n')
     executable(bin / 'opencode', '''#!/usr/bin/env python3
 import json, os, pathlib, sys
 p=pathlib.Path(os.environ['PASSES'])
@@ -73,6 +73,9 @@ elif a[:2]==['issue','list']:
    p=pathlib.Path(os.environ['QUERIES']); n=int(p.read_text())+1 if p.exists() else 1; p.write_text(str(n))
   n=int(pathlib.Path(os.environ['QUERIES']).read_text()) if pathlib.Path(os.environ['QUERIES']).exists() else 0
   if n>1:
+   if c=='blocked' and pathlib.Path(os.environ['WAKE']).exists():
+    data[0]['updatedAt']='2026-11-05T01:00:00Z'
+    pathlib.Path(os.environ['WAKE']).unlink()
    if c=='labels': data[0]['labels'].append({'name':'wake'})
    if c=='body': data[0]['body']='unblocked'
    if c=='comments': data[0]['comments']=[{'id':'1','body':'authorized','updatedAt':'2026-11-05T01:00:00Z'}]
@@ -86,14 +89,15 @@ print(json.dumps(data))
 ''')
     env = dict(os.environ, PATH=str(bin)+os.pathsep+os.environ['PATH'], REAL_JQ=shutil.which('jq'),
                REPOS='fixture/repo', RUN_DIRS=str(tmp/'none'), INTERVAL='1', POLL='1',
-               MIN_GAP='0', MERGE_EVERY='100', LIVE_PID=str(os.getpid()))
+               MIN_GAP='0', MERGE_EVERY='100', STALL_SLEEP='2', LIVE_PID=str(os.getpid()))
     env.pop('AUTOPILOT_REQUIRED_TOOLS', None)
     env.pop('AUTOPILOT_PREFLIGHT_PROBE', None)
     def run_case(case, expected, diagnostic):
-        for name in ('passes','queries','sleeps'):
+        for name in ('passes','queries','sleeps','notifications','wake'):
             path=tmp/name
             if path.exists(): path.unlink()
-        e=dict(env, CASE=case, PASSES=str(tmp/'passes'), QUERIES=str(tmp/'queries'), SLEEPS=str(tmp/'sleeps'))
+        e=dict(env, CASE=case, PASSES=str(tmp/'passes'), QUERIES=str(tmp/'queries'), SLEEPS=str(tmp/'sleeps'),
+               NOTIFICATIONS=str(tmp/'notifications'), WAKE=str(tmp/'wake'), NOTIFY_CMD='echo stalled >> "$NOTIFICATIONS"')
         try:
             p=sp.run(['bash',str(scripts/'autopilot.sh')],cwd=repo,env=e,text=True,stdout=sp.PIPE,stderr=sp.STDOUT,timeout=5)
         except sp.TimeoutExpired:
@@ -101,9 +105,12 @@ print(json.dumps(data))
         print('CASE',case,'exit',p.returncode,'\n'+p.stdout)
         check(p.returncode==expected and diagnostic in p.stdout, case+': intended behavior missing')
         if case=='quota': check((tmp/'sleeps').read_text().splitlines()==['900'], 'quota: exact 15-minute retry')
+        if case=='blocked':
+            check((tmp/'sleeps').read_text().splitlines()==['1','2'], 'blocked: one poll sleep and one stall sleep before fingerprint wake')
+            check((tmp/'notifications').read_text().splitlines()==['stalled'], 'blocked: one notification per stalled period')
         if case in ('worker','pr-ci','dev-ci','labels','body','comments'):
             check((tmp/'passes').read_text()=='2',case+': must wake one new pass')
-    run_case('blocked',2,'STALLED:')
+    run_case('blocked',0,'GitHub changed')
     for case in ('worker','pr-ci','dev-ci'):
         run_case(case,0,'bounded heartbeat')
     for case in ('labels','body','comments'):
@@ -115,7 +122,7 @@ print(json.dumps(data))
 
     # Identical blocked fixture, only the actual production return guard is removed.
     original=(scripts/'autopilot.sh').read_text()
-    guard='    return 2\n  done\n}'
+    guard='    [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }\n  done\n}'
     check(original.count(guard)==1,'stall mutation must change exactly one production guard')
     (scripts/'autopilot.sh').write_text(original.replace(guard,'    waited=0\n  done\n}'))
     try:
@@ -125,6 +132,14 @@ print(json.dumps(data))
         print('CONTROL PASS:',e)
     else: raise AssertionError('stall mutation survived identical fixture')
     (scripts/'autopilot.sh').write_text(original)
+
+    # A no-op mutation must not be mistaken for a failing production guard.
+    try:
+        run_case('blocked',2,'STALLED:')
+    except AssertionError as e:
+        check('intended behavior missing' in str(e),'no-op control must reject the false control')
+        print('NO-OP CONTROL PASS:',e)
+    else: raise AssertionError('no-op mutation falsely survived control')
 
     sentinel=tmp/'children'
     executable(bin/'child', '#!/bin/sh\necho child >> "$SENTINEL"\n')
