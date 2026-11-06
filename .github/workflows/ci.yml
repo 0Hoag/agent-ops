@@ -24,6 +24,8 @@ jobs:
             bash -n "$file" || exit 1
           done
           bash scripts/tests/test-autopilot-stalled.sh
+          bash -n scripts/worktrees.sh scripts/tests/test-worktrees.sh
+          bash scripts/tests/test-worktrees.sh
 
   api:
     name: API
