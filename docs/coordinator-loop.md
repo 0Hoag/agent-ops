@@ -109,6 +109,15 @@ One pass:
    (owner 06/11: blocking green PRs on the budget stalled the loop). At most 2 splits per original feature; on the
    3rd, or with CI red after the CI-fix run, mark the issue `status:blocked`, comment why, and move to the next wave. Never start a 3rd run on the same wave
    (`scripts/spawn.sh` refuses a `-r3` wave name; put the leftover work in a new issue instead).
+   **Recovery run (owner 06/11: units that ended with no PR stopped the loop for an owner answer):** when both runs
+   ended without a PR, or CI is still red after the CI-fix run, dispatch ONE recovery run under wave `<wave>-rec`
+   without asking. Its brief is self-contained: the preserved branch/worktree and dirty files, the exact failing
+   command from the last report, and one goal: make that command pass, run the gate, open the PR. Comment
+   `Recovery-of: <wave>` on the issue first. One recovery per issue chain: a split or follow-up of an issue that
+   already had one gets none. If the recovery ends without a green PR, mark `status:blocked` with the reason and move
+   on; report `AUTOPILOT: STOP` only when nothing else is runnable.
+   **Stale blocks:** in sync, for each `status:blocked` issue whose comment names blocking issues, set it back to
+   `todo` once all of them are closed.
    **Red PRs are work, not a wait state.** Every pass, for each open PR with a failed check and no worker on its branch
    (`pgrep -f <branch>`), dispatch ONE fix worker on that branch unless the PR is CRITICAL. A CI-fix run is **exempt
    from the run budget** (owner 30/10: the budget deadlocked three red PRs, nothing ran): brief it narrowly, no new
