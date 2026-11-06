@@ -73,7 +73,9 @@ elif a[:2]==['issue','list']:
    p=pathlib.Path(os.environ['QUERIES']); n=int(p.read_text())+1 if p.exists() else 1; p.write_text(str(n))
   n=int(pathlib.Path(os.environ['QUERIES']).read_text()) if pathlib.Path(os.environ['QUERIES']).exists() else 0
   if n>1:
-   if c=='blocked' and pathlib.Path(os.environ['WAKE']).exists(): data[0]['updatedAt']='2026-11-05T01:00:00Z'
+   if c=='blocked' and pathlib.Path(os.environ['WAKE']).exists():
+    data[0]['updatedAt']='2026-11-05T01:00:00Z'
+    pathlib.Path(os.environ['WAKE']).unlink()
    if c=='labels': data[0]['labels'].append({'name':'wake'})
    if c=='body': data[0]['body']='unblocked'
    if c=='comments': data[0]['comments']=[{'id':'1','body':'authorized','updatedAt':'2026-11-05T01:00:00Z'}]
@@ -91,7 +93,7 @@ print(json.dumps(data))
     env.pop('AUTOPILOT_REQUIRED_TOOLS', None)
     env.pop('AUTOPILOT_PREFLIGHT_PROBE', None)
     def run_case(case, expected, diagnostic):
-        for name in ('passes','queries','sleeps','notifications'):
+        for name in ('passes','queries','sleeps','notifications','wake'):
             path=tmp/name
             if path.exists(): path.unlink()
         e=dict(env, CASE=case, PASSES=str(tmp/'passes'), QUERIES=str(tmp/'queries'), SLEEPS=str(tmp/'sleeps'),
@@ -124,12 +126,20 @@ print(json.dumps(data))
     check(original.count(guard)==1,'stall mutation must change exactly one production guard')
     (scripts/'autopilot.sh').write_text(original.replace(guard,'    waited=0\n  done\n}'))
     try:
-        run_case('blocked-control',2,'STALLED:')
+        run_case('blocked',2,'STALLED:')
     except AssertionError as e:
         check('infinite idle wait' in str(e),'stall control must fail by bounded infinite-wait assertion')
         print('CONTROL PASS:',e)
     else: raise AssertionError('stall mutation survived identical fixture')
     (scripts/'autopilot.sh').write_text(original)
+
+    # A no-op mutation must not be mistaken for a failing production guard.
+    try:
+        run_case('blocked',2,'STALLED:')
+    except AssertionError as e:
+        check('intended behavior missing' in str(e),'no-op control must reject the false control')
+        print('NO-OP CONTROL PASS:',e)
+    else: raise AssertionError('no-op mutation falsely survived control')
 
     sentinel=tmp/'children'
     executable(bin/'child', '#!/bin/sh\necho child >> "$SENTINEL"\n')
