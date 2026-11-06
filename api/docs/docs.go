@@ -386,6 +386,86 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/alerts/thresholds": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Get alert thresholds",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.ThresholdsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Update alert thresholds",
+                "parameters": [
+                    {
+                        "description": "Alert thresholds; durations are positive integer seconds",
+                        "name": "thresholds",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.thresholdRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.ThresholdsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "consumes": [
@@ -2639,6 +2719,34 @@ const docTemplate = `{
                 },
                 "subject": {
                     "type": "string"
+                }
+            }
+        },
+        "alert.ThresholdsResponse": {
+            "type": "object",
+            "properties": {
+                "min_cache_hit": {
+                    "type": "number"
+                },
+                "pr_stale_seconds": {
+                    "type": "integer"
+                },
+                "silent_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "alert.thresholdRequest": {
+            "type": "object",
+            "properties": {
+                "min_cache_hit": {
+                    "type": "number"
+                },
+                "pr_stale_seconds": {
+                    "type": "integer"
+                },
+                "silent_seconds": {
+                    "type": "integer"
                 }
             }
         },
