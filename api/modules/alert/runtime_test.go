@@ -50,3 +50,34 @@ func TestRuntimeStartPerformsInitialBoundedScan(t *testing.T) {
 	}
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestRuntimeRepositoryScanAdvancesAcrossTicksAndWraps(t *testing.T) {
+	db, mock := alertDB(t)
+	runtime := NewRuntime(db, time.Hour, 2)
+	rows := func(values ...string) *sqlmock.Rows {
+		result := sqlmock.NewRows([]string{"id", "organization_id", "full_name"})
+		for i := 0; i < len(values); i += 3 {
+			result.AddRow(values[i], values[i+1], values[i+2])
+		}
+		return result
+	}
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, organization_id, full_name FROM "repositories" ORDER BY id LIMIT $1`)).
+		WithArgs(2).WillReturnRows(rows("repo-1", "org-a", "one", "repo-2", "org-a", "two"))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, organization_id, full_name FROM "repositories" WHERE id > $1 ORDER BY id LIMIT $2`)).
+		WithArgs("repo-2", 2).WillReturnRows(rows("repo-3", "org-b", "three"))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, organization_id, full_name FROM "repositories" WHERE id > $1 ORDER BY id LIMIT $2`)).
+		WithArgs("repo-3", 2).WillReturnRows(rows())
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, organization_id, full_name FROM "repositories" ORDER BY id LIMIT $1`)).
+		WithArgs(2).WillReturnRows(rows("repo-1", "org-a", "one", "repo-2", "org-a", "two"))
+
+	first, err := runtime.nextRepositories(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{"repo-1", "repo-2"}, []string{first[0].ID, first[1].ID})
+	second, err := runtime.nextRepositories(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{"repo-3"}, []string{second[0].ID})
+	wrapped, err := runtime.nextRepositories(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{"repo-1", "repo-2"}, []string{wrapped[0].ID, wrapped[1].ID})
+	require.NoError(t, mock.ExpectationsWereMet())
+}
