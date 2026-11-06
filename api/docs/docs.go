@@ -350,6 +350,125 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/alerts/channels": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "List alert channels",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/alert.channelResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Create alert channel",
+                "parameters": [
+                    {
+                        "description": "Environment references",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/channels/{kind}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Update alert channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Channel kind",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment references",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Delete alert channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Channel kind",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/alerts/history": {
             "get": {
                 "produces": [
@@ -2733,6 +2852,82 @@ const docTemplate = `{
                 },
                 "silent_seconds": {
                     "type": "integer"
+                }
+            }
+        },
+        "alert.channelRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "slack_webhook_url_env_ref": {
+                    "type": "string"
+                },
+                "smtp_from_env_ref": {
+                    "type": "string"
+                },
+                "smtp_host_env_ref": {
+                    "type": "string"
+                },
+                "smtp_password_env_ref": {
+                    "type": "string"
+                },
+                "smtp_port_env_ref": {
+                    "type": "string"
+                },
+                "smtp_to_env_ref": {
+                    "type": "string"
+                },
+                "smtp_username_env_ref": {
+                    "type": "string"
+                },
+                "telegram_chat_id_env_ref": {
+                    "type": "string"
+                },
+                "telegram_token_env_ref": {
+                    "type": "string"
+                }
+            }
+        },
+        "alert.channelResponse": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "slack_webhook_url_env_ref": {
+                    "type": "string"
+                },
+                "smtp_from_env_ref": {
+                    "type": "string"
+                },
+                "smtp_host_env_ref": {
+                    "type": "string"
+                },
+                "smtp_password_env_ref": {
+                    "type": "string"
+                },
+                "smtp_port_env_ref": {
+                    "type": "string"
+                },
+                "smtp_to_env_ref": {
+                    "type": "string"
+                },
+                "smtp_username_env_ref": {
+                    "type": "string"
+                },
+                "telegram_chat_id_env_ref": {
+                    "type": "string"
+                },
+                "telegram_token_env_ref": {
+                    "type": "string"
                 }
             }
         },

@@ -300,6 +300,56 @@ definitions:
       silent_seconds:
         type: integer
     type: object
+  alert.channelRequest:
+    properties:
+      enabled:
+        type: boolean
+      kind:
+        type: string
+      slack_webhook_url_env_ref:
+        type: string
+      smtp_from_env_ref:
+        type: string
+      smtp_host_env_ref:
+        type: string
+      smtp_password_env_ref:
+        type: string
+      smtp_port_env_ref:
+        type: string
+      smtp_to_env_ref:
+        type: string
+      smtp_username_env_ref:
+        type: string
+      telegram_chat_id_env_ref:
+        type: string
+      telegram_token_env_ref:
+        type: string
+    type: object
+  alert.channelResponse:
+    properties:
+      enabled:
+        type: boolean
+      kind:
+        type: string
+      slack_webhook_url_env_ref:
+        type: string
+      smtp_from_env_ref:
+        type: string
+      smtp_host_env_ref:
+        type: string
+      smtp_password_env_ref:
+        type: string
+      smtp_port_env_ref:
+        type: string
+      smtp_to_env_ref:
+        type: string
+      smtp_username_env_ref:
+        type: string
+      telegram_chat_id_env_ref:
+        type: string
+      telegram_token_env_ref:
+        type: string
+    type: object
   alert.thresholdRequest:
     properties:
       min_cache_hit:
@@ -1060,6 +1110,83 @@ paths:
           schema:
             $ref: '#/definitions/agentrun.AggregateResponse'
       summary: Aggregate agent runs
+  /api/v1/alerts/channels:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/alert.channelResponse'
+            type: array
+      summary: List alert channels
+      tags:
+      - alerts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Environment references
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/alert.channelRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/alert.channelResponse'
+      summary: Create alert channel
+      tags:
+      - alerts
+  /api/v1/alerts/channels/{kind}:
+    delete:
+      parameters:
+      - description: Channel kind
+        in: path
+        name: kind
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+      summary: Delete alert channel
+      tags:
+      - alerts
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Channel kind
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: Environment references
+        in: body
+        name: channel
+        required: true
+        schema:
+          $ref: '#/definitions/alert.channelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/alert.channelResponse'
+      summary: Update alert channel
+      tags:
+      - alerts
   /api/v1/alerts/history:
     get:
       parameters:
