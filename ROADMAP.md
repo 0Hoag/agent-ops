@@ -23,6 +23,7 @@
 | 24/10/2026 | **Code format follows the company sources literally**: API = `~/Desktop/controlplane` (config files, Makefile targets, package layout, response/error shape), client = `~/Desktop/console` (package scripts, tsconfig, rspack config, module layout, code style). Copy their config files and adapt; do not invent a parallel style. Details: `docs/be-standards.md`, `docs/client-standards.md`. |
 | 24/10/2026 | **It must run.** Every wave that touches API or client keeps `scripts/smoke.sh` green: compose up → API healthy → client built and served → the page loads real data from the API. A PR that breaks the smoke is sent back. |
 | 06/11/2026 | **Run budget does not block on green PRs.** When a wave has used its 2 worker runs and its PR CI is green but acceptance is still unmet, the coordinator merges the PR (normal checks), opens a `found-by:agent` issue with exactly the unmet acceptance (`Split-of: #n`), and continues. At most 2 splits per original feature; the 3rd blocks and asks the owner. Product decisions, credentials and irreversible actions still go to the owner. |
+| 06/11/2026 | **One recovery run without asking.** When a unit's 2 worker runs end without a PR (or CI stays red after the CI-fix run), the coordinator dispatches one recovery run (`<wave>-rec`) from the preserved work, aimed at the exact failing command. One per issue chain; if it fails the issue is blocked and the loop moves on. Blocked issues whose named blockers are all closed go back to todo. |
 
 ## Các đợt
 
