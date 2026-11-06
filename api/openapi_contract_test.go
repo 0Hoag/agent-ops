@@ -58,7 +58,7 @@ func TestOpenAPI(t *testing.T) {
 				require.NoError(t, json.Unmarshal(raw, &responses))
 				require.NotEmptyf(t, responses, "empty responses map for registered route %s %s", method, path)
 				for code, response := range responses {
-					if method == http.MethodGet && (path == "/api/v1/ws" || path == "/api/v1/board/ws") && code == "101" {
+					if method == http.MethodGet && (path == "/api/v1/ws" || path == "/api/v1/board/ws" || path == "/api/v1/workers/:worker_id/logs") && code == "101" {
 						continue
 					}
 					var responseObject map[string]json.RawMessage
@@ -69,6 +69,9 @@ func TestOpenAPI(t *testing.T) {
 					require.NoError(t, json.Unmarshal(schema, &schemaValue))
 					responseRefs := make([]string, 0)
 					collectSchemaRefs(schemaValue, &responseRefs)
+					if method == http.MethodGet && path == "/metrics" {
+						continue // Prometheus exposition is a plain-text scalar, not a JSON definition.
+					}
 					require.NotEmptyf(t, responseRefs, "missing response schema reference for registered route %s %s response %s", method, path, code)
 					for _, ref := range responseRefs {
 						assertDefinitionResolves(t, document.Definitions, ref, method, path, make(map[string]bool))

@@ -1,0 +1,273 @@
+package worker
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+)
+
+var (
+	ErrQueueFull = errors.New("worker queue is full")
+	ErrNotFound  = errors.New("worker job not found")
+	ErrInvalid   = errors.New("invalid worker request")
+)
+
+type Config struct {
+	QueueSize, Concurrency     int
+	ScriptRoots, WorktreeRoots []string
+	Scripts                    map[string]string
+}
+type Request struct{ OrganizationID, Wave, Branch, Brief, Worktree, Script string }
+type Job struct {
+	ID      string
+	Request Request
+	State   string
+	Err     error
+	cancel  context.CancelFunc
+	logs    *logStream
+}
+type Runner func(context.Context, Request) error
+
+type Executor struct {
+	cfg   Config
+	run   Runner
+	mu    sync.Mutex
+	next  uint64
+	jobs  map[string]*Job
+	queue chan *Job
+	stop  chan struct{}
+	once  sync.Once
+	wd    string
+}
+
+func New(cfg Config) (*Executor, error) {
+	if cfg.QueueSize < 1 {
+		cfg.QueueSize = 16
+	}
+	if cfg.Concurrency < 1 {
+		cfg.Concurrency = 1
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get worker process directory: %w", err)
+	}
+	e := &Executor{cfg: cfg, jobs: map[string]*Job{}, queue: make(chan *Job, cfg.QueueSize), stop: make(chan struct{}), wd: wd}
+	e.run = e.runProcess
+	for i := 0; i < cfg.Concurrency; i++ {
+		go e.loop()
+	}
+	return e, nil
+}
+func (e *Executor) loop() {
+	for {
+		select {
+		case j := <-e.queue:
+			e.execute(j)
+		case <-e.stop:
+			return
+		}
+	}
+}
+func (e *Executor) execute(j *Job) {
+	ctx, cancel := context.WithCancel(context.Background())
+	e.mu.Lock()
+	if j.State == "cancelled" {
+		e.mu.Unlock()
+		cancel()
+		return
+	}
+	j.cancel = cancel
+	j.State = "running"
+	e.mu.Unlock()
+	err := e.run(ctx, j.Request)
+	cancel()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	j.Err = err
+	if j.State == "cancelled" || errors.Is(err, context.Canceled) {
+		j.State = "cancelled"
+	} else if err != nil {
+		j.State = "failed"
+	} else {
+		j.State = "succeeded"
+	}
+	j.cancel = nil
+	if j.logs != nil {
+		j.logs.close()
+	}
+}
+func (e *Executor) Enqueue(req Request) (*Job, error) {
+	if err := e.validate(req); err != nil {
+		return nil, err
+	}
+	e.mu.Lock()
+	e.next++
+	j := &Job{ID: fmt.Sprintf("worker-%d", e.next), Request: req, State: "queued", logs: newLogStream()}
+	e.jobs[j.ID] = j
+	e.mu.Unlock()
+	select {
+	case e.queue <- j:
+		e.mu.Lock()
+		snapshot := *j
+		e.mu.Unlock()
+		return &snapshot, nil
+	default:
+		e.mu.Lock()
+		delete(e.jobs, j.ID)
+		e.mu.Unlock()
+		return nil, ErrQueueFull
+	}
+}
+func (e *Executor) Get(id string) (*Job, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	j, ok := e.jobs[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	copy := *j
+	return &copy, nil
+}
+func (e *Executor) GetForOrganization(id, organizationID string) (*Job, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	j, ok := e.jobs[id]
+	if !ok || j.Request.OrganizationID != organizationID {
+		return nil, ErrNotFound
+	}
+	copy := *j
+	return &copy, nil
+}
+func (e *Executor) Stop(id string) error {
+	return e.stopJob(id, "")
+}
+func (e *Executor) StopForOrganization(id, organizationID string) error {
+	return e.stopJob(id, organizationID)
+}
+func (e *Executor) stopJob(id, organizationID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	j, ok := e.jobs[id]
+	if !ok || (organizationID != "" && j.Request.OrganizationID != organizationID) {
+		return ErrNotFound
+	}
+	if j.cancel != nil {
+		j.cancel()
+		j.State = "cancelled"
+		return nil
+	}
+	if j.State == "queued" {
+		j.State = "cancelled"
+		return nil
+	}
+	return nil
+}
+func (e *Executor) Close() { e.once.Do(func() { close(e.stop) }) }
+
+func (e *Executor) SubscribeLogs(id, organizationID string) ([]string, <-chan string, func(), error) {
+	e.mu.Lock()
+	j, ok := e.jobs[id]
+	if !ok || j.Request.OrganizationID != organizationID {
+		e.mu.Unlock()
+		return nil, nil, nil, ErrNotFound
+	}
+	stream := j.logs
+	e.mu.Unlock()
+	history, ch, unsubscribe := stream.subscribe()
+	return history, ch, unsubscribe, nil
+}
+
+func (e *Executor) LogSubscriberCount(id string) int {
+	e.mu.Lock()
+	j := e.jobs[id]
+	e.mu.Unlock()
+	if j == nil || j.logs == nil {
+		return 0
+	}
+	j.logs.mu.Lock()
+	defer j.logs.mu.Unlock()
+	return len(j.logs.subs)
+}
+func (e *Executor) validate(r Request) error {
+	if strings.TrimSpace(r.OrganizationID) == "" || !validPart(r.Wave) || !validBranch(r.Branch) || strings.TrimSpace(r.Brief) == "" {
+		return fmt.Errorf("%w: missing or malformed worker arguments", ErrInvalid)
+	}
+	script, ok := e.cfg.Scripts[r.Script]
+	script = e.resolve(script)
+	if !ok || !insideAny(script, e.cfg.ScriptRoots) {
+		return fmt.Errorf("%w: script is not allowlisted", ErrInvalid)
+	}
+	if !insideAny(r.Worktree, e.cfg.WorktreeRoots) {
+		return fmt.Errorf("%w: worktree is outside permitted roots", ErrInvalid)
+	}
+	return nil
+}
+func validPart(s string) bool {
+	return s != "" && filepath.Base(s) == s && !strings.ContainsAny(s, "\\/$;&|`\n\r\t")
+}
+func validBranch(s string) bool {
+	if s == "" || strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") || strings.Contains(s, "//") || strings.ContainsAny(s, "\\;&|`\n\r\t?*[~^:") {
+		return false
+	}
+	for _, part := range strings.Split(s, "/") {
+		if part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return !strings.Contains(s, "..") && !strings.Contains(s, "@{") && !strings.HasPrefix(s, "-")
+}
+func insideAny(path string, roots []string) bool {
+	p, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for _, root := range roots {
+		r, err := filepath.Abs(root)
+		if err == nil {
+			rel, err := filepath.Rel(r, p)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+				return true
+			}
+		}
+	}
+	return false
+}
+func (e *Executor) runProcess(ctx context.Context, r Request) error {
+	e.mu.Lock()
+	var logs *logStream
+	for _, j := range e.jobs {
+		if j.Request == r && j.State == "running" {
+			logs = j.logs
+			break
+		}
+	}
+	e.mu.Unlock()
+	return e.runProcessWithLogs(ctx, r, logs)
+}
+
+func (e *Executor) runProcessWithLogs(ctx context.Context, r Request, logs *logStream) error {
+	script := e.resolve(e.cfg.Scripts[r.Script])
+	brief := e.resolve(r.Brief)
+	cmd := exec.CommandContext(ctx, script, r.Wave, r.Branch, brief)
+	cmd.Dir = e.wd
+	if logs != nil {
+		stdout, stderr := newLogWriter(logs), newLogWriter(logs)
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		defer stdout.close()
+		defer stderr.close()
+	}
+	return cmd.Run()
+}
+
+func (e *Executor) resolve(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(e.wd, path)
+}

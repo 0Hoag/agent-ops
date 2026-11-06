@@ -350,6 +350,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/alerts/history": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List alert history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.HistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "consumes": [
@@ -550,6 +586,187 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/budgets": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "summary": "List budgets",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/budget.Budget"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "summary": "Create budget",
+                "parameters": [
+                    {
+                        "description": "Budget",
+                        "name": "budget",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/budget.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/budget.Budget"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/budgets/{budget_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "summary": "Get budget",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Budget ID",
+                        "name": "budget_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/budget.Budget"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "summary": "Delete budget",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Budget ID",
+                        "name": "budget_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "budgets"
+                ],
+                "summary": "Update budget",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Budget ID",
+                        "name": "budget_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Budget",
+                        "name": "budget",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/budget.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/budget.Budget"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/insights": {
             "get": {
                 "produces": [
@@ -581,6 +798,132 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/insights/analytics": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get cost and cache analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "harness",
+                            "model",
+                            "wave",
+                            "area"
+                        ],
+                        "type": "string",
+                        "default": "harness",
+                        "description": "Grouping dimension",
+                        "name": "group_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "daily",
+                            "weekly"
+                        ],
+                        "type": "string",
+                        "default": "daily",
+                        "description": "Bucket period",
+                        "name": "period",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD), max 366 days",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.AnalyticsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/insights/delivery": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get delivery quality analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD), max 366 days",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.DeliveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -1304,6 +1647,223 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/waves": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List organization waves",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/wave.listResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create organization wave",
+                "parameters": [
+                    {
+                        "description": "Wave template brief",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/wave.request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/waves/{wave_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get organization wave",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Wave UUID",
+                        "name": "wave_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Delete organization wave",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Wave UUID",
+                        "name": "wave_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Update organization wave",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Wave UUID",
+                        "name": "wave_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Wave template brief and state",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/wave.request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/webhooks/{provider}": {
             "post": {
                 "consumes": [
@@ -1372,6 +1932,219 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/workers/audit-history": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List worker action audit history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/worker.AuditHistoryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workers/restart": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Restart worker",
+                "parameters": [
+                    {
+                        "description": "Worker request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/worker.request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workers/start": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Start worker",
+                "parameters": [
+                    {
+                        "description": "Worker request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/worker.request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workers/{worker_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get worker job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker job ID",
+                        "name": "worker_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workers/{worker_id}/logs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Worker job log websocket",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker job ID",
+                        "name": "worker_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "Switching Protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workers/{worker_id}/stop": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Stop worker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker job ID",
+                        "name": "worker_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "produces": [
@@ -1383,6 +2156,22 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "Prometheus service metrics",
+                "responses": {
+                    "200": {
+                        "description": "Prometheus exposition format",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -1810,6 +2599,49 @@ const docTemplate = `{
                 }
             }
         },
+        "alert.HistoryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/alert.Occurrence"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/pagination.PaginatorResponse"
+                }
+            }
+        },
+        "alert.Occurrence": {
+            "type": "object",
+            "properties": {
+                "alertKey": {
+                    "type": "string"
+                },
+                "detectedAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "organizationID": {
+                    "type": "string"
+                },
+                "repository": {
+                    "type": "string"
+                },
+                "rule": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                }
+            }
+        },
         "auth.LoginRequest": {
             "type": "object",
             "properties": {
@@ -1874,6 +2706,140 @@ const docTemplate = `{
                 }
             }
         },
+        "budget.Budget": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "starts_at": {
+                    "type": "string"
+                },
+                "token_limit": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "usd_limit": {
+                    "type": "number"
+                },
+                "wave": {
+                    "type": "string"
+                }
+            }
+        },
+        "budget.Request": {
+            "type": "object",
+            "properties": {
+                "ends_at": {
+                    "type": "string"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "starts_at": {
+                    "type": "string"
+                },
+                "token_limit": {
+                    "type": "integer"
+                },
+                "usd_limit": {
+                    "type": "number"
+                },
+                "wave": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.AnalyticsBucket": {
+            "type": "object",
+            "properties": {
+                "actual_cost_usd": {
+                    "type": "number"
+                },
+                "cache_hit_rate": {
+                    "type": "number"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_input_tokens": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "reasoning_tokens": {
+                    "type": "integer"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "start": {
+                    "type": "string"
+                },
+                "unknown_price_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.AnalyticsResponse": {
+            "type": "object",
+            "properties": {
+                "bucket_timestamp": {
+                    "type": "string"
+                },
+                "buckets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.AnalyticsBucket"
+                    }
+                },
+                "cache_denominator": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "group_by": {
+                    "type": "string"
+                },
+                "period": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "unknown_price_count": {
+                    "type": "integer"
+                },
+                "week_starts": {
+                    "type": "string"
+                }
+            }
+        },
         "insight.CycleMetric": {
             "type": "object",
             "properties": {
@@ -1888,6 +2854,75 @@ const docTemplate = `{
                 },
                 "median_seconds": {
                     "type": "number"
+                }
+            }
+        },
+        "insight.DeliveryCostMetric": {
+            "type": "object",
+            "properties": {
+                "actual_cost_usd": {
+                    "type": "number"
+                },
+                "cost_per_item_usd": {
+                    "type": "number"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "eligible": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.DeliveryHistory": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "type": "boolean"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
+        "insight.DeliveryResponse": {
+            "type": "object",
+            "properties": {
+                "closed_issues": {
+                    "$ref": "#/definitions/insight.DeliveryCostMetric"
+                },
+                "first_ci_success": {
+                    "$ref": "#/definitions/insight.FirstCIMetric"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "harness_comparison": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.HarnessMetric"
+                    }
+                },
+                "history": {
+                    "$ref": "#/definitions/insight.DeliveryHistory"
+                },
+                "issue_to_merge_lead_time": {
+                    "$ref": "#/definitions/insight.LeadTimeMetric"
+                },
+                "merged_prs": {
+                    "$ref": "#/definitions/insight.DeliveryCostMetric"
+                },
+                "send_back": {
+                    "$ref": "#/definitions/insight.SendBackMetric"
+                },
+                "to": {
+                    "type": "string"
                 }
             }
         },
@@ -1942,6 +2977,32 @@ const docTemplate = `{
                 }
             }
         },
+        "insight.HarnessMetric": {
+            "type": "object",
+            "properties": {
+                "changed_lines": {
+                    "type": "integer"
+                },
+                "cost_per_changed_line_usd": {
+                    "type": "number"
+                },
+                "eligible": {
+                    "type": "integer"
+                },
+                "equivalent_cost_usd": {
+                    "type": "number"
+                },
+                "harness": {
+                    "type": "string"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "unavailable": {
+                    "type": "integer"
+                }
+            }
+        },
         "insight.History": {
             "type": "object",
             "properties": {
@@ -1950,6 +3011,20 @@ const docTemplate = `{
                 },
                 "reason": {
                     "type": "string"
+                }
+            }
+        },
+        "insight.LeadTimeMetric": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "integer"
+                },
+                "median_seconds": {
+                    "type": "number"
+                },
+                "unavailable": {
+                    "type": "integer"
                 }
             }
         },
@@ -2081,6 +3156,20 @@ const docTemplate = `{
             "properties": {
                 "role": {
                     "type": "string"
+                }
+            }
+        },
+        "pagination.PaginatorResponse": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "per_page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -2252,6 +3341,126 @@ const docTemplate = `{
                 "data": {},
                 "status": {
                     "type": "integer"
+                }
+            }
+        },
+        "wave.Wave": {
+            "type": "object",
+            "properties": {
+                "brief": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organization_id": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "wave.listResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/wave.Wave"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/pagination.PaginatorResponse"
+                }
+            }
+        },
+        "wave.request": {
+            "type": "object",
+            "properties": {
+                "brief": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "worker.ActionAudit": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actorID": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "jobID": {
+                    "type": "string"
+                },
+                "occurredAt": {
+                    "type": "string"
+                },
+                "organizationID": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "wave": {
+                    "type": "string"
+                }
+            }
+        },
+        "worker.AuditHistoryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/worker.ActionAudit"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/pagination.PaginatorResponse"
+                }
+            }
+        },
+        "worker.request": {
+            "type": "object",
+            "properties": {
+                "branch": {
+                    "type": "string"
+                },
+                "brief": {
+                    "type": "string"
+                },
+                "script": {
+                    "type": "string"
+                },
+                "wave": {
+                    "type": "string"
+                },
+                "worktree": {
+                    "type": "string"
                 }
             }
         }

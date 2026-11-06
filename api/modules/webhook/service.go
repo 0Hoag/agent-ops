@@ -22,7 +22,11 @@ type Service struct {
 	registry     ProviderRegistry
 	publisher    Publisher
 	sealer       *appcrypto.Sealer
+	metrics      LagObserver
+	now          func() time.Time
+	limiter      *RateLimiter
 }
+type LagObserver interface{ ObserveWebhook(string, time.Time) }
 
 type ProviderRegistry interface {
 	Build(string, scm.Config) (scm.SCMProvider, error)
@@ -33,13 +37,19 @@ func NewService(db *gorm.DB, registry ProviderRegistry) *Service {
 }
 
 func NewServiceWithPublisher(db *gorm.DB, registry ProviderRegistry, publisher Publisher) *Service {
-	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher}
+	return &Service{db: db, repositories: store.New(db), registry: registry, publisher: publisher, now: time.Now, limiter: NewRateLimiter(defaultRateLimit, defaultRateWindow, defaultRateEntries, nil)}
 }
 
 func NewServiceWithPublisherAndSealer(db *gorm.DB, registry ProviderRegistry, publisher Publisher, sealer *appcrypto.Sealer) *Service {
 	service := NewServiceWithPublisher(db, registry, publisher)
 	service.sealer = sealer
 	return service
+}
+func (service *Service) SetMetrics(observer LagObserver, now func() time.Time) {
+	service.metrics = observer
+	if now != nil {
+		service.now = now
+	}
 }
 
 func (service *Service) Ingest(ctx context.Context, provider, configuredRepository, secret, token, baseURL string, h http.Header, payload []byte) (bool, error) {
@@ -112,8 +122,10 @@ func (service *Service) persistVerified(ctx context.Context, provider, configure
 }
 
 var ErrCandidateMismatch = errors.New("webhook candidate mismatch")
+var ErrRateLimited = errors.New("webhook rate limit exceeded")
 
 func (service *Service) persistEvent(ctx context.Context, provider, configuredRepository string, event scm.Event, payload []byte) (bool, error) {
+	started := service.now()
 	if !strings.EqualFold(event.Repository, configuredRepository) {
 		return false, ErrCandidateMismatch
 	}
@@ -127,6 +139,9 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 		repo, lookupErr := st.Repositories.GetByName(ctx, provider, configuredRepository)
 		if lookupErr != nil {
 			return ErrRejected
+		}
+		if service.limiter != nil && !service.limiter.Allow(repo.ID) {
+			return ErrRateLimited
 		}
 		id := store.NewUUID()
 		created, createErr := st.WebhookEvents.CreateIfNew(ctx, &store.WebhookEvent{ID: id, RepositoryID: repo.ID, Provider: provider, EventType: event.EventType, DeliveryID: event.DeliveryID, Payload: store.JSONB(payload), ReceivedAt: event.ReceivedAt})
@@ -160,6 +175,9 @@ func (service *Service) persistEvent(ctx context.Context, provider, configuredRe
 	}
 	if result && service.publisher != nil {
 		service.publisher.Publish(string(repositoryID))
+	}
+	if result && service.metrics != nil {
+		service.metrics.ObserveWebhook(provider, started)
 	}
 	return result, nil
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/0Hoag/agent-ops/api/pkg/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +21,7 @@ func Request(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		started := time.Now()
 		c.Next()
-		log.Info("http request", "method", c.Request.Method, "path", c.Request.URL.Path, "status", c.Writer.Status(), "duration_ms", time.Since(started).Milliseconds())
+		log.Info("http request", "method", c.Request.Method, "path", c.Request.URL.Path, "status", c.Writer.Status(), "duration_ms", time.Since(started).Milliseconds(), "request_id", middleware.GetRequestID(c))
 	}
 }
 

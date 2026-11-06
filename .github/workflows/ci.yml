@@ -13,6 +13,20 @@ permissions:
   contents: read
 
 jobs:
+  shell-regression:
+    name: Shell regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax and offline behavior (real jq)
+        run: |
+          for file in scripts/autopilot.sh scripts/autopilot-state.sh scripts/spawn.sh scripts/run-worker.sh scripts/run-worker-opencode.sh scripts/tests/test-autopilot-stalled.sh; do
+            bash -n "$file" || exit 1
+          done
+          bash scripts/tests/test-autopilot-stalled.sh
+          bash -n scripts/worktrees.sh scripts/tests/test-worktrees.sh
+          bash scripts/tests/test-worktrees.sh
+
   api:
     name: API
     runs-on: ubuntu-latest

@@ -263,6 +263,34 @@ definitions:
           $ref: '#/definitions/agentrun.RunStep'
         type: array
     type: object
+  alert.HistoryResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/alert.Occurrence'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
+  alert.Occurrence:
+    properties:
+      alertKey:
+        type: string
+      detectedAt:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      organizationID:
+        type: string
+      repository:
+        type: string
+      rule:
+        type: string
+      subject:
+        type: string
+    type: object
   auth.LoginRequest:
     properties:
       email:
@@ -304,6 +332,94 @@ definitions:
       meta:
         $ref: '#/definitions/board.ListMeta'
     type: object
+  budget.Budget:
+    properties:
+      created_at:
+        type: string
+      ends_at:
+        type: string
+      id:
+        type: string
+      organization_id:
+        type: string
+      repository_id:
+        type: string
+      starts_at:
+        type: string
+      token_limit:
+        type: integer
+      updated_at:
+        type: string
+      usd_limit:
+        type: number
+      wave:
+        type: string
+    type: object
+  budget.Request:
+    properties:
+      ends_at:
+        type: string
+      repository_id:
+        type: string
+      starts_at:
+        type: string
+      token_limit:
+        type: integer
+      usd_limit:
+        type: number
+      wave:
+        type: string
+    type: object
+  insight.AnalyticsBucket:
+    properties:
+      actual_cost_usd:
+        type: number
+      cache_hit_rate:
+        type: number
+      cache_write_tokens:
+        type: integer
+      cached_input_tokens:
+        type: integer
+      equivalent_cost_usd:
+        type: number
+      input_tokens:
+        type: integer
+      key:
+        type: string
+      output_tokens:
+        type: integer
+      reasoning_tokens:
+        type: integer
+      runs:
+        type: integer
+      start:
+        type: string
+      unknown_price_count:
+        type: integer
+    type: object
+  insight.AnalyticsResponse:
+    properties:
+      bucket_timestamp:
+        type: string
+      buckets:
+        items:
+          $ref: '#/definitions/insight.AnalyticsBucket'
+        type: array
+      cache_denominator:
+        type: string
+      from:
+        type: string
+      group_by:
+        type: string
+      period:
+        type: string
+      to:
+        type: string
+      unknown_price_count:
+        type: integer
+      week_starts:
+        type: string
+    type: object
   insight.CycleMetric:
     properties:
       completed:
@@ -314,6 +430,51 @@ definitions:
         type: array
       median_seconds:
         type: number
+    type: object
+  insight.DeliveryCostMetric:
+    properties:
+      actual_cost_usd:
+        type: number
+      cost_per_item_usd:
+        type: number
+      count:
+        type: integer
+      eligible:
+        type: integer
+      equivalent_cost_usd:
+        type: number
+      unavailable:
+        type: integer
+    type: object
+  insight.DeliveryHistory:
+    properties:
+      complete:
+        type: boolean
+      unavailable:
+        type: integer
+    type: object
+  insight.DeliveryResponse:
+    properties:
+      closed_issues:
+        $ref: '#/definitions/insight.DeliveryCostMetric'
+      first_ci_success:
+        $ref: '#/definitions/insight.FirstCIMetric'
+      from:
+        type: string
+      harness_comparison:
+        items:
+          $ref: '#/definitions/insight.HarnessMetric'
+        type: array
+      history:
+        $ref: '#/definitions/insight.DeliveryHistory'
+      issue_to_merge_lead_time:
+        $ref: '#/definitions/insight.LeadTimeMetric'
+      merged_prs:
+        $ref: '#/definitions/insight.DeliveryCostMetric'
+      send_back:
+        $ref: '#/definitions/insight.SendBackMetric'
+      to:
+        type: string
     type: object
   insight.Envelope:
     properties:
@@ -348,12 +509,38 @@ definitions:
       successful:
         type: integer
     type: object
+  insight.HarnessMetric:
+    properties:
+      changed_lines:
+        type: integer
+      cost_per_changed_line_usd:
+        type: number
+      eligible:
+        type: integer
+      equivalent_cost_usd:
+        type: number
+      harness:
+        type: string
+      runs:
+        type: integer
+      unavailable:
+        type: integer
+    type: object
   insight.History:
     properties:
       complete:
         type: boolean
       reason:
         type: string
+    type: object
+  insight.LeadTimeMetric:
+    properties:
+      completed:
+        type: integer
+      median_seconds:
+        type: number
+      unavailable:
+        type: integer
     type: object
   insight.Response:
     properties:
@@ -439,6 +626,15 @@ definitions:
         type: string
     required:
     - role
+    type: object
+  pagination.PaginatorResponse:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
     type: object
   repositorysettings.CreateRequest:
     properties:
@@ -550,6 +746,84 @@ definitions:
       data: {}
       status:
         type: integer
+    type: object
+  wave.Wave:
+    properties:
+      brief:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      organization_id:
+        type: string
+      state:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  wave.listResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/wave.Wave'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
+  wave.request:
+    properties:
+      brief:
+        type: string
+      name:
+        type: string
+      state:
+        type: string
+    type: object
+  worker.ActionAudit:
+    properties:
+      action:
+        type: string
+      actorID:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      jobID:
+        type: string
+      occurredAt:
+        type: string
+      organizationID:
+        type: string
+      outcome:
+        type: string
+      wave:
+        type: string
+    type: object
+  worker.AuditHistoryResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/worker.ActionAudit'
+        type: array
+      meta:
+        $ref: '#/definitions/pagination.PaginatorResponse'
+    type: object
+  worker.request:
+    properties:
+      branch:
+        type: string
+      brief:
+        type: string
+      script:
+        type: string
+      wave:
+        type: string
+      worktree:
+        type: string
     type: object
 host: localhost:8080
 info:
@@ -768,6 +1042,29 @@ paths:
           schema:
             $ref: '#/definitions/agentrun.AggregateResponse'
       summary: Aggregate agent runs
+  /api/v1/alerts/history:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/alert.HistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List alert history
   /api/v1/auth/login:
     post:
       consumes:
@@ -898,6 +1195,124 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Board invalidation websocket handshake
+  /api/v1/budgets:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/budget.Budget'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List budgets
+      tags:
+      - budgets
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Budget
+        in: body
+        name: budget
+        required: true
+        schema:
+          $ref: '#/definitions/budget.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create budget
+      tags:
+      - budgets
+  /api/v1/budgets/{budget_id}:
+    delete:
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete budget
+      tags:
+      - budgets
+    get:
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get budget
+      tags:
+      - budgets
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Budget ID
+        in: path
+        name: budget_id
+        required: true
+        type: string
+      - description: Budget
+        in: body
+        name: budget
+        required: true
+        schema:
+          $ref: '#/definitions/budget.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/budget.Budget'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update budget
+      tags:
+      - budgets
   /api/v1/insights:
     get:
       parameters:
@@ -927,6 +1342,92 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Get repository insights
+  /api/v1/insights/analytics:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        type: string
+      - default: harness
+        description: Grouping dimension
+        enum:
+        - harness
+        - model
+        - wave
+        - area
+        in: query
+        name: group_by
+        type: string
+      - default: daily
+        description: Bucket period
+        enum:
+        - daily
+        - weekly
+        in: query
+        name: period
+        type: string
+      - description: Inclusive UTC start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Inclusive UTC end date (YYYY-MM-DD), max 366 days
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.AnalyticsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get cost and cache analytics
+  /api/v1/insights/delivery:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        type: string
+      - description: Inclusive UTC start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Inclusive UTC end date (YYYY-MM-DD), max 366 days
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.DeliveryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get delivery quality analytics
   /api/v1/organization-invitations/accept:
     post:
       consumes:
@@ -1386,6 +1887,148 @@ paths:
       security:
       - BearerAuth: []
       summary: Update repository settings
+  /api/v1/waves:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/wave.listResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List organization waves
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Wave template brief
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/wave.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create organization wave
+  /api/v1/waves/{wave_id}:
+    delete:
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete organization wave
+    get:
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get organization wave
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Wave UUID
+        in: path
+        name: wave_id
+        required: true
+        type: string
+      - description: Wave template brief and state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/wave.request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Update organization wave
   /api/v1/webhooks/{provider}:
     post:
       consumes:
@@ -1431,6 +2074,143 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Ingest provider webhook
+  /api/v1/workers/{worker_id}:
+    get:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get worker job
+  /api/v1/workers/{worker_id}/logs:
+    get:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Worker job log websocket
+  /api/v1/workers/{worker_id}/stop:
+    post:
+      parameters:
+      - description: Worker job ID
+        in: path
+        name: worker_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+      summary: Stop worker
+  /api/v1/workers/audit-history:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/worker.AuditHistoryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: List worker action audit history
+  /api/v1/workers/restart:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Worker request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/worker.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: Restart worker
+  /api/v1/workers/start:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Worker request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/worker.request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      summary: Start worker
   /healthz:
     get:
       produces:
@@ -1441,6 +2221,16 @@ paths:
           schema:
             $ref: '#/definitions/response.SuccessResponse'
       summary: Process health
+  /metrics:
+    get:
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Prometheus exposition format
+          schema:
+            type: string
+      summary: Prometheus service metrics
   /readyz:
     get:
       produces:

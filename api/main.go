@@ -10,13 +10,17 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/docs"
 	"github.com/0Hoag/agent-ops/api/modules/account"
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
+	"github.com/0Hoag/agent-ops/api/modules/alert"
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
+	"github.com/0Hoag/agent-ops/api/modules/budget"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/repositorysettings"
 	"github.com/0Hoag/agent-ops/api/modules/store"
+	"github.com/0Hoag/agent-ops/api/modules/wave"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
+	"github.com/0Hoag/agent-ops/api/modules/worker"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/database"
@@ -25,6 +29,7 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 	"github.com/0Hoag/agent-ops/api/pkg/logger"
+	"github.com/0Hoag/agent-ops/api/pkg/metrics"
 	"github.com/0Hoag/agent-ops/api/pkg/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -99,6 +104,9 @@ func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg
 
 func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub) {
 	handlers.NewHealth(db).Register(router)
+	serviceMetrics := metrics.New(nil)
+	router.Use(serviceMetrics.GinMiddleware())
+	router.GET("/metrics", gin.WrapH(serviceMetrics.Handler()))
 	configs := map[string][]webhook.Config{}
 	for _, r := range cfg.Repositories {
 		configs[r.Provider] = append(configs[r.Provider], webhook.Config{Repository: r.FullName, SecretEnv: r.WebhookSecretEnv, TokenEnv: r.TokenEnv, BaseURLEnv: r.BaseURLEnv})
@@ -107,19 +115,28 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 	if hub == nil {
 		hub = board.NewHub()
 	}
+	hub.SetQueueObserver(serviceMetrics)
 	authService := auth.NewService(account.NewRepository(gormDB), cfg.JWTSecret, cfg.JWTExpiration)
 	var webhookSealer *appcrypto.Sealer
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		webhookSealer = sealer
 	}
-	webhook.NewRoutes(webhook.NewController(webhook.NewServiceWithPublisherAndSealer(gormDB, builder.Default(), hub, webhookSealer), configs)).Register(router.Group("/api/v1"))
+	webhookService := webhook.NewServiceWithPublisherAndSealer(gormDB, builder.Default(), hub, webhookSealer)
+	webhookService.SetMetrics(serviceMetrics, nil)
+	webhook.NewRoutes(webhook.NewController(webhookService, configs)).Register(router.Group("/api/v1"))
 	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
 		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "")).Register(private)
 	}
 	agentrun.RegisterPriceRoutes(private, agentrun.NewPriceController(agentrun.NewRepository(gormDB), organization.NewRepository(gormDB)))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)
+	budget.NewRoutes(budget.NewController(budget.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
+	wave.NewRoutes(wave.NewController(wave.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
+	if execution, err := worker.New(worker.Config{QueueSize: cfg.WorkerQueueSize, Concurrency: cfg.WorkerConcurrency, ScriptRoots: cfg.WorkerScriptRoots, WorktreeRoots: cfg.WorkerWorktreeRoots, Scripts: cfg.WorkerScripts}); err == nil {
+		worker.NewRoutes(worker.NewController(execution, organization.NewRepository(gormDB), worker.NewAuditRepository(gormDB))).Register(private)
+	}
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
+	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB))).Register(private)
 	prices := map[string]agentrun.Price{}
 	for model, raw := range cfg.AgentRunModelPrices {
 		var p agentrun.Price

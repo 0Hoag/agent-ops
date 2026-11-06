@@ -21,6 +21,7 @@ type event struct {
 	pipelineID              string
 	issue, pr               *int64
 	startedAt, sourceAt     time.Time
+	additions, deletions    *int64
 }
 
 func (r *Repository) Build(ctx context.Context, id string) (Response, error) {
@@ -148,7 +149,9 @@ func decode(row store.WebhookEvent) event {
 		if strings.EqualFold(row.EventType, "pull_request") {
 			var p struct {
 				PR struct {
-					Number int64 `json:"number"`
+					Number    int64  `json:"number"`
+					Additions *int64 `json:"additions"`
+					Deletions *int64 `json:"deletions"`
 				} `json:"pull_request"`
 			}
 			_ = json.Unmarshal(row.Payload, &p)
@@ -156,6 +159,7 @@ func decode(row store.WebhookEvent) event {
 			if n != 0 {
 				e.pr = &n
 			}
+			e.additions, e.deletions = p.PR.Additions, p.PR.Deletions
 		}
 	case "gitlab":
 		var p gitlabPayload

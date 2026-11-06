@@ -3,6 +3,7 @@ package insight
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -36,6 +37,73 @@ func (c *Controller) Get(ctx *gin.Context) {
 	}
 	if err != nil {
 		response.Error(ctx, 500, "failed to build insights")
+		return
+	}
+	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}
+
+// Analytics returns daily or weekly cost and cache trends for the authenticated organization.
+// @Summary Get cost and cache analytics
+// @Produce json
+// @Param repository_id query string false "Repository UUID" format(uuid)
+// @Param group_by query string false "Grouping dimension" Enums(harness,model,wave,area) default(harness)
+// @Param period query string false "Bucket period" Enums(daily,weekly) default(daily)
+// @Param from query string true "Inclusive UTC start date (YYYY-MM-DD)"
+// @Param to query string true "Inclusive UTC end date (YYYY-MM-DD), max 366 days"
+// @Success 200 {object} AnalyticsResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/insights/analytics [get]
+func (c *Controller) Analytics(ctx *gin.Context) {
+	group := ctx.DefaultQuery("group_by", "harness")
+	period := ctx.DefaultQuery("period", "daily")
+	from, err := time.Parse("2006-01-02", ctx.Query("from"))
+	if err != nil {
+		response.BadRequest(ctx, "from must be YYYY-MM-DD")
+		return
+	}
+	to, err := time.Parse("2006-01-02", ctx.Query("to"))
+	if err != nil {
+		response.BadRequest(ctx, "to must be YYYY-MM-DD")
+		return
+	}
+	f := AnalyticsFilter{RepositoryID: ctx.Query("repository_id"), GroupBy: group, Period: period, From: &from, To: &to}
+	data, err := c.repository.Analytics(ctx.Request.Context(), f)
+	if err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
+	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}
+
+// Delivery returns organization-scoped delivery quality and normalized comparison metrics.
+// @Summary Get delivery quality analytics
+// @Produce json
+// @Param repository_id query string false "Repository UUID" format(uuid)
+// @Param from query string true "Inclusive UTC start date (YYYY-MM-DD)"
+// @Param to query string true "Inclusive UTC end date (YYYY-MM-DD), max 366 days"
+// @Success 200 {object} DeliveryResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/insights/delivery [get]
+func (c *Controller) Delivery(ctx *gin.Context) {
+	from, err := time.Parse("2006-01-02", ctx.Query("from"))
+	if err != nil {
+		response.BadRequest(ctx, "from must be YYYY-MM-DD")
+		return
+	}
+	to, err := time.Parse("2006-01-02", ctx.Query("to"))
+	if err != nil {
+		response.BadRequest(ctx, "to must be YYYY-MM-DD")
+		return
+	}
+	data, err := c.repository.Delivery(ctx.Request.Context(), DeliveryFilter{RepositoryID: ctx.Query("repository_id"), From: &from, To: &to})
+	if err != nil {
+		if err.Error() == "invalid delivery date range" {
+			response.BadRequest(ctx, err.Error())
+			return
+		}
+		response.Error(ctx, 500, "failed to build delivery analytics")
 		return
 	}
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
