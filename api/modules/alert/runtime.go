@@ -16,11 +16,13 @@ const defaultRuntimeInterval = time.Minute
 
 // Runtime polls persisted observations with a bounded per-tick workload.
 type Runtime struct {
-	db       *gorm.DB
-	interval time.Duration
-	limit    int
-	mu       sync.Mutex
-	services map[string]*Service
+	db        *gorm.DB
+	interval  time.Duration
+	limit     int
+	mu        sync.Mutex
+	services  map[string]*Service
+	scanMu    sync.Mutex
+	scanAfter string
 }
 
 func NewRuntime(db *gorm.DB, interval time.Duration, limit int) *Runtime {
@@ -52,9 +54,9 @@ func (r *Runtime) Start(ctx context.Context) {
 func (r *Runtime) Trigger(ctx context.Context) error { return r.triggerAt(ctx, time.Now()) }
 
 func (r *Runtime) triggerAt(ctx context.Context, now time.Time) error {
-	var repos []struct{ ID, OrganizationID, FullName string }
-	if err := r.db.WithContext(ctx).Table("repositories").Select("id, organization_id, full_name").Order("id").Limit(r.limit).Find(&repos).Error; err != nil {
-		return fmt.Errorf("list alert repositories: %w", err)
+	repos, err := r.nextRepositories(ctx)
+	if err != nil {
+		return err
 	}
 	for _, repo := range repos {
 		if err := ctx.Err(); err != nil {
@@ -80,6 +82,29 @@ func (r *Runtime) triggerAt(ctx context.Context, now time.Time) error {
 		}
 	}
 	return nil
+}
+
+func (r *Runtime) nextRepositories(ctx context.Context) ([]struct{ ID, OrganizationID, FullName string }, error) {
+	r.scanMu.Lock()
+	defer r.scanMu.Unlock()
+	var repos []struct{ ID, OrganizationID, FullName string }
+	query := r.db.WithContext(ctx).Table("repositories").Select("id, organization_id, full_name").Order("id").Limit(r.limit)
+	if r.scanAfter != "" {
+		query = query.Where("id > ?", r.scanAfter)
+	}
+	if err := query.Find(&repos).Error; err != nil {
+		return nil, fmt.Errorf("list alert repositories: %w", err)
+	}
+	if len(repos) == 0 && r.scanAfter != "" {
+		r.scanAfter = ""
+		if err := r.db.WithContext(ctx).Table("repositories").Select("id, organization_id, full_name").Order("id").Limit(r.limit).Find(&repos).Error; err != nil {
+			return nil, fmt.Errorf("wrap alert repository scan: %w", err)
+		}
+	}
+	if len(repos) > 0 {
+		r.scanAfter = repos[len(repos)-1].ID
+	}
+	return repos, nil
 }
 
 func (r *Runtime) service(org string, thresholds Thresholds, channels map[string]notification.Notifier) *Service {
