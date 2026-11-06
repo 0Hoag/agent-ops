@@ -34,8 +34,9 @@ health=starting
 for _ in $(seq 1 60); do health=$(docker inspect --format '{{.State.Health.Status}}' "$API"); [ "$health" = healthy ] && break; sleep 1; done
 test "$health" = healthy
 docker exec "$API" test -f /etc/ssl/certs/ca-certificates.crt
+docker exec "$API" test -x /bootstrap-account
 ! docker exec "$API" sh -c 'command -v go'
-printf 'PASS: image build, UID=%s, /healthz=200, /readyz=200, health=healthy, CA certs present, Go compiler absent\n' "$uid"
+printf 'PASS: image build, UID=%s, /healthz=200, /readyz=200, health=healthy, CA certs present, bootstrap binary present, Go compiler absent\n' "$uid"
 cleanup; trap - EXIT
 if docker container inspect "$API" >/dev/null 2>&1 || docker container inspect "$DB" >/dev/null 2>&1 || docker network inspect "$NETWORK" >/dev/null 2>&1; then echo 'FAIL: fixture cleanup left an owned resource' >&2; exit 1; fi
 printf 'PASS: cleanup verified (containers/network removed)\n'
