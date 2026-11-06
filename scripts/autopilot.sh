@@ -108,11 +108,11 @@ merge_ready() {
         (.state == "SUCCESS" or .state == "SKIPPED" or .state == "NEUTRAL"))' \
         <<<"$checks" >/dev/null 2>&1 || continue
       if [ "$base" = main ]; then
-        gh pr merge "$n" -R "$r" --merge --match-head-commit "$sha" > /dev/null 2>&1 && echo "  promoted $r#$n to main by script"
+        scripts/merge-pr.sh "$r" "$n" "$sha" merge && echo "  promoted $r#$n to main by script"
       else
         pgrep -f -- "$head" > /dev/null && continue
         is_critical "$r" "$n" "$sha" && continue
-        gh pr merge "$n" -R "$r" --squash --match-head-commit "$sha" > /dev/null 2>&1 \
+        scripts/merge-pr.sh "$r" "$n" "$sha" squash \
           && { echo "  merged $r#$n into reviews/development by script"; scripts/close-linked.sh "$r" "$n" | sed 's/^/    /'; }
       fi
     done

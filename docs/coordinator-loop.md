@@ -68,7 +68,9 @@ One pass:
    - CI green on the exact head, `Closes #n`, no out-of-scope files (`gh pr diff --name-only`).
    - **Re-run at most 2 checks yourself**, the ones most likely to be false (e.g. one test, one curl).
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
-   - Then merge (squash, pinned SHA), confirm the content is on `main`, remove its worktree.
+   - Then merge through `scripts/merge-pr.sh <owner/repo> <n> "$sha" squash` for feature PRs or
+     `... merge` for `reviews/development → main`; it retries only transient failures and confirms `MERGED`
+     before linked issues are closed. Confirm the content is on `main`, then remove its worktree.
    - **Hygiene is scripted, you only read it.** Before each pass `autopilot.sh` runs `scripts/worktrees.sh --prune` and `scripts/branches.sh --delete` (deletes
      only branches whose tip is exactly a merged PR's head; never `main`/`reviews/development`/PR bases) and
      `scripts/audit.sh` (missing/double status, no priority, blocked without a `Status:` note, closed issue still
