@@ -120,13 +120,21 @@ merge_ready() {
 }
 MERGE_EVERY=${MERGE_EVERY:-300}
 MIN_GAP=${MIN_GAP:-900}   # min seconds between passes; events (worker ended, GitHub changed) cannot wake sooner
+STALL_SLEEP=${STALL_SLEEP:-3600}
+notify_stalled() {
+  if [ -n "${NOTIFY_CMD:-}" ]; then
+    bash -c "$NOTIFY_CMD" >/dev/null 2>&1 || true
+  elif command -v osascript >/dev/null 2>&1; then
+    osascript -e 'display notification "No worker, pending CI, or GitHub changes observed" with title "Autopilot stalled"' >/dev/null 2>&1 || true
+  fi
+}
 end=0
 
 # Sleep up to $interval, but wake after at most $poll seconds once a worker ends or writes its result.
 # While $cap workers run there is nothing to dispatch, so wait up to 3 x $interval (heartbeat for hung workers).
 # At the heartbeat, wake for live workers/CI; otherwise stop unchanged idle backlog.
 wait_for_event() {
-  local pids stamp waited=0 limit=$interval now
+  local pids stamp waited=0 limit=$interval now notified=0
   pids=$(worker_pids)
   stamp=$pre   # taken before the pass: a worker that ended during the pass still counts as news
   [ "$(echo $pids | wc -w)" -ge "$cap" ] && limit=$((interval * 3))
@@ -155,7 +163,14 @@ wait_for_event() {
     done
     [ "$stale" -gt 0 ] && { echo "  $stale issue(s) in progress but no worker: next pass now"; return; }
     echo "  STALLED: no local worker or observed pending CI; GitHub unchanged; backlog needs review"
-    return 2
+    if [ "$notified" -eq 0 ]; then
+      notify_stalled
+      notified=1
+    fi
+    sleep "$STALL_SLEEP"
+    [ -e .agent-runs/STOP ] && return
+    now=$(fingerprint) || { echo "  API ERROR: GitHub fingerprint failed"; return 2; }
+    [ "$now" != "$base" ] && { echo "  GitHub changed, next pass now"; return; }
   done
 }
 
