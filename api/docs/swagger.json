@@ -344,6 +344,125 @@
                 }
             }
         },
+        "/api/v1/alerts/channels": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "List alert channels",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/alert.channelResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Create alert channel",
+                "parameters": [
+                    {
+                        "description": "Environment references",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/channels/{kind}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Update alert channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Channel kind",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment references",
+                        "name": "channel",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.channelResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Delete alert channel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Channel kind",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/alerts/history": {
             "get": {
                 "produces": [
@@ -373,6 +492,86 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/alerts/thresholds": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Get alert thresholds",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.ThresholdsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "alerts"
+                ],
+                "summary": "Update alert thresholds",
+                "parameters": [
+                    {
+                        "description": "Alert thresholds; durations are positive integer seconds",
+                        "name": "thresholds",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/alert.thresholdRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/alert.ThresholdsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -2633,6 +2832,110 @@
                 },
                 "subject": {
                     "type": "string"
+                }
+            }
+        },
+        "alert.ThresholdsResponse": {
+            "type": "object",
+            "properties": {
+                "min_cache_hit": {
+                    "type": "number"
+                },
+                "pr_stale_seconds": {
+                    "type": "integer"
+                },
+                "silent_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "alert.channelRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "slack_webhook_url_env_ref": {
+                    "type": "string"
+                },
+                "smtp_from_env_ref": {
+                    "type": "string"
+                },
+                "smtp_host_env_ref": {
+                    "type": "string"
+                },
+                "smtp_password_env_ref": {
+                    "type": "string"
+                },
+                "smtp_port_env_ref": {
+                    "type": "string"
+                },
+                "smtp_to_env_ref": {
+                    "type": "string"
+                },
+                "smtp_username_env_ref": {
+                    "type": "string"
+                },
+                "telegram_chat_id_env_ref": {
+                    "type": "string"
+                },
+                "telegram_token_env_ref": {
+                    "type": "string"
+                }
+            }
+        },
+        "alert.channelResponse": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "slack_webhook_url_env_ref": {
+                    "type": "string"
+                },
+                "smtp_from_env_ref": {
+                    "type": "string"
+                },
+                "smtp_host_env_ref": {
+                    "type": "string"
+                },
+                "smtp_password_env_ref": {
+                    "type": "string"
+                },
+                "smtp_port_env_ref": {
+                    "type": "string"
+                },
+                "smtp_to_env_ref": {
+                    "type": "string"
+                },
+                "smtp_username_env_ref": {
+                    "type": "string"
+                },
+                "telegram_chat_id_env_ref": {
+                    "type": "string"
+                },
+                "telegram_token_env_ref": {
+                    "type": "string"
+                }
+            }
+        },
+        "alert.thresholdRequest": {
+            "type": "object",
+            "properties": {
+                "min_cache_hit": {
+                    "type": "number"
+                },
+                "pr_stale_seconds": {
+                    "type": "integer"
+                },
+                "silent_seconds": {
+                    "type": "integer"
                 }
             }
         },

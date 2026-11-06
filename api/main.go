@@ -99,10 +99,14 @@ func productionCORS(cfg config.Config) gin.HandlerFunc {
 }
 
 func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config) {
-	registerRoutesWithHub(router, db, gormDB, cfg, nil)
+	registerRoutesWithRuntime(router, db, gormDB, cfg, nil, true)
 }
 
 func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub) {
+	registerRoutesWithRuntime(router, db, gormDB, cfg, supplied, false)
+}
+
+func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub, startRuntime bool) {
 	handlers.NewHealth(db).Register(router)
 	serviceMetrics := metrics.New(nil)
 	router.Use(serviceMetrics.GinMiddleware())
@@ -136,7 +140,10 @@ func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.
 		worker.NewRoutes(worker.NewController(execution, organization.NewRepository(gormDB), worker.NewAuditRepository(gormDB))).Register(private)
 	}
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
-	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB))).Register(private)
+	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
+	if startRuntime && cfg.DatabaseURL != "" {
+		alert.NewRuntime(gormDB, 0, 100).Start(context.Background())
+	}
 	prices := map[string]agentrun.Price{}
 	for model, raw := range cfg.AgentRunModelPrices {
 		var p agentrun.Price
