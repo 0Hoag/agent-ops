@@ -17,6 +17,9 @@ func NewService(e *Evaluator, r *Repository, channels map[string]notification.No
 	return &Service{evaluator: e, repository: r, channels: channels}
 }
 func (s *Service) EvaluateAndDeliver(ctx context.Context, now time.Time, observation Observation) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	for _, a := range s.evaluator.Evaluate(ctx, now, observation) {
 		row, inserted, err := s.repository.Record(ctx, a)
 		if err != nil {
@@ -26,6 +29,9 @@ func (s *Service) EvaluateAndDeliver(ctx context.Context, now time.Time, observa
 			continue
 		}
 		for channel, sender := range s.channels {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			err := sender.Notify(ctx, notification.Message{Subject: a.Rule, Body: a.Message})
 			d := Delivery{OccurrenceID: row.ID, Channel: channel, Success: err == nil, DeliveredAt: now}
 			if err != nil {
