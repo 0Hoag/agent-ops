@@ -181,11 +181,15 @@ while true; do
   scripts/worktrees.sh --prune > "$dir/worktrees.txt" 2>&1
   scripts/branches.sh --delete > "$dir/branches.txt" 2>&1; scripts/audit.sh > "$dir/audit.txt" 2>&1   # no tokens; the pass reads the two files
   pre=$(results_stamp)
+  python3 scripts/autopilot-snapshot.py "$dir" $REPOS || exit 2
   # opencode v2 dropped --command/--attach/--dir: the prompt carries the instruction, cwd is the repo root.
   OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
     --format json \
     --title "autopilot $ts" \
-    "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully first), then end your turn with the report format it describes. Do not sleep or wait for workers; the shell calls you again." < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
+    "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully once), then end your turn with the report format it describes. Do not load the orchestrator-workers skill or its references. Do not list .agent-runs/coordinator/. Read ROADMAP.md only when planning new issues. Fetch issue bodies/comments only for issues acted on in this pass. Batch several gh commands per shell call. Use the inline snapshot for sync inventory; read the status board body separately. Do not read whole JSONL transcripts. Do not sleep or wait for workers; the shell calls you again.
+
+$(cat "$dir/snapshot.md")
+" < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
 
   [ -s "$dir/$ts.err" ] && { echo "  opencode error:"; head -3 "$dir/$ts.err" | sed 's/^/    /'; }
   events_valid=1

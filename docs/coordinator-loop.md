@@ -43,7 +43,7 @@ idle completion. These are bounded waits, not a claim that CI will finish. Quota
 
 One pass:
 
-1. **Sync.** `git pull`; `gh pr list`; open issues; for each running worker read only
+1. **Sync.** `git pull`; use the inline `.agent-runs/coordinator/snapshot.md` inventory (issues, PRs, live workers, last three final reports); fetch bodies/comments only for issues acted on this pass. For each running worker read only
    `tail -20 .agent-runs/<wave>.log` and `.agent-runs/<wave>.md` if present (never the whole `.jsonl`).
    Read the status board issue body.
 2. **Plan: many small issues, all up front.** Break the whole ROADMAP into fine-grained issues before
@@ -158,3 +158,39 @@ One pass:
 6. **End the pass** with a report of at most 10 lines. **First line** is one of:
    `AUTOPILOT: CONTINUE` (normal) · `AUTOPILOT: STOP roadmap done` · `AUTOPILOT: STOP owner decision: <question>`
    (only for ROADMAP "Câu hỏi mở" or the "ask the owner" list above). Never sleep or wait inside a pass.
+
+Snapshot maintenance runs before each model pass. Only timestamp-named `.md`, `.jsonl`, and `.err`
+files belonging to completed passes, all older than 24 hours and absent from live process commands,
+move to `archive/`. Incomplete reports/transcripts, recent files, hygiene inputs and support files stay.
+Snapshot inventory failures stop before the model starts; an old snapshot is never used as a fallback.
+
+Post-merge #430 acceptance is pending: the coordinator must run one actual pass with a valid final
+report and post its cached tokens versus the median of the previous ten passes (at least 40% lower).
+Do not start a nested loop for this measurement. Set `PASS` to that pass timestamp and run from the repo:
+
+```bash
+PASS=YYYYMMDD-HHMMSS python3 - <<'PY'
+import json, os, pathlib, statistics
+root = pathlib.Path('.agent-runs/coordinator')
+files = {p.stem: p for parent in (root / 'archive', root) for p in parent.glob('*.jsonl')}
+stamp = os.environ['PASS']
+previous = sorted(s for s in files if s < stamp)[-10:]
+assert len(previous) == 10, 'need ten prior pass transcripts'
+def cached(s):
+    total = 0
+    with files[s].open() as stream:
+        for line in stream:
+            event = json.loads(line)
+            if event.get('type') == 'step_finish':
+                total += event['part']['tokens']['cache']['read']
+    return total
+report = files[stamp].with_suffix('.md').read_text().splitlines()[0]
+assert report == 'AUTOPILOT: CONTINUE' or report.startswith('AUTOPILOT: STOP '), 'invalid report'
+median = statistics.median(cached(s) for s in previous)
+assert median > 0
+current = cached(stamp)
+print({'pass': stamp, 'previous': previous, 'median_cached': median,
+       'cached': current, 'reduction_percent': 100 * (1 - current / median),
+       'accepted': current <= .6 * median})
+PY
+```

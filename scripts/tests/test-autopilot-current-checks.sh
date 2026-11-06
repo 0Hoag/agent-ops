@@ -21,7 +21,12 @@ case "$1 $2" in
     malformed) printf '%s\n' '[{"name":"PR gate","state":null}]' ;;
     same-name-failure) printf '%s\n' '[{"name":"PR gate","workflow":"CI","state":"SUCCESS"},{"name":"PR gate","workflow":"external","state":"FAILURE"}]' ;;
   esac ;;
-  'pr view') printf '%s\n' 'Closes #413' ;;
+  'pr view')
+    case "$*" in
+      *state,headRefOid*) printf 'OPEN\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+      *--json\ state*) if [ -e "$MERGED" ]; then echo MERGED; else echo OPEN; fi ;;
+      *) printf '%s\n' 'Closes #413' ;;
+    esac ;;
   'issue view') printf '%s\n' 'OPEN' ;;
   'issue close'|'issue edit') : ;;
   'pr merge') : > "$MERGED" ;;
