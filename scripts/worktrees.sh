@@ -5,16 +5,20 @@
 #   scripts/worktrees.sh --remove PATH  # remove one worktree if SAFE; never forces
 # SAFE = clean tree, no process running inside it, and everything on it is already in the base: HEAD is an ancestor of
 # origin/reviews/development or origin/main, or equals the head of a merged PR. Anything else is reported with the reason
-# (DIRTY, UNPUSHED, BUSY) and left alone. Removal uses --force only after the check above found nothing but build leftovers.
+# (EVIDENCE, DIRTY, UNPUSHED, BUSY) and left alone. Removal uses --force only after these checks.
 set -uo pipefail
 mode=list; target=""
 case "${1:-}" in --prune) mode=prune; shift ;; --remove) mode=remove; target=${2:?path}; shift 2 ;; esac
 REPOS=("$@"); [ ${#REPOS[@]} -gt 0 ] || REPOS=("$HOME/agent-ops" "$HOME/agent-ops-client")
 
 verdict() { # repo path head merged_heads -> prints SAFE or the reason
-  local repo=$1 wt=$2 head=$3 merged=$4
+  local repo=$1 wt=$2 head=$3 merged=$4 evidence
   [ -d "$wt" ] || { echo MISSING; return; }
-  # Untracked build leftovers (dependency stores, dist, run logs) do not count as work.
+  # Never guess that ignored acceptance evidence has been archived. Keep even empty containers.
+  for evidence in .agent-runs test-results; do
+    [ ! -e "$wt/$evidence" ] && [ ! -L "$wt/$evidence" ] || { echo "EVIDENCE ($evidence; archive before removal)"; return; }
+  done
+  # Untracked build leftovers do not count as work; evidence containers were checked above.
   [ -z "$(git -C "$wt" status --porcelain 2>/dev/null | grep -Ev '^\?\? (\.pnpm-store|node_modules|dist|\.agent-runs|test-results)/?$')" ] || { echo DIRTY; return; }
   pgrep -f -- "$wt" > /dev/null && { echo BUSY; return; }
   for base in origin/reviews/development origin/main; do
