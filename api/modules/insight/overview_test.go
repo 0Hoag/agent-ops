@@ -28,7 +28,7 @@ func TestOverviewPeriodCostAndCacheArithmetic(t *testing.T) {
 
 	got := cost(run, price)
 	require.Equal(t, 3.8, got)
-	require.Equal(t, 1_750_000, run.InputTokens+run.CachedInputTokens+run.CacheWriteTokens)
+	require.Equal(t, int64(1_750_000), run.InputTokens+run.CachedInputTokens+run.CacheWriteTokens)
 	require.Equal(t, price, func() priceRow {
 		p, ok := priceAt([]priceRow{price}, "model-a", at)
 		require.True(t, ok)
@@ -41,7 +41,7 @@ func TestOverviewPeriodCostAndCacheArithmetic(t *testing.T) {
 func TestOverviewRejectsInvalidRangeWithoutDatabaseAccess(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{})
 	require.NoError(t, err)
 
