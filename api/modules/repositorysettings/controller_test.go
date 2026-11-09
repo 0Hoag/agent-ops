@@ -115,6 +115,11 @@ func TestTestRepositoryEndpointExercisesProviderAndAuthorization(t *testing.T) {
 			r.ServeHTTP(resp, req)
 			require.Equal(t, tc.status, resp.Code, resp.Body.String())
 			require.NotContains(t, resp.Body.String(), "secret-token")
+			if tc.name == "success" {
+				var payload TestResponse
+				require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+				require.Equal(t, "acme/app", payload.Data.ProjectName)
+			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
