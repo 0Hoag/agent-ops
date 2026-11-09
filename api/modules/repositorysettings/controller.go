@@ -117,6 +117,11 @@ func (c *Controller) view(r *store.Repository) View {
 // @Summary Sync repository
 // @Param repository_id path string true "Repository UUID"
 // @Success 200 {object} ViewResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 403 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Security BearerAuth
 // @Router /api/v1/repositories/{repository_id}/sync [post]
 func (c *Controller) Sync(ctx *gin.Context) {
 	org, ok := c.allowed(ctx, false)
