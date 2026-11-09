@@ -2296,6 +2296,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/work": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List repository work",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "State",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Title search",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/work.ListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/work/{kind}/{number}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get work detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "pr or issue",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Work number",
+                        "name": "number",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/work.Detail"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/workers/audit-history": {
             "get": {
                 "produces": [
@@ -4016,6 +4098,118 @@ const docTemplate = `{
                 },
                 "state": {
                     "type": "string"
+                }
+            }
+        },
+        "work.Detail": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "$ref": "#/definitions/work.Item"
+                },
+                "runs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/work.Run"
+                    }
+                }
+            }
+        },
+        "work.Item": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "ci_status": {
+                    "type": "string"
+                },
+                "cost_usd": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "last_activity": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "runs_count": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "work.ListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/work.Item"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/work.Meta"
+                }
+            }
+        },
+        "work.Meta": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "per_page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "work.Run": {
+            "type": "object",
+            "properties": {
+                "cache_hit": {
+                    "type": "boolean"
+                },
+                "cost_usd": {
+                    "type": "number"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "integer"
                 }
             }
         },
