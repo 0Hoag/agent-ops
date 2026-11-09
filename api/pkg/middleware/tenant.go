@@ -7,6 +7,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/auth"
 	"github.com/0Hoag/agent-ops/api/modules/board"
 	"github.com/0Hoag/agent-ops/api/modules/insight"
+	"github.com/0Hoag/agent-ops/api/modules/work"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +37,7 @@ func RequireOrganization(service *auth.Service) gin.HandlerFunc {
 		c.Request = c.Request.WithContext(board.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Request = c.Request.WithContext(insight.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Request = c.Request.WithContext(agentrun.WithOrganization(c.Request.Context(), s.OrganizationID))
+		c.Request = c.Request.WithContext(work.WithOrganization(c.Request.Context(), s.OrganizationID))
 		c.Next()
 	}
 }

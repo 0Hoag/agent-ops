@@ -911,6 +911,79 @@ definitions:
       state:
         type: string
     type: object
+  work.Detail:
+    properties:
+      item:
+        $ref: '#/definitions/work.Item'
+      runs:
+        items:
+          $ref: '#/definitions/work.Run'
+        type: array
+    type: object
+  work.Item:
+    properties:
+      author:
+        type: string
+      ci_status:
+        type: string
+      cost_usd:
+        type: number
+      created_at:
+        type: string
+      kind:
+        type: string
+      last_activity:
+        type: string
+      number:
+        type: integer
+      runs_count:
+        type: integer
+      state:
+        type: string
+      title:
+        type: string
+      tokens:
+        type: integer
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  work.ListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/work.Item'
+        type: array
+      meta:
+        $ref: '#/definitions/work.Meta'
+    type: object
+  work.Meta:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  work.Run:
+    properties:
+      cache_hit:
+        type: boolean
+      cost_usd:
+        type: number
+      ended_at:
+        type: string
+      id:
+        type: string
+      model:
+        type: string
+      started_at:
+        type: string
+      tokens:
+        type: integer
+    type: object
   worker.ActionAudit:
     properties:
       action:
@@ -2366,6 +2439,60 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Ingest provider webhook
+  /api/v1/work:
+    get:
+      parameters:
+      - description: Repository UUID
+        in: query
+        name: repository_id
+        required: true
+        type: string
+      - description: State
+        in: query
+        name: state
+        type: string
+      - description: Title search
+        in: query
+        name: q
+        type: string
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/work.ListResponse'
+      summary: List repository work
+  /api/v1/work/{kind}/{number}:
+    get:
+      parameters:
+      - description: Repository UUID
+        in: query
+        name: repository_id
+        required: true
+        type: string
+      - description: pr or issue
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: Work number
+        in: path
+        name: number
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/work.Detail'
+      summary: Get work detail
   /api/v1/workers/{worker_id}:
     get:
       parameters:

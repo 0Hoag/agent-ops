@@ -20,6 +20,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/wave"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
+	"github.com/0Hoag/agent-ops/api/modules/work"
 	"github.com/0Hoag/agent-ops/api/modules/worker"
 	"github.com/0Hoag/agent-ops/api/pkg/config"
 	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
@@ -140,6 +141,7 @@ func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *g
 		worker.NewRoutes(worker.NewController(execution, organization.NewRepository(gormDB), worker.NewAuditRepository(gormDB))).Register(private)
 	}
 	insight.NewRoutes(insight.NewController(insight.NewRepository(gormDB))).Register(private)
+	work.NewRoutes(work.NewController(work.NewRepository(gormDB))).Register(private)
 	alert.NewRoutes(alert.NewController(alert.NewRepository(gormDB), organization.NewRepository(gormDB))).Register(private)
 	if startRuntime && cfg.DatabaseURL != "" {
 		alert.NewRuntime(gormDB, 0, 100).Start(context.Background())
