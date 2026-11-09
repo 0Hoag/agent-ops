@@ -68,7 +68,7 @@ func (r *Repository) Overview(ctx context.Context, f OverviewFilter) (OverviewRe
 }
 
 func (r *Repository) overviewPeriod(ctx context.Context, repo string, from, to time.Time) (OverviewPeriod, error) {
-	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND ar.started_at >= ? AND ar.started_at < ?", organizationFromContext(ctx), from, to)
+	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND (ar.started_at >= ? AND ar.started_at < ? OR EXISTS (SELECT 1 FROM agent_run_steps ts WHERE ts.run_id = ar.id AND ts.started_at >= ? AND ts.started_at < ?))", organizationFromContext(ctx), from, to, from, to)
 	if repo != "" {
 		q = q.Where("ar.repository_id = ?", repo)
 	}
@@ -86,26 +86,20 @@ func (r *Repository) overviewPeriod(ctx context.Context, repo string, from, to t
 	cacheSavings := 0.0
 	hasSavings := false
 	for _, run := range runs {
-		out.Runs++
-		out.InputTokens += run.InputTokens
-		out.OutputTokens += run.OutputTokens
-		out.CacheReadTokens += run.CachedInputTokens
-		out.CacheWriteTokens += run.CacheWriteTokens
-		denom += run.InputTokens + run.CachedInputTokens
-		p, ok := priceAt(prices, run.Model, run.StartedAt)
-		if !ok {
-			if !seenMissing[run.Model] {
-				out.ModelsWithoutPrice = append(out.ModelsWithoutPrice, run.Model)
-				seenMissing[run.Model] = true
+		steps, err := r.usageSteps(ctx, run.ID)
+		if err != nil {
+			return OverviewPeriod{}, err
+		}
+		if compatibleTimeline(run.AnalyticsRun, steps) {
+			for _, step := range steps {
+				if step.StartedAt == nil || step.StartedAt.Before(from) || !step.StartedAt.Before(to) {
+					continue
+				}
+				r.addOverviewUsage(&out, run, stepRun(run.AnalyticsRun, step), *step.StartedAt, prices, &seenMissing, &denom, &cacheSavings, &hasSavings)
 			}
 			continue
 		}
-		c := cost(run.AnalyticsRun, p)
-		out.SpendUSD = add(out.SpendUSD, c)
-		baseline := float64(run.CachedInputTokens) * p.InputPerMillion / 1e6
-		actual := float64(run.CachedInputTokens) * p.CachedInputPerMillion / 1e6
-		cacheSavings += baseline - actual
-		hasSavings = true
+		r.addOverviewUsage(&out, run, run.AnalyticsRun, run.StartedAt, prices, &seenMissing, &denom, &cacheSavings, &hasSavings)
 	}
 	if denom > 0 {
 		out.CacheHitRate = float64(out.CacheReadTokens) / float64(denom)
@@ -134,6 +128,29 @@ func (r *Repository) overviewPeriod(ctx context.Context, repo string, from, to t
 	out.ReworkRate = delivery.SendBack.Rate
 	out.CIFirstPassRate = delivery.FirstCI.Rate
 	return out, nil
+}
+
+func (r *Repository) addOverviewUsage(out *OverviewPeriod, row overviewRun, run AnalyticsRun, at time.Time, prices []priceRow, seenMissing *map[string]bool, denom *int64, cacheSavings *float64, hasSavings *bool) {
+	out.Runs++
+	out.InputTokens += run.InputTokens
+	out.OutputTokens += run.OutputTokens
+	out.CacheReadTokens += run.CachedInputTokens
+	out.CacheWriteTokens += run.CacheWriteTokens
+	*denom += run.InputTokens + run.CachedInputTokens
+	p, ok := priceAt(prices, run.Model, at)
+	if !ok {
+		if !(*seenMissing)[run.Model] {
+			out.ModelsWithoutPrice = append(out.ModelsWithoutPrice, run.Model)
+			(*seenMissing)[run.Model] = true
+		}
+		return
+	}
+	c := cost(run, p)
+	out.SpendUSD = add(out.SpendUSD, c)
+	baseline := float64(run.CachedInputTokens) * p.InputPerMillion / 1e6
+	actual := float64(run.CachedInputTokens) * p.CachedInputPerMillion / 1e6
+	*cacheSavings += baseline - actual
+	*hasSavings = true
 }
 
 func (r *Repository) overviewAttention(ctx context.Context, repo string, now time.Time) ([]OverviewAttention, error) {
