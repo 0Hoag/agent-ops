@@ -14,8 +14,15 @@ import (
 
 type PriceRepository interface {
 	ListPrices(context.Context, string) ([]PriceVersion, error)
+	ListMissingPrices(context.Context, string) ([]MissingPrice, error)
 	CreatePrice(context.Context, *PriceVersion) error
 	UpdatePrice(context.Context, string, string, *PriceVersion) error
+}
+
+type MissingPrice struct {
+	Model  string `json:"model"`
+	Runs   int64  `json:"runs"`
+	Tokens int64  `json:"tokens"`
 }
 type PriceController struct {
 	repo        PriceRepository
@@ -63,6 +70,26 @@ func (c *PriceController) List(ctx *gin.Context) {
 	v, e := c.repo.ListPrices(ctx, org)
 	if e != nil {
 		response.InternalError(ctx, "failed to list prices")
+		return
+	}
+	response.OK(ctx, v)
+}
+
+// Missing returns models used by organization runs without a historical price in effect.
+// Configured fallback prices are not applied: this endpoint reports missing persisted prices.
+// @Summary List models missing an effective price
+// @Produce json
+// @Success 200 {object} response.SuccessResponse
+// @Security BearerAuth
+// @Router /api/v1/agent-run-prices/missing [get]
+func (c *PriceController) Missing(ctx *gin.Context) {
+	org, ok := c.allowed(ctx, false)
+	if !ok {
+		return
+	}
+	v, err := c.repo.ListMissingPrices(ctx, org)
+	if err != nil {
+		response.InternalError(ctx, "failed to list missing prices")
 		return
 	}
 	response.OK(ctx, v)
