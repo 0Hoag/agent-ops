@@ -66,6 +66,21 @@ func (r *Repository) ListPrices(ctx context.Context, org string) ([]PriceVersion
 	err := r.db.WithContext(ctx).Where("organization_id = ?", org).Order("model, effective_date DESC").Find(&out).Error
 	return out, err
 }
+
+func (r *Repository) ListMissingPrices(ctx context.Context, org string) ([]MissingPrice, error) {
+	var out []MissingPrice
+	const tokenTotal = "input_tokens + cached_input_tokens + cache_write_tokens + output_tokens + reasoning_tokens"
+	err := r.db.WithContext(ctx).Table("agent_runs ar").
+		Select("ar.model, COUNT(*) AS runs, COALESCE(SUM("+tokenTotal+"), 0) AS tokens").
+		Joins("JOIN repositories repo ON repo.id = ar.repository_id").
+		Where("repo.organization_id = ?", org).
+		Where("NOT EXISTS (?)", r.db.Table("agent_run_price_versions pv").Select("1").Where("pv.organization_id = repo.organization_id AND pv.model = ar.model AND pv.effective_date <= ar.started_at::date")).
+		Group("ar.model").Order("ar.model ASC").Scan(&out).Error
+	if err != nil {
+		return nil, fmt.Errorf("list missing prices: %w", err)
+	}
+	return out, nil
+}
 func (r *Repository) CreatePrice(ctx context.Context, p *PriceVersion) error {
 	if err := validatePrice(p); err != nil {
 		return err

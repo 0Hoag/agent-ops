@@ -108,3 +108,32 @@ func (c *Controller) Delivery(ctx *gin.Context) {
 	}
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
 }
+
+// Overview returns organization-scoped current and previous period summary metrics.
+// @Summary Get overview summary
+// @Produce json
+// @Param repository_id query string false "Repository UUID" format(uuid)
+// @Param from query string true "Inclusive UTC start date (YYYY-MM-DD)"
+// @Param to query string true "Inclusive UTC end date (YYYY-MM-DD)"
+// @Success 200 {object} OverviewResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/overview [get]
+func (c *Controller) Overview(ctx *gin.Context) {
+	from, err := time.Parse("2006-01-02", ctx.Query("from"))
+	if err != nil {
+		response.BadRequest(ctx, "from must be YYYY-MM-DD")
+		return
+	}
+	to, err := time.Parse("2006-01-02", ctx.Query("to"))
+	if err != nil {
+		response.BadRequest(ctx, "to must be YYYY-MM-DD")
+		return
+	}
+	data, err := c.repository.Overview(ctx.Request.Context(), OverviewFilter{RepositoryID: ctx.Query("repository_id"), From: from, To: to})
+	if err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
+	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}

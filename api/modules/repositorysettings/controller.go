@@ -262,6 +262,7 @@ func (c *Controller) Update(ctx *gin.Context) {
 // @Failure 401 {object} response.ErrorResponse
 // @Failure 403 {object} response.ErrorResponse
 // @Failure 404 {object} response.ErrorResponse
+// @Failure 409 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/repositories/{repository_id} [delete]
@@ -273,6 +274,10 @@ func (c *Controller) Delete(ctx *gin.Context) {
 	err := c.repos.DeleteByOrganization(ctx, org, store.UUID(ctx.Param("repository_id")))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		response.NotFound(ctx, "repository not found")
+		return
+	}
+	if errors.Is(err, store.ErrRepositoryHasDependencies) {
+		response.Conflict(ctx, "repository cannot be deleted while dependent agent runs exist")
 		return
 	}
 	if err != nil {

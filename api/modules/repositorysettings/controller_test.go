@@ -12,6 +12,7 @@ import (
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
@@ -120,6 +121,42 @@ func TestTestRepositoryEndpointExercisesProviderAndAuthorization(t *testing.T) {
 				require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
 				require.Equal(t, "acme/app", payload.Data.ProjectName)
 			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestDeleteMapsRepositoryStoreErrorsToHTTPResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		dbErr      error
+		wantStatus int
+	}{
+		{name: "foreign key dependency", dbErr: &pgconn.PgError{Code: "23503"}, wantStatus: http.StatusConflict},
+		{name: "unrelated database error", dbErr: sqlmock.ErrCancelled, wantStatus: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+			require.NoError(t, err)
+			require.NoError(t, db.Callback().Delete().Before("gorm:delete").Register("repositorysettings_test_error", func(tx *gorm.DB) { tx.Error = tc.dbErr }))
+			orgID, accountID := "org-a", "account-a"
+			repositoryID := "11111111-1111-1111-1111-111111111111"
+			mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2 ORDER BY "organization_memberships"."id" LIMIT $3`)).
+				WithArgs(orgID, accountID, 1).
+				WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "account_id", "role"}).AddRow("membership-a", orgID, accountID, "owner"))
+			controller := NewController(store.New(db).Repositories, organization.NewRepository(db), nil, "")
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/repositories/"+repositoryID, nil)
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = req
+			ctx.Params = gin.Params{{Key: "repository_id", Value: repositoryID}}
+			ctx.Set("organization_id", orgID)
+			ctx.Set("account_id", accountID)
+			controller.Delete(ctx)
+			require.Equal(t, tc.wantStatus, w.Code, w.Body.String())
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}

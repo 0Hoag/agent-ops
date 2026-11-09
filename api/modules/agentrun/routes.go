@@ -23,6 +23,7 @@ func (r *Routes) RegisterAggregate(g *gin.RouterGroup) {
 func RegisterPriceRoutes(g *gin.RouterGroup, c *PriceController) {
 	p := g.Group("/agent-run-prices")
 	p.GET("", c.List)
+	p.GET("/missing", c.Missing)
 	p.POST("", c.Create)
 	p.PATCH("/:price_id", c.Update)
 }
