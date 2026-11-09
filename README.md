@@ -1,62 +1,45 @@
-# agent-ops
+# Agent Ops
 
-Dashboard theo dõi quy trình **orchestrator-workers**: một agent coordinator giao issue cho các worker agent,
-worker mở PR/MR, coordinator kiểm tra và merge. Agent Ops cho biết:
+Agent Ops turns agent work into evidence you can act on. It answers three questions that GitLab and GitHub do not:
 
-- board: issue nào đang ở đâu, worker nào giữ, PR/MR nào chờ CI;
-- chi phí: input / output / cache read / cache write, cache hit %, $ theo worker, theo đợt, theo issue;
-- chất lượng: tỉ lệ PR bị gửi lại, CI xanh lần đầu, thời gian mỗi issue.
+- What did AI work cost? See cost by week, merge request, issue, tool, and model.
+- Is it getting more efficient? See cache-hit rate, cost per merged MR, rework rate, and first-pass CI rate.
+- What needs attention now? See work stuck in CI or review, sessions with no MR, and models without a price.
 
-Hỗ trợ **GitHub và GitLab** (provider pattern), để dùng được cho repo cá nhân lẫn repo công ty.
+GitLab and GitHub remain the source for issue and merge-request detail; Agent Ops links to them instead of copying them.
 
-Project này cũng được xây **bằng chính quy trình orchestrator-workers** (Codex coordinator + worker).
-Số liệu quá trình xây nằm trong issue ghim **Status board** (label `status-board`).
+## Start in five steps
 
-## Stack
-
-| | |
-| --- | --- |
-| API (`api/`) | Go, Gin, GORM + Postgres, migration SQL đánh số, Swagger (swaggo), testify, Air, golangci-lint |
-| Client (`0Hoag/agent-ops-client`, sibling checkout `../agent-ops-client`) | React 18 + TypeScript, Rspack, pnpm, TanStack Query/Table, axios, react-router 6, react-hook-form, Tailwind, Vitest |
-
-## Đọc gì trước
-
-- Agent: `AGENTS.md` (bắt buộc), rồi `ROLES.md`, `FIVE-MINUTES.md`.
-- Kiến trúc: `docs/architecture.md`. Chuẩn code: `docs/be-standards.md`, `docs/client-standards.md`.
-- Kế hoạch: `ROADMAP.md`; trạng thái hiện tại: issue ghim Status board.
-
-## Local API development
-
-Prerequisites: Docker with Compose and Go. The default host API connection is
-`postgres://agent_ops:agent_ops_dev@localhost:5432/agent_ops?sslmode=disable`.
-Start the development database with `docker compose up -d postgres`. Set the
-variables from `api/.env.example` in your shell, then run the host API from
-`api/` with `go run .`. The database is stored in the persistent
-`agent_ops_postgres` volume. To avoid a host port collision, choose an unused
-port with `POSTGRES_HOST_PORT=15432 docker compose up -d postgres` and set
-`DATABASE_URL=postgres://agent_ops:agent_ops_dev@localhost:15432/agent_ops?sslmode=disable`
-for the host API. Do not use the Compose-internal hostname `postgres` from a
-host process.
-
-## Run everything locally
-
-See the [local installation and adoption guide](docs/install.md) for exact prerequisites, sibling checkouts, locally generated `JWT_SECRET` and `REPOSITORY_ENCRYPTION_KEY`, `CLIENT_DIR`, persistent Compose startup, health/readiness checks, account and organization bootstrap, provider setup, transcript reporting, and upgrade/rollback safety. The defaults are local/development only; do not use them as a production deployment recipe.
-
-## Browser smoke test
-
-Prerequisites: Docker with Compose, Node.js 20.19+ and pnpm 11.21+, and Chromium available to Playwright (`pnpm exec playwright install chromium` once in the client checkout if needed). The smoke uses `~/agent-ops-client` by default, cloning it if absent and only fast-forwarding a clean checkout. To avoid modifying a canonical checkout with user changes, use a clean disposable client clone and set `CLIENT_DIR` as shown below. No external credentials or shared database are used; the smoke creates an isolated Postgres/API stack and disposable repository, issue, pull request, and CI fixtures.
-
-From a fresh `agent-ops` worktree, run these commands (the smoke clones the client automatically when it does not exist):
+The shortest supported local path is: start the isolated Compose stack, create the first account, connect a GitLab project,
+push one synthetic transcript, then open **Overview**. The repository does not promise a five-minute duration: record the
+elapsed time on your machine. The complete, command-by-command guide is [docs/install.md](docs/install.md).
 
 ```sh
-make smoke
+git clone https://github.com/0Hoag/agent-ops.git
+git clone https://github.com/0Hoag/agent-ops-client.git
+cd agent-ops
+export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
+export SMOKE_API_PORT=28080 SMOKE_CLIENT_PORT=24173 POSTGRES_HOST_PORT=25432
+export JWT_SECRET="$(openssl rand -hex 32)"
+export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export AGENT_RUN_TOKEN="local-only-transcript-token"
+docker compose -p agent-ops-docs config --quiet
+docker compose -p agent-ops-docs up --build -d
 ```
 
-For a strictly disposable client checkout, run these commands from this repository (the clone location must not already exist):
+Then follow [the timed quickstart](docs/install.md#timed-five-step-quickstart). Use only synthetic credentials and an
+isolated Compose project, ports, and volume. Do not use this local setup as a production deployment recipe.
 
-```sh
-git clone https://github.com/0Hoag/agent-ops-client.git ../agent-ops-client-smoke
-CLIENT_DIR="$(pwd)/../agent-ops-client-smoke" make smoke
-```
+## What is here
 
-The command builds and previews the client against the API, launches Chromium to assert the visible seeded issue and linked PR/CI plus successful API network responses, and saves logs/screenshot under `.agent-runs/smoke/`. It always stops its preview process and removes its uniquely named containers and volume; persistent development Compose data is not touched. If the sibling checkout already exists, it is fetched/fast-forwarded only when clean; user changes are preserved by refusing to update. API and client ports can be overridden with `SMOKE_API_PORT` and `SMOKE_CLIENT_PORT`.
+- `api/` — Go API, PostgreSQL persistence, provider webhooks, account bootstrap, and transcript ingestion.
+- `docs/install.md` — local startup, first account, GitLab project, transcript, Overview, and data-safety guidance.
+- `docs/` — architecture and operational notes.
+
+The client is a separate repository. The current documentation describes only capabilities present in this tree; pending
+W18 UI/API work is not presented as available.
+
+## Development
+
+API prerequisites are Docker Compose and Go. Read [docs/be-standards.md](docs/be-standards.md) before changing API code.
+For the full local acceptance smoke, see the [client smoke instructions](docs/install.md#browser-result).
