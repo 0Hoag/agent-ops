@@ -20,6 +20,9 @@ type ActionAudit struct {
 	Outcome        string     `gorm:"not null"`
 	CreatedAt      time.Time  `gorm:"not null"`
 }
+
+func (ActionAudit) TableName() string { return "worker_action_audits" }
+
 type AuditRepository interface {
 	Create(context.Context, *ActionAudit) error
 }
