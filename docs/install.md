@@ -37,12 +37,15 @@ secret values. Do not reuse these development values for a hosted deployment.
 export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
 export JWT_SECRET="$(openssl rand -hex 32)"
 export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 16)"
+export AGENT_RUN_TOKEN='local-agent-run-token'
 docker compose config --quiet
 docker compose up --build -d
 ```
 
 `CLIENT_DIR`, `JWT_SECRET`, and `REPOSITORY_ENCRYPTION_KEY` are required by the
-current `docker-compose.yml`. The API loader permits an empty encryption key for
+current `docker-compose.yml`. `AGENT_RUN_TOKEN` is optional: leave it empty to
+disable transcript ingestion, or set the same private value used by the CLI to
+enable it. The API loader permits an empty encryption key for
 deployments that do not configure encrypted repository secrets, but any supplied
 key must be exactly 32 bytes. The default host ports are client `4173`, API
 `18080`, and PostgreSQL `5432`; override them with `SMOKE_CLIENT_PORT`,
@@ -57,6 +60,9 @@ Check liveness and readiness at `http://localhost:${SMOKE_CLIENT_PORT:-4173}/hea
 and `http://localhost:${SMOKE_CLIENT_PORT:-4173}/readyz`. Direct API checks are
 available at `http://localhost:${SMOKE_API_PORT:-18080}/healthz` and `/readyz`.
 Open `http://localhost:${SMOKE_CLIENT_PORT:-4173}` for the dashboard.
+Sign in at `http://localhost:${SMOKE_CLIENT_PORT:-4173}/login`. If you change
+`AGENT_RUN_TOKEN`, recreate the API container (`docker compose up -d --force-recreate api`)
+before pushing transcripts so the API and CLI use the matching token.
 
 ## First account and organization
 
@@ -95,6 +101,8 @@ TOKEN=$(printf '%s' "$LOGIN_JSON" | jq -r '.token')
 curl -fsS "$API/api/v1/organizations" -H "Authorization: Bearer $TOKEN"
 ```
 
+The dashboard sign-in page is `/login`.
+
 Create the first organization through `POST /api/v1/organizations` with
 `{"name":"Your organization"}`. The creator becomes its owner. Select it with
 `POST /api/v1/auth/select-organization` and
@@ -120,7 +128,8 @@ perform external webhook registration.
 
 ## Push or watch transcripts
 
-Build the CLI from `api/`, set `AGENT_RUN_TOKEN`, and supply the repository UUID,
+Build the CLI from `api/`, set `AGENT_RUN_TOKEN` to the same value configured for
+the API before starting the stack, and supply the repository UUID,
 wave, and worker metadata. `push` accepts one Codex, OpenCode, or Claude JSONL
 transcript and `watch` polls Claude's projects directory. The complete supported
 flags are in [api/cmd/agentops/README.md](../api/cmd/agentops/README.md).
@@ -171,9 +180,15 @@ export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
 export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
 export JWT_SECRET="$(openssl rand -hex 32)"
 export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 16)"
+export AGENT_RUN_TOKEN='local-agent-run-token'
 docker compose -f compose.prod.yml config --quiet
 docker compose -f compose.prod.yml up --build -d
 ```
+
+`AGENT_RUN_TOKEN` is optional for production-shaped local Compose: without it,
+agent-run ingestion is disabled. When it is set, configure the CLI with the
+same value. If it changes, recreate the API container before using the CLI:
+`docker compose -f compose.prod.yml up -d --force-recreate api`.
 
 The defaults publish the client on `18081`, the API on `18080`, and PostgreSQL
 on `15432`; override `PRODUCTION_CLIENT_PORT`, `PRODUCTION_API_PORT`, and
