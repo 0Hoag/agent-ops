@@ -1094,6 +1094,18 @@ paths:
       security:
       - BearerAuth: []
       summary: Update model price version
+  /api/v1/agent-run-prices/missing:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: List models missing an effective price
   /api/v1/agent-runs:
     get:
       parameters:

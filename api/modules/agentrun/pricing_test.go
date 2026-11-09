@@ -167,11 +167,16 @@ type pricingRepo struct {
 	updated      bool
 	org          string
 	id           string
+	missing      []MissingPrice
+	missingOrg   string
 }
 
 type duplicatePricingRepo struct{ calls int }
 
 func (p *duplicatePricingRepo) ListPrices(context.Context, string) ([]PriceVersion, error) {
+	return nil, nil
+}
+func (p *duplicatePricingRepo) ListMissingPrices(context.Context, string) ([]MissingPrice, error) {
 	return nil, nil
 }
 func (p *duplicatePricingRepo) CreatePrice(context.Context, *PriceVersion) error {
@@ -188,6 +193,10 @@ func (p *duplicatePricingRepo) UpdatePrice(context.Context, string, string, *Pri
 func (p *pricingRepo) ListPrices(_ context.Context, org string) ([]PriceVersion, error) {
 	p.org = org
 	return p.prices, nil
+}
+func (p *pricingRepo) ListMissingPrices(_ context.Context, org string) ([]MissingPrice, error) {
+	p.missingOrg = org
+	return p.missing, nil
 }
 func (p *pricingRepo) CreatePrice(_ context.Context, price *PriceVersion) error {
 	p.created = true
@@ -254,6 +263,24 @@ func TestPriceControllerListAndUpdateAreTenantScoped(t *testing.T) {
 	r.ServeHTTP(httptest.NewRecorder(), req)
 	require.Equal(t, "org-a", repo.org)
 	require.Equal(t, "price-1", repo.id)
+}
+
+func TestPriceControllerMissingIsTenantScopedAndReturnsUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &pricingRepo{missing: []MissingPrice{{Model: "unknown-model", Runs: 2, Tokens: 1234}}}
+	r := gin.New()
+	r.GET("/api/v1/agent-run-prices/missing", func(c *gin.Context) {
+		c.Set("organization_id", "org-a")
+		c.Set("account_id", "acct-a")
+		NewPriceController(repo, pricingMemberships{role: "member"}).Missing(c)
+	})
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/v1/agent-run-prices/missing", nil))
+	require.Equal(t, http.StatusOK, res.Code)
+	require.Contains(t, res.Body.String(), `"model":"unknown-model"`)
+	require.Contains(t, res.Body.String(), `"runs":2`)
+	require.Contains(t, res.Body.String(), `"tokens":1234`)
+	require.Equal(t, "org-a", repo.missingOrg)
 }
 
 func TestPriceControllerOwnerAndAdminCanWrite(t *testing.T) {

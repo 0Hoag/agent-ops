@@ -72,6 +72,27 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/agent-run-prices/missing": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List models missing an effective price",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/agent-run-prices/{price_id}": {
             "patch": {
                 "security": [
