@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/insight"
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/repositorysettings"
+	"github.com/0Hoag/agent-ops/api/modules/repositorysync"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/modules/wave"
 	"github.com/0Hoag/agent-ops/api/modules/webhook"
@@ -74,11 +76,20 @@ func main() {
 		logger.Fatal(fmt.Errorf("run migrations: %w", err))
 	}
 	configured := store.New(db)
+	sealer, _ := appcrypto.New(cfg.EncryptionKey)
 	for _, repository := range cfg.Repositories {
 		if err := configured.Repositories.UpsertConfigured(context.Background(), &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv}); err != nil {
 			logger.Fatal(fmt.Errorf("configure repository: %w", err))
 		}
 	}
+	syncService := repositorysync.New(configured, sealer)
+	go func() {
+		ticker := time.NewTicker(cfg.SyncInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			runScheduledSync(context.Background(), log, syncService)
+		}
+	}()
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -86,7 +97,7 @@ func main() {
 	router.Use(productionCORS(cfg))
 	router.Use(logger.Request(log))
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	registerRoutes(router, database.AsPinger(db), db, cfg)
+	registerRoutesWithSync(router, database.AsPinger(db), db, cfg, syncService)
 
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	log.Info("api listening", "addr", cfg.HTTPAddr)
@@ -95,19 +106,32 @@ func main() {
 	}
 }
 
+type repositorySyncer interface {
+	SyncAll(context.Context) error
+}
+
+func runScheduledSync(ctx context.Context, log *slog.Logger, syncer repositorySyncer) {
+	if syncer.SyncAll(ctx) != nil {
+		log.Error("scheduled repository sync failed")
+	}
+}
+
 func productionCORS(cfg config.Config) gin.HandlerFunc {
 	return cors.New(cors.Config{AllowOrigins: cfg.CORSOrigins, AllowMethods: []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"}, AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-Hub-Signature-256", "X-Gitlab-Token", "X-Agent-Run-Token"}, AllowCredentials: false, MaxAge: 12 * time.Hour})
 }
 
 func registerRoutes(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config) {
-	registerRoutesWithRuntime(router, db, gormDB, cfg, nil, true)
+	registerRoutesWithRuntime(router, db, gormDB, cfg, nil, true, nil)
+}
+func registerRoutesWithSync(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, syncService *repositorysync.Service) {
+	registerRoutesWithRuntime(router, db, gormDB, cfg, nil, true, syncService)
 }
 
 func registerRoutesWithHub(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub) {
-	registerRoutesWithRuntime(router, db, gormDB, cfg, supplied, false)
+	registerRoutesWithRuntime(router, db, gormDB, cfg, supplied, false, nil)
 }
 
-func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub, startRuntime bool) {
+func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *gorm.DB, cfg config.Config, supplied *board.Hub, startRuntime bool, syncService *repositorysync.Service) {
 	handlers.NewHealth(db).Register(router)
 	serviceMetrics := metrics.New(nil)
 	router.Use(serviceMetrics.GinMiddleware())
@@ -131,7 +155,7 @@ func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *g
 	webhook.NewRoutes(webhook.NewController(webhookService, configs)).Register(router.Group("/api/v1"))
 	private := router.Group("/api/v1", middleware.RequireOrganization(authService))
 	if sealer, sealErr := appcrypto.New(cfg.EncryptionKey); sealErr == nil {
-		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "")).Register(private)
+		repositorysettings.NewRoutes(repositorysettings.NewController(store.New(gormDB).Repositories, organization.NewRepository(gormDB), sealer, "", syncService)).Register(private)
 	}
 	agentrun.RegisterPriceRoutes(private, agentrun.NewPriceController(agentrun.NewRepository(gormDB), organization.NewRepository(gormDB)))
 	board.NewRoutes(board.NewControllerWithHub(board.NewRepository(gormDB), hub)).Register(private)

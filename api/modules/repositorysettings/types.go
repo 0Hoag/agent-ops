@@ -1,5 +1,7 @@
 package repositorysettings
 
+import "time"
+
 type CreateRequest struct {
 	Provider       string            `json:"provider"`
 	FullName       string            `json:"full_name"`
@@ -21,6 +23,9 @@ type View struct {
 	GitLabBaseURL  string            `json:"gitlab_base_url,omitempty"`
 	StatusMappings map[string]string `json:"status_mappings"`
 	WebhookURL     string            `json:"webhook_url"`
+	LastSyncedAt   *time.Time        `json:"last_synced_at,omitempty"`
+	LastSyncStatus string            `json:"last_sync_status"`
+	LastSyncError  string            `json:"last_sync_error,omitempty"`
 }
 
 type CreatedView struct {
@@ -40,4 +45,17 @@ type ViewResponse struct {
 type CreatedResponse struct {
 	Status int         `json:"status"`
 	Data   CreatedView `json:"data"`
+}
+type TestRequest struct {
+	Provider string `json:"provider"`
+	FullName string `json:"full_name"`
+	BaseURL  string `json:"base_url"`
+	Token    string `json:"token"`
+}
+type TestView struct {
+	ProjectName string `json:"project_name"`
+}
+type TestResponse struct {
+	Status int      `json:"status"`
+	Data   TestView `json:"data"`
 }

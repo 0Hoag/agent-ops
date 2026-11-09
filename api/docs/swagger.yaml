@@ -4,6 +4,8 @@ definitions:
     properties:
       billing_type:
         type: string
+      branch:
+        type: string
       cache_write_tokens:
         type: integer
       cached_input_tokens:
@@ -88,6 +90,8 @@ definitions:
   agentrun.CreateInput:
     properties:
       billing_type:
+        type: string
+      branch:
         type: string
       cache_write_tokens:
         type: integer
@@ -799,6 +803,12 @@ definitions:
         type: string
       id:
         type: string
+      last_sync_error:
+        type: string
+      last_sync_status:
+        type: string
+      last_synced_at:
+        type: string
       provider:
         type: string
       status_mappings:
@@ -818,6 +828,29 @@ definitions:
         type: array
       status:
         type: integer
+    type: object
+  repositorysettings.TestRequest:
+    properties:
+      base_url:
+        type: string
+      full_name:
+        type: string
+      provider:
+        type: string
+      token:
+        type: string
+    type: object
+  repositorysettings.TestResponse:
+    properties:
+      data:
+        $ref: '#/definitions/repositorysettings.TestView'
+      status:
+        type: integer
+    type: object
+  repositorysettings.TestView:
+    properties:
+      project_name:
+        type: string
     type: object
   repositorysettings.UpdateRequest:
     properties:
@@ -839,6 +872,12 @@ definitions:
       gitlab_base_url:
         type: string
       id:
+        type: string
+      last_sync_error:
+        type: string
+      last_sync_status:
+        type: string
+      last_synced_at:
         type: string
       provider:
         type: string
@@ -2179,6 +2218,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2264,6 +2307,61 @@ paths:
       security:
       - BearerAuth: []
       summary: Update repository settings
+  /api/v1/repositories/{repository_id}/sync:
+    post:
+      parameters:
+      - description: Repository UUID
+        in: path
+        name: repository_id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.ViewResponse'
+      summary: Sync repository
+  /api/v1/repositories/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Repository connection
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/repositorysettings.TestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.TestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Test repository provider access
   /api/v1/waves:
     get:
       produces:

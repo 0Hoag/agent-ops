@@ -1,6 +1,7 @@
 package repositorysettings
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/crypto"
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
+	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm/builder"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -19,11 +22,64 @@ type Controller struct {
 	orgs        *organization.Repository
 	sealer      *crypto.Sealer
 	webhookBase string
+	sync        syncService
 }
 
-func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string) *Controller {
-	return &Controller{repos: repos, orgs: orgs, sealer: sealer, webhookBase: strings.TrimRight(webhookBase, "/")}
+type syncService interface {
+	Sync(context.Context, store.UUID) error
 }
+
+// Test checks provider access without storing the candidate repository or token.
+// @Summary Test repository provider access
+// @Accept json
+// @Produce json
+// @Param request body TestRequest true "Repository connection"
+// @Success 200 {object} TestResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 403 {object} response.ErrorResponse
+// @Failure 422 {object} response.ErrorResponse
+// @Failure 502 {object} response.ErrorResponse
+// @Security BearerAuth
+// @Router /api/v1/repositories/test [post]
+func (c *Controller) Test(ctx *gin.Context) {
+	if _, ok := c.allowed(ctx, true); !ok {
+		return
+	}
+	var req TestRequest
+	if ctx.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Provider) == "" || strings.TrimSpace(req.FullName) == "" || strings.TrimSpace(req.BaseURL) == "" || strings.TrimSpace(req.Token) == "" {
+		response.BadRequest(ctx, "provider, full_name, base_url and token are required")
+		return
+	}
+	provider, err := builder.Build(req.Provider, scm.Config{Token: req.Token, APIBaseURL: req.BaseURL})
+	if err != nil {
+		response.BadRequest(ctx, "unsupported provider")
+		return
+	}
+	name, err := provider.TestRepository(ctx.Request.Context(), req.FullName)
+	if errors.Is(err, scm.ErrInvalidToken) {
+		response.UnprocessableEntity(ctx, "provider token is invalid")
+		return
+	}
+	if errors.Is(err, scm.ErrProjectNotFound) {
+		response.NotFound(ctx, "repository project not found")
+		return
+	}
+	if err != nil {
+		response.BadGateway(ctx, "provider host is unreachable")
+		return
+	}
+	response.OK(ctx, TestView{ProjectName: name})
+}
+
+func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string, services ...syncService) *Controller {
+	c := &Controller{repos: repos, orgs: orgs, sealer: sealer, webhookBase: strings.TrimRight(webhookBase, "/")}
+	if len(services) > 0 {
+		c.sync = services[0]
+	}
+	return c
+}
+
 func (c *Controller) org(ctx *gin.Context) (string, bool) {
 	id, ok := ctx.Get("organization_id")
 	s, valid := id.(string)
@@ -52,9 +108,40 @@ func (c *Controller) allowed(ctx *gin.Context, write bool) (string, bool) {
 func accountID(ctx *gin.Context) string { v, _ := ctx.Get("account_id"); s, _ := v.(string); return s }
 func (c *Controller) view(r *store.Repository) View {
 	base := c.webhookBase
-	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: base + "/api/v1/webhooks/" + r.Provider}
+	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: base + "/api/v1/webhooks/" + r.Provider, LastSyncedAt: r.LastSyncedAt, LastSyncStatus: r.LastSyncStatus, LastSyncError: r.LastSyncError}
 	_ = json.Unmarshal(r.StatusMappings, &v.StatusMappings)
 	return v
+}
+
+// Sync performs an authenticated immediate provider sync.
+// @Summary Sync repository
+// @Param repository_id path string true "Repository UUID"
+// @Success 200 {object} ViewResponse
+// @Router /api/v1/repositories/{repository_id}/sync [post]
+func (c *Controller) Sync(ctx *gin.Context) {
+	org, ok := c.allowed(ctx, false)
+	if !ok || c.sync == nil {
+		return
+	}
+	r, err := c.repos.GetByOrganization(ctx, store.UUID(org), store.UUID(ctx.Param("repository_id")))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.NotFound(ctx, "repository not found")
+		return
+	}
+	if err != nil {
+		response.InternalError(ctx, "failed to get repository")
+		return
+	}
+	if err = c.sync.Sync(ctx.Request.Context(), r.ID); err != nil {
+		response.InternalError(ctx, "repository sync failed")
+		return
+	}
+	latest, err := c.repos.Get(ctx, r.ID)
+	if err != nil {
+		response.InternalError(ctx, "failed to load repository sync status")
+		return
+	}
+	response.OK(ctx, c.view(latest))
 }
 
 // List returns repository settings without stored credentials.
@@ -217,6 +304,7 @@ func (c *Controller) Update(ctx *gin.Context) {
 // @Failure 401 {object} response.ErrorResponse
 // @Failure 403 {object} response.ErrorResponse
 // @Failure 404 {object} response.ErrorResponse
+// @Failure 409 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/repositories/{repository_id} [delete]
@@ -228,6 +316,10 @@ func (c *Controller) Delete(ctx *gin.Context) {
 	err := c.repos.DeleteByOrganization(ctx, org, store.UUID(ctx.Param("repository_id")))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		response.NotFound(ctx, "repository not found")
+		return
+	}
+	if errors.Is(err, store.ErrRepositoryHasDependencies) {
+		response.Conflict(ctx, "repository cannot be deleted while dependent agent runs exist")
 		return
 	}
 	if err != nil {

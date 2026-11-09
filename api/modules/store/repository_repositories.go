@@ -4,11 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var ErrRepositoryHasDependencies = errors.New("repository has dependent data")
+
+func isForeignKeyViolation(err error) bool {
+	if errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
+}
 
 type RepositoryRepository struct{ db *gorm.DB }
 
@@ -81,8 +93,24 @@ func (repository *RepositoryRepository) ListByOrganization(ctx context.Context, 
 	}
 	return items, nil
 }
+func (repository *RepositoryRepository) ListAll(ctx context.Context) ([]Repository, error) {
+	var items []Repository
+	if err := repository.db.WithContext(ctx).Order("full_name ASC").Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("list repositories: %w", err)
+	}
+	return items, nil
+}
+func (repository *RepositoryRepository) UpdateSyncStatus(ctx context.Context, id UUID, at *time.Time, status, syncError string) error {
+	if err := repository.db.WithContext(ctx).Model(&Repository{}).Where("id = ?", id).Updates(map[string]any{"last_synced_at": at, "last_sync_status": status, "last_sync_error": syncError}).Error; err != nil {
+		return fmt.Errorf("update repository sync status: %w", err)
+	}
+	return nil
+}
 func (repository *RepositoryRepository) DeleteByOrganization(ctx context.Context, organizationID string, id UUID) error {
 	if result := repository.db.WithContext(ctx).Where("id = ? AND organization_id = ?", id, organizationID).Delete(&Repository{}); result.Error != nil {
+		if isForeignKeyViolation(result.Error) {
+			return fmt.Errorf("delete repository: %w", ErrRepositoryHasDependencies)
+		}
 		return fmt.Errorf("delete repository: %w", result.Error)
 	} else if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound

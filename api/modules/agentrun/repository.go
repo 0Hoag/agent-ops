@@ -11,11 +11,22 @@ import (
 
 type Repository struct{ db *gorm.DB }
 
+func (r *Repository) PRNumberByBranch(ctx context.Context, repositoryID, branch string) (*int64, error) {
+	var row struct{ Number int64 }
+	if err := r.db.WithContext(ctx).Table("pull_requests").Select("number").Where("repository_id = ? AND branch = ?", repositoryID, branch).Order("number DESC").First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find pull request by branch: %w", err)
+	}
+	return &row.Number, nil
+}
+
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
 	q := r.db.WithContext(ctx)
 	if run.Harness != nil && run.SessionID != nil && *run.Harness != "" && *run.SessionID != "" {
-		q = q.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "harness"}, {Name: "session_id"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "harness <> '' AND session_id <> ''"}}}, DoUpdates: clause.AssignmentColumns([]string{"wave", "worker", "model", "issue_numbers", "pr_number", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "updated_at"})})
+		q = q.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "harness"}, {Name: "session_id"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "harness <> '' AND session_id <> ''"}}}, DoUpdates: clause.AssignmentColumns([]string{"wave", "worker", "model", "issue_numbers", "pr_number", "branch", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "updated_at"})})
 	}
 	if err := q.Create(run).Error; err != nil {
 		return fmt.Errorf("create agent run: %w", err)

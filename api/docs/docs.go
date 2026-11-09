@@ -1742,6 +1742,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/repositories/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Test repository provider access",
+                "parameters": [
+                    {
+                        "description": "Repository connection",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.TestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.TestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/repositories/{repository_id}": {
             "get": {
                 "security": [
@@ -1839,6 +1904,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -1913,6 +1984,28 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/repositories/{repository_id}/sync": {
+            "post": {
+                "summary": "Sync repository",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.ViewResponse"
                         }
                     }
                 }
@@ -2560,6 +2653,9 @@ const docTemplate = `{
                 "billing_type": {
                     "type": "string"
                 },
+                "branch": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },
@@ -2695,6 +2791,9 @@ const docTemplate = `{
             ],
             "properties": {
                 "billing_type": {
+                    "type": "string"
+                },
+                "branch": {
                     "type": "string"
                 },
                 "cache_write_tokens": {
@@ -3775,6 +3874,15 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "last_sync_error": {
+                    "type": "string"
+                },
+                "last_sync_status": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
@@ -3803,6 +3911,42 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "integer"
+                }
+            }
+        },
+        "repositorysettings.TestRequest": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "repositorysettings.TestResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/repositorysettings.TestView"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "repositorysettings.TestView": {
+            "type": "object",
+            "properties": {
+                "project_name": {
+                    "type": "string"
                 }
             }
         },
@@ -3836,6 +3980,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "last_sync_error": {
+                    "type": "string"
+                },
+                "last_sync_status": {
+                    "type": "string"
+                },
+                "last_synced_at": {
                     "type": "string"
                 },
                 "provider": {
