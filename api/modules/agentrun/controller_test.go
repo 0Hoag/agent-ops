@@ -3,15 +3,34 @@ package agentrun
 import (
 	"bytes"
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
+
+type jsonArrayArgument string
+
+func (a jsonArrayArgument) Match(value driver.Value) bool {
+	switch v := value.(type) {
+	case []byte:
+		return string(v) == string(a)
+	case string:
+		return v == string(a)
+	default:
+		return false
+	}
+}
 
 type fakeRepository struct {
 	creates         int
@@ -204,6 +223,46 @@ func TestCreatePersistsValidRun(t *testing.T) {
 	r.ServeHTTP(response, request)
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Equal(t, 1, repo.creates)
+}
+
+func TestCreatePersistsIssueNumbersAsJSONArrays(t *testing.T) {
+	for _, tc := range []struct {
+		name, issueNumbers string
+	}{
+		{name: "omitted", issueNumbers: "[]"},
+		{name: "explicit empty", issueNumbers: "[]"},
+		{name: "nonempty", issueNumbers: "[24,25]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
+			require.NoError(t, err)
+
+			mock.ExpectBegin()
+			mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "agent_runs"`)).
+				WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), jsonArrayArgument(tc.issueNumbers), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			r := gin.New()
+			r.POST("/", NewController(NewRepository(db), "secret", nil).Create)
+			issueField := ""
+			if tc.name == "explicit empty" {
+				issueField = `,"issue_numbers":[]`
+			} else if tc.name == "nonempty" {
+				issueField = `,"issue_numbers":[24,25]`
+			}
+			request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"repository_id":"7e57d004-2b97-0e7a-b45f-5387367791cd","wave":"w3a","worker":"worker","model":"m"`+issueField+`,"started_at":"2026-01-01T00:00:00Z","ended_at":"2026-01-01T00:00:01Z"}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Agent-Run-Token", "secret")
+			response := httptest.NewRecorder()
+			r.ServeHTTP(response, request)
+			require.Equal(t, http.StatusCreated, response.Code)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestCreateRejectsEmptyConfiguredToken(t *testing.T) {
