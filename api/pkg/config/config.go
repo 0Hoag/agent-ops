@@ -27,6 +27,7 @@ type Config struct {
 	WorkerScriptRoots     []string
 	WorkerWorktreeRoots   []string
 	WorkerScripts         map[string]string
+	SyncInterval          time.Duration
 }
 
 type RepositoryConfig struct {
@@ -53,6 +54,7 @@ func Load() (Config, error) {
 		WorkerScriptRoots:   splitCSV(envOr("WORKER_SCRIPT_ROOTS", ".")),
 		WorkerWorktreeRoots: splitCSV(envOr("WORKER_WORKTREE_ROOTS", ".")),
 		WorkerScripts:       map[string]string{"codex": "scripts/run-worker.sh", "opencode": "scripts/run-worker-opencode.sh"},
+		SyncInterval:        10 * time.Minute,
 	}
 	if raw := os.Getenv("WORKER_SCRIPTS_JSON"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.WorkerScripts); err != nil {
@@ -76,6 +78,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("JWT_EXPIRATION is invalid")
 		}
 		cfg.JWTExpiration = duration
+	}
+	if raw := os.Getenv("SYNC_INTERVAL"); raw != "" {
+		duration, err := time.ParseDuration(raw)
+		if err != nil || duration <= 0 {
+			return Config{}, fmt.Errorf("SYNC_INTERVAL is invalid")
+		}
+		cfg.SyncInterval = duration
 	}
 	if raw := os.Getenv("AGENT_RUN_MODEL_PRICES"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.AgentRunModelPrices); err != nil {
