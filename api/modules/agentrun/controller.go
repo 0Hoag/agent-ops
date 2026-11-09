@@ -92,6 +92,9 @@ func (c *Controller) Create(ctx *gin.Context) {
 		response.BadRequest(ctx, "ended_at must not precede started_at")
 		return
 	}
+	if in.IssueNumbers == nil {
+		in.IssueNumbers = []int64{}
+	}
 	b, err := json.Marshal(in.IssueNumbers)
 	if err != nil {
 		response.BadRequest(ctx, "invalid issue_numbers")
