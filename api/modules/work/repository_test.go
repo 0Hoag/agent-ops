@@ -31,11 +31,11 @@ func TestListScopesRepositoryAndOrganizationAndAppliesFilters(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "repositories" WHERE id = $1 AND organization_id = $2`)).
 		WithArgs("repo-a", "org-a").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
-	mock.ExpectQuery(`WITH work AS`).
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM \(WITH work AS`).
 		WithArgs("repo-a", "repo-a", "repo-a", "org-a", "org-a", "open", "%search%").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	mock.ExpectQuery(`WITH work AS`).
+	mock.ExpectQuery(`WITH work AS[\s\S]*LIMIT 10 OFFSET 10`).
 		WithArgs("repo-a", "repo-a", "repo-a", "org-a", "org-a", "open", "%search%").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"kind", "number", "title", "url", "author", "state", "ci_status", "created_at", "updated_at",
