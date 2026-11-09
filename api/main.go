@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -85,9 +86,7 @@ func main() {
 		ticker := time.NewTicker(cfg.SyncInterval)
 		defer ticker.Stop()
 		for range ticker.C {
-			if err := syncService.SyncAll(context.Background()); err != nil {
-				log.Error("scheduled repository sync failed", "error", err)
-			}
+			runScheduledSync(context.Background(), log, syncService)
 		}
 	}()
 
@@ -103,6 +102,16 @@ func main() {
 	log.Info("api listening", "addr", cfg.HTTPAddr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal(fmt.Errorf("server stopped: %w", err))
+	}
+}
+
+type repositorySyncer interface {
+	SyncAll(context.Context) error
+}
+
+func runScheduledSync(ctx context.Context, log *slog.Logger, syncer repositorySyncer) {
+	if syncer.SyncAll(ctx) != nil {
+		log.Error("scheduled repository sync failed")
 	}
 }
 

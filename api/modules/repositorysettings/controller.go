@@ -1,13 +1,13 @@
 package repositorysettings
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
-	"github.com/0Hoag/agent-ops/api/modules/repositorysync"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
@@ -20,13 +20,17 @@ type Controller struct {
 	orgs        *organization.Repository
 	sealer      *crypto.Sealer
 	webhookBase string
-	sync        *repositorysync.Service
+	sync        syncService
 }
 
-func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string, syncService ...*repositorysync.Service) *Controller {
+type syncService interface {
+	Sync(context.Context, store.UUID) error
+}
+
+func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string, services ...syncService) *Controller {
 	c := &Controller{repos: repos, orgs: orgs, sealer: sealer, webhookBase: strings.TrimRight(webhookBase, "/")}
-	if len(syncService) > 0 {
-		c.sync = syncService[0]
+	if len(services) > 0 {
+		c.sync = services[0]
 	}
 	return c
 }
@@ -86,7 +90,11 @@ func (c *Controller) Sync(ctx *gin.Context) {
 		response.InternalError(ctx, "repository sync failed")
 		return
 	}
-	latest, _ := c.repos.Get(ctx, r.ID)
+	latest, err := c.repos.Get(ctx, r.ID)
+	if err != nil {
+		response.InternalError(ctx, "failed to load repository sync status")
+		return
+	}
 	response.OK(ctx, c.view(latest))
 }
 

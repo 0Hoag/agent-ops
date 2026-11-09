@@ -3,8 +3,8 @@ package repositorysync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/store"
@@ -16,28 +16,46 @@ import (
 type Service struct {
 	repositories *store.Store
 	sealer       *appcrypto.Sealer
+	providers    *builder.Registry
 	now          func() time.Time
 }
 
 func New(st *store.Store, sealer *appcrypto.Sealer) *Service {
-	return &Service{repositories: st, sealer: sealer, now: time.Now}
+	return NewWithRegistry(st, sealer, builder.Default())
 }
+
+func NewWithRegistry(st *store.Store, sealer *appcrypto.Sealer, providers *builder.Registry) *Service {
+	return &Service{repositories: st, sealer: sealer, providers: providers, now: time.Now}
+}
+
+var (
+	errLoadRepositories = errors.New("load repositories for sync failed")
+	errLoadRepository   = errors.New("load repository for sync failed")
+	errProviderSync     = errors.New("provider sync failed")
+	errStoreStatus      = errors.New("store repository sync status failed")
+)
+
 func (s *Service) Sync(ctx context.Context, id store.UUID) error {
 	r, err := s.repositories.Repositories.Get(ctx, id)
 	if err != nil {
-		return err
+		return errLoadRepository
 	}
 	if err = s.syncOne(ctx, r); err != nil {
-		_ = s.repositories.Repositories.UpdateSyncStatus(ctx, id, nil, "error", sanitize(err.Error()))
-		return err
+		if statusErr := s.repositories.Repositories.UpdateSyncStatus(ctx, id, nil, "error", errProviderSync.Error()); statusErr != nil {
+			return errStoreStatus
+		}
+		return errProviderSync
 	}
 	at := s.now().UTC()
-	return s.repositories.Repositories.UpdateSyncStatus(ctx, id, &at, "success", "")
+	if err := s.repositories.Repositories.UpdateSyncStatus(ctx, id, &at, "success", ""); err != nil {
+		return errStoreStatus
+	}
+	return nil
 }
 func (s *Service) SyncAll(ctx context.Context) error {
 	rows, err := s.repositories.Repositories.ListAll(ctx)
 	if err != nil {
-		return err
+		return errLoadRepositories
 	}
 	var first error
 	for i := range rows {
@@ -58,7 +76,7 @@ func (s *Service) syncOne(ctx context.Context, r *store.Repository) error {
 	if secret, _ = s.sealer.Open(secret); secret == "" {
 		return fmt.Errorf("repository webhook secret is not configured")
 	}
-	p, err := builder.Build(r.Provider, scm.Config{Token: token, WebhookSecret: secret, APIBaseURL: r.GitLabBaseURL})
+	p, err := s.providers.Build(r.Provider, scm.Config{Token: token, WebhookSecret: secret, APIBaseURL: r.GitLabBaseURL})
 	if err != nil {
 		return err
 	}
@@ -88,11 +106,4 @@ func nonzero(t time.Time) *time.Time {
 		return nil
 	}
 	return &t
-}
-func sanitize(v string) string {
-	v = strings.ReplaceAll(v, "Bearer ", "Bearer [redacted]")
-	if len(v) > 500 {
-		return v[:500]
-	}
-	return v
 }
