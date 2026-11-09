@@ -127,10 +127,10 @@ curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { compose
 
 # Insert deterministic smoke-owned records into this run's isolated Compose database.
 compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000014','member@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000015','other@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000014','member@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000015','other@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000012','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000010','owner');
 INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000016','Smoke other tenant');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000017','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000014','member');
@@ -156,7 +156,9 @@ run_count=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELE
 log "pricing fixture persisted exactly 2 owned agent runs"
 
 # Exercise real account authentication and the supported organization-selection endpoint.
-login=$(curl --fail --silent --show-error -H 'Content-Type: application/json' -d '{"email":"smoke@example.invalid","password":"smoke-password-not-a-secret"}' "$API_URL/api/v1/auth/login")
+login_response="$ARTIFACT_DIR/login-response.json"
+curl --fail-with-body --silent --show-error -H 'Content-Type: application/json' -d '{"email":"smoke@example.invalid","password":"smoke-password-not-a-secret"}' -o "$login_response" "$API_URL/api/v1/auth/login"
+login=$(<"$login_response")
 account_token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$login")
 selected=$(curl --fail --silent --show-error -H "Authorization: Bearer $account_token" -H 'Content-Type: application/json' -d '{"organization_id":"d0000000-0000-4000-8000-000000000011"}' "$API_URL/api/v1/auth/select-organization")
 SESSION_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$selected")
@@ -185,7 +187,7 @@ if [[ "${SMOKE_ARITHMETIC_ONLY:-0}" == 1 ]]; then
 import json, sys
 overview, work, usage = map(json.loads, sys.argv[1:4])
 work_total, merged, runs, tokens, failures = map(int, sys.argv[4:])
-assert overview['data']['current']['merged_pull_requests'] == merged, 'Overview merged_pull_requests arithmetic'
+assert overview['data']['current']['merged_prs'] == merged, 'Overview merged_prs arithmetic'
 assert work['meta']['total'] == work_total, 'Work total arithmetic'
 assert sum(b['runs'] for b in usage['data']['buckets']) == runs, 'Usage runs arithmetic'
 assert sum(b['input_tokens'] for b in usage['data']['buckets']) == tokens, 'Usage input_tokens arithmetic'
