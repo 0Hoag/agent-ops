@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -16,9 +17,9 @@ import (
 )
 
 type submitter struct {
-	endpoint, token, repository, wave, worker, harness string
-	issues                                             []int64
-	client                                             *http.Client
+	endpoint, token, repository, wave, worker, harness, branch, cwd string
+	issues                                                          []int64
+	client                                                          *http.Client
 }
 
 type createdRun struct {
@@ -28,7 +29,11 @@ type createdRun struct {
 }
 
 func (s submitter) submit(ctx context.Context, session transcript.Session) error {
-	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID}
+	branch, err := s.branchFor(session)
+	if err != nil {
+		return err
+	}
+	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch}
 	b, err := json.Marshal(p)
 	if err != nil {
 		return err
@@ -124,6 +129,8 @@ func run(args []string) error {
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
 	issues := fs.String("issue-numbers", os.Getenv("AGENT_RUN_ISSUES"), "JSON issue-number array")
+	branch := fs.String("branch", "", "source branch (overrides transcript gitBranch)")
+	cwd := fs.String("cwd", ".", "working directory used to resolve the current Git branch")
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("invalid push flags")
 	}
@@ -181,13 +188,31 @@ func run(args []string) error {
 			return fmt.Errorf("invalid issue-numbers JSON: %w", err)
 		}
 	}
-	s := submitter{*endpoint, token, *repository, *wave, *worker, *harness, issueNumbers, http.DefaultClient}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: *harness, branch: *branch, cwd: *cwd, issues: issueNumbers, client: http.DefaultClient}
 	for _, session := range sessions {
 		if err := s.submit(context.Background(), session); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s submitter) branchFor(session transcript.Session) (string, error) {
+	return resolveBranch(s.branch, session.Branch, s.cwd)
+}
+
+func resolveBranch(explicit, transcriptBranch, cwd string) (string, error) {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return value, nil
+	}
+	if value := strings.TrimSpace(transcriptBranch); value != "" {
+		return value, nil
+	}
+	out, err := exec.Command("git", "-C", filepath.Clean(cwd), "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve Git branch: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {

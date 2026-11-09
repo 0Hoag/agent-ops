@@ -23,6 +23,7 @@ type codexRecord struct {
 		Output     int64 `json:"output_tokens"`
 		Reasoning  int64 `json:"reasoning_output_tokens"`
 	} `json:"usage"`
+	GitBranch string `json:"gitBranch"`
 }
 
 // ParseCodex parses turn.completed records. Codex input_tokens already
@@ -54,6 +55,9 @@ func ParseCodex(r io.Reader) ([]Session, error) {
 		}
 		key := string(line)
 		s := getSession(sessions, id)
+		if strings.TrimSpace(v.GitBranch) != "" {
+			s.Branch = strings.TrimSpace(v.GitBranch)
+		}
 		if seen[id] == nil {
 			seen[id] = map[string]bool{}
 		}
@@ -93,6 +97,7 @@ type openCodeRecord struct {
 			} `json:"cache"`
 		} `json:"tokens"`
 	} `json:"part"`
+	GitBranch string `json:"gitBranch"`
 }
 
 // ParseOpenCode parses step_finish records. OpenCode input and cache counters
@@ -111,6 +116,9 @@ func ParseOpenCode(r io.Reader) ([]Session, error) {
 			return fmt.Errorf("step_finish record has no session identity")
 		}
 		s := getSession(sessions, id)
+		if strings.TrimSpace(v.GitBranch) != "" {
+			s.Branch = strings.TrimSpace(v.GitBranch)
+		}
 		if seen[id] == nil {
 			seen[id] = map[string]bool{}
 		}
@@ -135,8 +143,8 @@ func ParseOpenCode(r io.Reader) ([]Session, error) {
 }
 
 type claudeRecord struct {
-	Type, UUID, SessionID, Model, Timestamp string
-	Message                                 struct {
+	Type, UUID, SessionID, Model, Timestamp, GitBranch string
+	Message                                            struct {
 		Model string `json:"model"`
 		Usage struct {
 			Input     int64 `json:"input_tokens"`
@@ -161,6 +169,9 @@ func ParseClaude(r io.Reader) ([]Session, error) {
 		}
 		id := strings.TrimSpace(v.SessionID)
 		s := getSession(sessions, id)
+		if strings.TrimSpace(v.GitBranch) != "" {
+			s.Branch = strings.TrimSpace(v.GitBranch)
+		}
 		if seen[id] == nil {
 			seen[id] = map[string]bool{}
 		}

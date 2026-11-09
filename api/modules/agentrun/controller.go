@@ -20,6 +20,9 @@ type RunRepository interface {
 	List(context.Context, Filter) ([]AgentRun, error)
 	Aggregate(context.Context, Filter, map[string]Price) ([]Aggregate, error)
 }
+type branchPRResolver interface {
+	PRNumberByBranch(context.Context, string, string) (*int64, error)
+}
 type HistoricalAggregator interface {
 	AggregateHistorical(context.Context, Filter, map[string]Price) ([]Aggregate, error)
 }
@@ -95,12 +98,22 @@ func (c *Controller) Create(ctx *gin.Context) {
 	if in.IssueNumbers == nil {
 		in.IssueNumbers = []int64{}
 	}
+	if in.PRNumber == nil && in.Branch != "" {
+		if resolver, ok := c.repository.(branchPRResolver); ok {
+			var err error
+			in.PRNumber, err = resolver.PRNumberByBranch(ctx.Request.Context(), in.RepositoryID, in.Branch)
+			if err != nil {
+				response.Error(ctx, http.StatusInternalServerError, "failed to relate agent run")
+				return
+			}
+		}
+	}
 	b, err := json.Marshal(in.IssueNumbers)
 	if err != nil {
 		response.BadRequest(ctx, "invalid issue_numbers")
 		return
 	}
-	run := AgentRun{ID: store.NewUUID(), RepositoryID: store.UUID(in.RepositoryID), Wave: in.Wave, Worker: in.Worker, Model: in.Model, IssueNumbers: b, PRNumber: in.PRNumber, InputTokens: in.InputTokens, CachedInputTokens: in.CachedInputTokens, CacheWriteTokens: in.CacheWriteTokens, OutputTokens: in.OutputTokens, ReasoningTokens: in.ReasoningTokens, StartedAt: in.StartedAt, EndedAt: in.EndedAt}
+	run := AgentRun{ID: store.NewUUID(), RepositoryID: store.UUID(in.RepositoryID), Wave: in.Wave, Worker: in.Worker, Model: in.Model, IssueNumbers: b, PRNumber: in.PRNumber, Branch: in.Branch, InputTokens: in.InputTokens, CachedInputTokens: in.CachedInputTokens, CacheWriteTokens: in.CacheWriteTokens, OutputTokens: in.OutputTokens, ReasoningTokens: in.ReasoningTokens, StartedAt: in.StartedAt, EndedAt: in.EndedAt}
 	if in.Harness != "" || in.SessionID != "" {
 		run.Harness, run.SessionID = &in.Harness, &in.SessionID
 	}
