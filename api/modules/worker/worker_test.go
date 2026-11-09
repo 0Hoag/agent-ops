@@ -54,25 +54,49 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 	defer e.Close()
 	started := make(chan struct{})
 	release := make(chan struct{})
+	done := make(chan struct{})
 	e.run = func(context.Context, Request) error {
 		close(started)
 		<-release
+		close(done)
 		return nil
 	}
+	e.afterEnqueueUnlock = func() {
+		<-started
+		close(release)
+		<-done
+		e.mu.Lock()
+		for _, stored := range e.jobs {
+			require.Equal(t, "succeeded", stored.State)
+		}
+		e.mu.Unlock()
+	}
 
-	job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
-	require.NoError(t, err)
-	<-started
+	enqueued := make(chan struct {
+		job *Job
+		err error
+	})
+	go func() {
+		job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
+		enqueued <- struct {
+			job *Job
+			err error
+		}{job: job, err: err}
+	}()
+	result := <-enqueued
+	require.NoError(t, result.err)
+	job := result.job
+	require.Equal(t, "queued", job.State)
 	for i := 0; i < 1000; i++ {
 		require.Equal(t, "queued", job.State)
 	}
-	close(release)
 
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		stored, getErr := e.Get(job.ID)
 		require.NoError(t, getErr)
 		if stored.State == "succeeded" {
+			require.Equal(t, "queued", job.State)
 			return
 		}
 		time.Sleep(time.Millisecond)

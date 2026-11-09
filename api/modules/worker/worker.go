@@ -34,15 +34,16 @@ type Job struct {
 type Runner func(context.Context, Request) error
 
 type Executor struct {
-	cfg   Config
-	run   Runner
-	mu    sync.Mutex
-	next  uint64
-	jobs  map[string]*Job
-	queue chan *Job
-	stop  chan struct{}
-	once  sync.Once
-	wd    string
+	cfg                Config
+	run                Runner
+	mu                 sync.Mutex
+	next               uint64
+	jobs               map[string]*Job
+	queue              chan *Job
+	stop               chan struct{}
+	once               sync.Once
+	wd                 string
+	afterEnqueueUnlock func()
 }
 
 func New(cfg Config) (*Executor, error) {
@@ -109,12 +110,13 @@ func (e *Executor) Enqueue(req Request) (*Job, error) {
 	e.next++
 	j := &Job{ID: fmt.Sprintf("worker-%d", e.next), Request: req, State: "queued", logs: newLogStream()}
 	e.jobs[j.ID] = j
+	snapshot := *j
 	e.mu.Unlock()
 	select {
 	case e.queue <- j:
-		e.mu.Lock()
-		snapshot := *j
-		e.mu.Unlock()
+		if e.afterEnqueueUnlock != nil {
+			e.afterEnqueueUnlock()
+		}
 		return &snapshot, nil
 	default:
 		e.mu.Lock()
