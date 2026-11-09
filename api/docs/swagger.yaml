@@ -610,6 +610,67 @@ definitions:
       unavailable:
         type: integer
     type: object
+  insight.OverviewAttention:
+    properties:
+      kind:
+        type: string
+      message:
+        type: string
+      model:
+        type: string
+      pr_number:
+        type: integer
+      repository_id:
+        type: string
+      run_id:
+        type: string
+    type: object
+  insight.OverviewPeriod:
+    properties:
+      cache_hit_rate:
+        type: number
+      cache_read_tokens:
+        type: integer
+      cache_savings_usd:
+        type: number
+      cache_write_tokens:
+        type: integer
+      ci_first_pass_rate:
+        type: number
+      cost_per_merged_pr:
+        type: number
+      from:
+        type: string
+      input_tokens:
+        type: integer
+      merged_prs:
+        type: integer
+      models_without_price:
+        items:
+          type: string
+        type: array
+      output_tokens:
+        type: integer
+      rework_rate:
+        type: number
+      runs:
+        type: integer
+      spend_usd:
+        type: number
+      to:
+        type: string
+    type: object
+  insight.OverviewResponse:
+    properties:
+      attention:
+        items:
+          $ref: '#/definitions/insight.OverviewAttention'
+        type: array
+      current:
+        $ref: '#/definitions/insight.OverviewPeriod'
+      previous:
+        $ref: '#/definitions/insight.OverviewPeriod'
+    type: object
   insight.Response:
     properties:
       cycle_time:
@@ -1912,6 +1973,40 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Update member role
+  /api/v1/overview:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        type: string
+      - description: Inclusive UTC start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Inclusive UTC end date (YYYY-MM-DD)
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.OverviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get overview summary
   /api/v1/repositories:
     get:
       produces:

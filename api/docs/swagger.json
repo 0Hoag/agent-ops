@@ -1568,6 +1568,57 @@
                 }
             }
         },
+        "/api/v1/overview": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get overview summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.OverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/repositories": {
             "get": {
                 "security": [
@@ -3322,6 +3373,99 @@
                 },
                 "unavailable": {
                     "type": "integer"
+                }
+            }
+        },
+        "insight.OverviewAttention": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.OverviewPeriod": {
+            "type": "object",
+            "properties": {
+                "cache_hit_rate": {
+                    "type": "number"
+                },
+                "cache_read_tokens": {
+                    "type": "integer"
+                },
+                "cache_savings_usd": {
+                    "type": "number"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "ci_first_pass_rate": {
+                    "type": "number"
+                },
+                "cost_per_merged_pr": {
+                    "type": "number"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "merged_prs": {
+                    "type": "integer"
+                },
+                "models_without_price": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "rework_rate": {
+                    "type": "number"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "spend_usd": {
+                    "type": "number"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.OverviewResponse": {
+            "type": "object",
+            "properties": {
+                "attention": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.OverviewAttention"
+                    }
+                },
+                "current": {
+                    "$ref": "#/definitions/insight.OverviewPeriod"
+                },
+                "previous": {
+                    "$ref": "#/definitions/insight.OverviewPeriod"
                 }
             }
         },
