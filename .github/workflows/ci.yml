@@ -56,6 +56,14 @@ jobs:
       - run: go build ./...
         working-directory: api
 
+  independent-arithmetic-smoke:
+    name: Independent arithmetic smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run authenticated API arithmetic smoke
+        run: bash scripts/heavy.sh bash scripts/independent-arithmetic-smoke.sh
+
   client-contract:
     name: Client contract drift
     runs-on: ubuntu-latest
