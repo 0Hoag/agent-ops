@@ -109,12 +109,10 @@ func (e *Executor) Enqueue(req Request) (*Job, error) {
 	e.next++
 	j := &Job{ID: fmt.Sprintf("worker-%d", e.next), Request: req, State: "queued", logs: newLogStream()}
 	e.jobs[j.ID] = j
+	snapshot := *j
 	e.mu.Unlock()
 	select {
 	case e.queue <- j:
-		e.mu.Lock()
-		snapshot := *j
-		e.mu.Unlock()
 		return &snapshot, nil
 	default:
 		e.mu.Lock()
