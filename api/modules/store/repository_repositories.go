@@ -6,9 +6,17 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var ErrRepositoryHasDependencies = errors.New("repository has dependent data")
+
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
+}
 
 type RepositoryRepository struct{ db *gorm.DB }
 
@@ -83,6 +91,9 @@ func (repository *RepositoryRepository) ListByOrganization(ctx context.Context, 
 }
 func (repository *RepositoryRepository) DeleteByOrganization(ctx context.Context, organizationID string, id UUID) error {
 	if result := repository.db.WithContext(ctx).Where("id = ? AND organization_id = ?", id, organizationID).Delete(&Repository{}); result.Error != nil {
+		if isForeignKeyViolation(result.Error) {
+			return fmt.Errorf("delete repository: %w", ErrRepositoryHasDependencies)
+		}
 		return fmt.Errorf("delete repository: %w", result.Error)
 	} else if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound

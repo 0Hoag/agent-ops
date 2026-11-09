@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
 	"github.com/0Hoag/agent-ops/api/modules/store"
@@ -92,6 +93,14 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 		require.NotContains(t, w.Body.String(), "webhook_secret")
 		require.NotContains(t, w.Body.String(), "backfill_token")
 	}
+	runID := uuid.NewString()
+	now := time.Now().UTC()
+	require.NoError(t, db.Exec(`INSERT INTO agent_runs (id,repository_id,wave,worker,model,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, runID, created.Data.ID, "W18", "worker", "model", 1, 0, 0, 1, 0, now, now).Error)
+	blocked := request(t, h, fixture.adminA, fixture.orgA, http.MethodDelete, "/api/v1/repositories/"+created.Data.ID, "")
+	require.Equal(t, http.StatusConflict, blocked.Code, blocked.Body.String())
+	require.Contains(t, blocked.Body.String(), "dependent agent runs")
+	require.NoError(t, db.First(&row, "id = ?", created.Data.ID).Error)
+	require.NoError(t, db.Exec("DELETE FROM agent_runs WHERE id = ?", runID).Error)
 	list := request(t, h, fixture.ownerA, fixture.orgA, http.MethodGet, "/api/v1/repositories", "")
 	require.Equal(t, http.StatusOK, list.Code, list.Body.String())
 	require.NotContains(t, list.Body.String(), "secret-a")
