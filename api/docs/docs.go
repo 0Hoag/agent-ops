@@ -72,6 +72,27 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/agent-run-prices/missing": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "List models missing an effective price",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/agent-run-prices/{price_id}": {
             "patch": {
                 "security": [
@@ -1574,6 +1595,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/overview": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get overview summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Inclusive UTC end date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/insight.OverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/repositories": {
             "get": {
                 "security": [
@@ -1663,6 +1735,71 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/repositories/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Test repository provider access",
+                "parameters": [
+                    {
+                        "description": "Repository connection",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.TestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.TestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -1763,6 +1900,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -3353,6 +3496,99 @@ const docTemplate = `{
                 }
             }
         },
+        "insight.OverviewAttention": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "pr_number": {
+                    "type": "integer"
+                },
+                "repository_id": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.OverviewPeriod": {
+            "type": "object",
+            "properties": {
+                "cache_hit_rate": {
+                    "type": "number"
+                },
+                "cache_read_tokens": {
+                    "type": "integer"
+                },
+                "cache_savings_usd": {
+                    "type": "number"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "ci_first_pass_rate": {
+                    "type": "number"
+                },
+                "cost_per_merged_pr": {
+                    "type": "number"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "merged_prs": {
+                    "type": "integer"
+                },
+                "models_without_price": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "rework_rate": {
+                    "type": "number"
+                },
+                "runs": {
+                    "type": "integer"
+                },
+                "spend_usd": {
+                    "type": "number"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "insight.OverviewResponse": {
+            "type": "object",
+            "properties": {
+                "attention": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/insight.OverviewAttention"
+                    }
+                },
+                "current": {
+                    "$ref": "#/definitions/insight.OverviewPeriod"
+                },
+                "previous": {
+                    "$ref": "#/definitions/insight.OverviewPeriod"
+                }
+            }
+        },
         "insight.Response": {
             "type": "object",
             "properties": {
@@ -3587,6 +3823,42 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "integer"
+                }
+            }
+        },
+        "repositorysettings.TestRequest": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "repositorysettings.TestResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/repositorysettings.TestView"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "repositorysettings.TestView": {
+            "type": "object",
+            "properties": {
+                "project_name": {
+                    "type": "string"
                 }
             }
         },

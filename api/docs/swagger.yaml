@@ -610,6 +610,67 @@ definitions:
       unavailable:
         type: integer
     type: object
+  insight.OverviewAttention:
+    properties:
+      kind:
+        type: string
+      message:
+        type: string
+      model:
+        type: string
+      pr_number:
+        type: integer
+      repository_id:
+        type: string
+      run_id:
+        type: string
+    type: object
+  insight.OverviewPeriod:
+    properties:
+      cache_hit_rate:
+        type: number
+      cache_read_tokens:
+        type: integer
+      cache_savings_usd:
+        type: number
+      cache_write_tokens:
+        type: integer
+      ci_first_pass_rate:
+        type: number
+      cost_per_merged_pr:
+        type: number
+      from:
+        type: string
+      input_tokens:
+        type: integer
+      merged_prs:
+        type: integer
+      models_without_price:
+        items:
+          type: string
+        type: array
+      output_tokens:
+        type: integer
+      rework_rate:
+        type: number
+      runs:
+        type: integer
+      spend_usd:
+        type: number
+      to:
+        type: string
+    type: object
+  insight.OverviewResponse:
+    properties:
+      attention:
+        items:
+          $ref: '#/definitions/insight.OverviewAttention'
+        type: array
+      current:
+        $ref: '#/definitions/insight.OverviewPeriod'
+      previous:
+        $ref: '#/definitions/insight.OverviewPeriod'
+    type: object
   insight.Response:
     properties:
       cycle_time:
@@ -763,6 +824,29 @@ definitions:
         type: array
       status:
         type: integer
+    type: object
+  repositorysettings.TestRequest:
+    properties:
+      base_url:
+        type: string
+      full_name:
+        type: string
+      provider:
+        type: string
+      token:
+        type: string
+    type: object
+  repositorysettings.TestResponse:
+    properties:
+      data:
+        $ref: '#/definitions/repositorysettings.TestView'
+      status:
+        type: integer
+    type: object
+  repositorysettings.TestView:
+    properties:
+      project_name:
+        type: string
     type: object
   repositorysettings.UpdateRequest:
     properties:
@@ -972,6 +1056,18 @@ paths:
       security:
       - BearerAuth: []
       summary: Update model price version
+  /api/v1/agent-run-prices/missing:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+      security:
+      - BearerAuth: []
+      summary: List models missing an effective price
   /api/v1/agent-runs:
     get:
       parameters:
@@ -1924,6 +2020,40 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Update member role
+  /api/v1/overview:
+    get:
+      parameters:
+      - description: Repository UUID
+        format: uuid
+        in: query
+        name: repository_id
+        type: string
+      - description: Inclusive UTC start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Inclusive UTC end date (YYYY-MM-DD)
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/insight.OverviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get overview summary
   /api/v1/repositories:
     get:
       produces:
@@ -2009,6 +2139,10 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/response.ErrorResponse'
         "500":
@@ -2110,6 +2244,47 @@ paths:
           schema:
             $ref: '#/definitions/repositorysettings.ViewResponse'
       summary: Sync repository
+  /api/v1/repositories/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Repository connection
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/repositorysettings.TestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.TestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Test repository provider access
   /api/v1/waves:
     get:
       produces:

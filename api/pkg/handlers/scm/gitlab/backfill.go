@@ -39,6 +39,37 @@ func (p *Provider) Backfill(ctx context.Context, repository string) (scm.Backfil
 	return out, nil
 }
 
+func (p *Provider) TestRepository(ctx context.Context, repository string) (string, error) {
+	path := "/api/v4/projects/" + url.PathEscape(repository)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+path, nil)
+	if err != nil {
+		return "", scm.ErrUnreachable
+	}
+	req.Header.Set("PRIVATE-TOKEN", p.token)
+	req.Header.Set("Accept", "application/json")
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", scm.ErrUnreachable
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return "", scm.ErrInvalidToken
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", scm.ErrProjectNotFound
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", scm.ErrUnreachable
+	}
+	var value struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&value); err != nil || value.Name == "" {
+		return "", scm.ErrUnreachable
+	}
+	return value.Name, nil
+}
+
 func list[T any](p *Provider, ctx context.Context, path, extra string) ([]T, error) {
 	var out []T
 	for page := 1; ; page++ {

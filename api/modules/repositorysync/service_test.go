@@ -30,6 +30,7 @@ func (p backfillProvider) ParseEvent(context.Context, string, http.Header, []byt
 func (p backfillProvider) Backfill(context.Context, string) (scm.BackfillResult, error) {
 	return scm.BackfillResult{}, p.err
 }
+func (p backfillProvider) TestRepository(context.Context, string) (string, error) { return "", nil }
 
 func TestSyncFailureStoresAndReturnsOnlySafeError(t *testing.T) {
 	service, mock, repository := syncFixture(t, errors.New(exposedSecrets))

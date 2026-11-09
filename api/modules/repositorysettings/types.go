@@ -46,3 +46,16 @@ type CreatedResponse struct {
 	Status int         `json:"status"`
 	Data   CreatedView `json:"data"`
 }
+type TestRequest struct {
+	Provider string `json:"provider"`
+	FullName string `json:"full_name"`
+	BaseURL  string `json:"base_url"`
+	Token    string `json:"token"`
+}
+type TestView struct {
+	ProjectName string `json:"project_name"`
+}
+type TestResponse struct {
+	Status int      `json:"status"`
+	Data   TestView `json:"data"`
+}
