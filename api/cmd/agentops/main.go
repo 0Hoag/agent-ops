@@ -17,9 +17,9 @@ import (
 )
 
 type submitter struct {
-	endpoint, token, repository, wave, worker, harness, branch string
-	issues                                                     []int64
-	client                                                     *http.Client
+	endpoint, token, repository, wave, worker, harness, branch, cwd string
+	issues                                                          []int64
+	client                                                          *http.Client
 }
 
 type createdRun struct {
@@ -29,9 +29,9 @@ type createdRun struct {
 }
 
 func (s submitter) submit(ctx context.Context, session transcript.Session) error {
-	branch := strings.TrimSpace(s.branch)
-	if branch == "" {
-		branch = strings.TrimSpace(session.Branch)
+	branch, err := s.branchFor(session)
+	if err != nil {
+		return err
 	}
 	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch}
 	b, err := json.Marshal(p)
@@ -173,10 +173,6 @@ func run(args []string) error {
 	if len(sessions) == 0 {
 		return fmt.Errorf("transcript contains no usable sessions")
 	}
-	resolvedBranch, err := resolveBranch(*branch, sessions[0].Branch, *cwd)
-	if err != nil {
-		return err
-	}
 	configuredModel := strings.TrimSpace(*model)
 	for i := range sessions {
 		if strings.TrimSpace(sessions[i].Model) == "" {
@@ -192,13 +188,17 @@ func run(args []string) error {
 			return fmt.Errorf("invalid issue-numbers JSON: %w", err)
 		}
 	}
-	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: *harness, branch: resolvedBranch, issues: issueNumbers, client: http.DefaultClient}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: *harness, branch: *branch, cwd: *cwd, issues: issueNumbers, client: http.DefaultClient}
 	for _, session := range sessions {
 		if err := s.submit(context.Background(), session); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s submitter) branchFor(session transcript.Session) (string, error) {
+	return resolveBranch(s.branch, session.Branch, s.cwd)
 }
 
 func resolveBranch(explicit, transcriptBranch, cwd string) (string, error) {

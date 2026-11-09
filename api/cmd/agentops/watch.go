@@ -60,11 +60,7 @@ func runWatch(args []string) error {
 	if err != nil {
 		return err
 	}
-	resolvedBranch, err := resolveBranch(*branch, "", *cwd)
-	if err != nil {
-		return err
-	}
-	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", branch: resolvedBranch, client: httpClient()}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", branch: *branch, cwd: *cwd, client: httpClient()}
 	ctx, stop := signalContext()
 	defer stop()
 	for {

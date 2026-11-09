@@ -262,6 +262,73 @@ func TestSubmitRejectsHTTPError(t *testing.T) {
 	}
 }
 
+func TestSubmitResolvesExplicitThenSessionThenCWDBranch(t *testing.T) {
+	var branches []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Branch string `json:"branch"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		branches = append(branches, payload.Branch)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	base := submitter{endpoint: server.URL, token: "token", repository: "repo", wave: "wave", worker: "worker", client: server.Client(), cwd: "."}
+	if err := base.submit(t.Context(), transcript.Session{ID: "transcript", Branch: "feat/transcript"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.submit(t.Context(), transcript.Session{ID: "cwd"}); err != nil {
+		t.Fatal(err)
+	}
+	explicit := base
+	explicit.branch = "feat/explicit"
+	if err := explicit.submit(t.Context(), transcript.Session{ID: "override", Branch: "feat/transcript"}); err != nil {
+		t.Fatal(err)
+	}
+	cwdBranch, err := resolveBranch("", "", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(branches, ","), "feat/transcript,"+cwdBranch+",feat/explicit"; got != want {
+		t.Fatalf("branches=%q, want %q", got, want)
+	}
+}
+
+func TestRunUsesEachSessionTranscriptBranch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "codex.jsonl")
+	contents := `{"type":"turn.completed","session_id":"a","model":"m","gitBranch":"feat/a","timestamp":"2026-10-27T00:00:00Z"}
+{"type":"turn.completed","session_id":"b","model":"m","gitBranch":"feat/b","timestamp":"2026-10-27T00:00:01Z"}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var branches []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Branch string `json:"branch"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		branches = append(branches, payload.Branch)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	oldToken := os.Getenv("AGENT_RUN_TOKEN")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	err := run([]string{"push", "--harness", "codex", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "wave", "--worker", "worker", "--cwd", ".", path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(branches, ","), "feat/a,feat/b"; got != want {
+		t.Fatalf("branches=%q, want %q", got, want)
+	}
+}
+
 func sessionFixture() transcript.Session {
 	now := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
 	return transcript.Session{ID: "session", Model: "model", Started: now, Ended: now, Usage: transcript.Usage{Input: 1}}
