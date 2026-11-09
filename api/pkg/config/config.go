@@ -67,6 +67,9 @@ func Load() (Config, error) {
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
+	if len(cfg.EncryptionKey) != 0 && len(cfg.EncryptionKey) != 32 {
+		return Config{}, fmt.Errorf("REPOSITORY_ENCRYPTION_KEY must be 32 bytes")
+	}
 	if raw := os.Getenv("JWT_EXPIRATION"); raw != "" {
 		duration, err := time.ParseDuration(raw)
 		if err != nil || duration <= 0 {
