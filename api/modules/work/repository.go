@@ -3,6 +3,7 @@ package work
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/0Hoag/agent-ops/api/modules/agentrun"
 	"gorm.io/gorm"
@@ -78,11 +79,19 @@ func (r *Repository) List(ctx context.Context, id, state, q string, page, per in
 		return nil, 0, gorm.ErrRecordNotFound
 	}
 	var total int64
-	if e = r.query(ctx, id, "", state, q).Count(&total).Error; e != nil {
+	countQuery := r.query(ctx, id, "", state, q)
+	if e = r.db.WithContext(ctx).Raw(
+		"SELECT COUNT(*) FROM ("+countQuery.Statement.SQL.String()+") AS work_count",
+		countQuery.Statement.Vars...,
+	).Scan(&total).Error; e != nil {
 		return nil, 0, e
 	}
 	var out []Item
-	if e = r.query(ctx, id, "", state, q).Offset((page - 1) * per).Limit(per).Scan(&out).Error; e != nil {
+	listQuery := r.query(ctx, id, "", state, q)
+	if e = r.db.WithContext(ctx).Raw(
+		listQuery.Statement.SQL.String()+" LIMIT "+strconv.Itoa(per)+" OFFSET "+strconv.Itoa((page-1)*per),
+		listQuery.Statement.Vars...,
+	).Scan(&out).Error; e != nil {
 		return nil, 0, e
 	}
 	return out, total, nil
