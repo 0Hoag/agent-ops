@@ -21,7 +21,7 @@ func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
 		GitLabBaseURL: "https://gitlab.example", StatusMappings: JSONB(`{"status:review":"review"}`),
 	}
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "repositories"`)).WithArgs(id, "github", "acme/app", "APP_SECRET", item.OrganizationID, "sealed-webhook", "sealed-backfill", "https://gitlab.example", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`{"status:review":"review"}`)).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{"status:review":"review"}`)))
+	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "repositories"`)).WithArgs(id, "github", "acme/app", "APP_SECRET", item.OrganizationID, "sealed-webhook", "sealed-backfill", "https://gitlab.example", "", "", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`{"status:review":"review"}`)).WillReturnRows(sqlmock.NewRows([]string{"status_mappings", "last_synced_at"}).AddRow([]byte(`{"status:review":"review"}`), nil))
 	mock.ExpectCommit()
 	// The helper values are deliberately checked by the SQL driver, including conflict identity.
 	require.NoError(t, store.Repositories.Create(context.Background(), item))
@@ -36,7 +36,7 @@ func TestRepositoryCreateGetListAndUniqueUpsert(t *testing.T) {
 	require.Len(t, items, 1)
 	require.Equal(t, int64(1), page.Total)
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "repositories".*ON CONFLICT \("provider","full_name"\).*DO UPDATE SET.*webhook_secret_env_ref.*EXCLUDED\.webhook_secret_env_ref`).WithArgs(id, "github", "acme/app", "APP_SECRET", item.OrganizationID, "sealed-webhook", "sealed-backfill", "https://gitlab.example", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`{"status:review":"review"}`)).WillReturnRows(sqlmock.NewRows([]string{"status_mappings"}).AddRow([]byte(`{"status:review":"review"}`)))
+	mock.ExpectQuery(`INSERT INTO "repositories".*ON CONFLICT \("provider","full_name"\).*DO UPDATE SET.*webhook_secret_env_ref.*EXCLUDED\.webhook_secret_env_ref`).WithArgs(id, "github", "acme/app", "APP_SECRET", item.OrganizationID, "sealed-webhook", "sealed-backfill", "https://gitlab.example", "", "", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`{"status:review":"review"}`)).WillReturnRows(sqlmock.NewRows([]string{"status_mappings", "last_synced_at"}).AddRow([]byte(`{"status:review":"review"}`), nil))
 	mock.ExpectCommit()
 	require.NoError(t, store.Repositories.Upsert(context.Background(), item))
 	require.NoError(t, mock.ExpectationsWereMet())

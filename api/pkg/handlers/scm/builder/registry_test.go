@@ -32,6 +32,7 @@ func TestRegistryPassesConfigurationToFactories(t *testing.T) {
 func (fakeProvider) Backfill(context.Context, string) (scm.BackfillResult, error) {
 	return scm.BackfillResult{}, nil
 }
+func (fakeProvider) TestRepository(context.Context, string) (string, error) { return "", nil }
 
 func TestRegistryRejectsUnknownAndDuplicate(t *testing.T) {
 	registry := NewRegistry()

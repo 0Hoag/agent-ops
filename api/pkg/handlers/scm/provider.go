@@ -2,9 +2,16 @@ package scm
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
+)
+
+var (
+	ErrInvalidToken    = errors.New("invalid provider token")
+	ErrProjectNotFound = errors.New("provider project not found")
+	ErrUnreachable     = errors.New("provider host unreachable")
 )
 
 // Config contains provider credentials and transport settings shared by SCM vendors.
@@ -118,4 +125,5 @@ type SCMProvider interface {
 	VerifyWebhook(ctx context.Context, headers http.Header, payload []byte) error
 	ParseEvent(ctx context.Context, eventType string, headers http.Header, payload []byte) (Event, error)
 	Backfill(ctx context.Context, repository string) (BackfillResult, error)
+	TestRepository(ctx context.Context, repository string) (string, error)
 }
