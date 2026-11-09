@@ -24,6 +24,7 @@
 | 24/10/2026 | **It must run.** Every wave that touches API or client keeps `scripts/smoke.sh` green: compose up → API healthy → client built and served → the page loads real data from the API. A PR that breaks the smoke is sent back. |
 | 06/11/2026 | **Run budget does not block on green PRs.** When a wave has used its 2 worker runs and its PR CI is green but acceptance is still unmet, the coordinator merges the PR (normal checks), opens a `found-by:agent` issue with exactly the unmet acceptance (`Split-of: #n`), and continues. At most 2 splits per original feature; the 3rd blocks and asks the owner. Product decisions, credentials and irreversible actions still go to the owner. |
 | 06/11/2026 | **One recovery run without asking.** When a unit's 2 worker runs end without a PR (or CI stays red after the CI-fix run), the coordinator dispatches one recovery run (`<wave>-rec`) from the preserved work, aimed at the exact failing command. One per issue chain; if it fails the issue is blocked and the loop moves on. Blocked issues whose named blockers are all closed go back to todo. |
+| 09/11/2026 | **Product redesign (W18).** Real use judged the dashboard unusable (unclear tables, wrong or empty numbers, no reason to use it over GitLab). Direction is in `docs/ux-principles.md`: answer three questions (cost, efficiency, what needs attention), four nav items, simple and beautiful, correct numbers, GitLab linked for detail. ROADMAP is not done until W18 is closed. Supersedes the dense-ERP guidance. |
 
 ## Các đợt
 
@@ -145,6 +146,12 @@ Docker images for API and client (multi-stage, non-root) · `docker compose -f c
 whole stack · semantic versioning + CHANGELOG from commits · docs: install, connect GitHub/GitLab, connect
 each harness, upgrade. Done when: a clean machine goes from clone to working dashboard in under 10 minutes
 following only the docs (a worker does it in a fresh worktree and reports the time).
+
+### W18: simple, insight-first product (owner 09/11/2026)
+
+Rules and acceptance: `docs/ux-principles.md`. Issues are many and small, one deliverable each. Order: foundation
+(design system, shell, API summary endpoints) first, then pages, then copy, QA and data-correctness checks.
+Related defects found by the first real install: #448, #449, #450, #451.
 
 ## Câu hỏi mở (owner)
 

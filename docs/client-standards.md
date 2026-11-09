@@ -35,7 +35,7 @@ src/
 - TypeScript strict; every API response typed.
 - Modules never import other modules; shared code goes to `src/shared/`.
 - TanStack Query for data (array query keys), react-hook-form for forms, TanStack Table for tables.
-- Tailwind for styling. Dense ERP dashboard: no record data in headers, one primary button per screen, no forced ALL-CAPS.
+- Tailwind for styling. Visual and copy rules: `docs/ux-principles.md` (owner 09/11/2026; replaces the dense ERP style). No record data in headers, one primary button per screen, no forced ALL-CAPS.
 - Loading (skeleton), empty and error states on every screen that calls the API.
 - ≤200 lines per file. Vitest for pure functions and hooks; a test must be shown to fail once.
 - `APP_API_URL` from env (`.env.example` documents every variable).
