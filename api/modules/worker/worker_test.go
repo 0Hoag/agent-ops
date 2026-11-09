@@ -63,6 +63,7 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 	job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
 	require.NoError(t, err)
 	<-started
+	require.Equal(t, "queued", job.State)
 	for i := 0; i < 1000; i++ {
 		require.Equal(t, "queued", job.State)
 	}
@@ -73,6 +74,7 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 		stored, getErr := e.Get(job.ID)
 		require.NoError(t, getErr)
 		if stored.State == "succeeded" {
+			require.Equal(t, "queued", job.State)
 			return
 		}
 		time.Sleep(time.Millisecond)
