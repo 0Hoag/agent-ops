@@ -54,12 +54,19 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 	defer e.Close()
 	started := make(chan struct{})
 	release := make(chan struct{})
+	done := make(chan struct{})
 	e.run = func(context.Context, Request) error {
-		e.mu.Lock()
 		close(started)
 		<-release
-		e.mu.Unlock()
+		close(done)
 		return nil
+	}
+	e.afterEnqueueUnlock = func() {
+		<-started
+		close(release)
+		<-done
+		e.mu.Lock()
+		e.mu.Unlock()
 	}
 
 	enqueued := make(chan struct {
@@ -73,8 +80,6 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 			err error
 		}{job: job, err: err}
 	}()
-	<-started
-	close(release)
 	result := <-enqueued
 	require.NoError(t, result.err)
 	job := result.job
