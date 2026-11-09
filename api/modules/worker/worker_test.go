@@ -66,6 +66,9 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 		close(release)
 		<-done
 		e.mu.Lock()
+		for _, stored := range e.jobs {
+			require.Equal(t, "succeeded", stored.State)
+		}
 		e.mu.Unlock()
 	}
 
