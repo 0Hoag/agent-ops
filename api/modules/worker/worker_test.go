@@ -55,19 +55,33 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	e.run = func(context.Context, Request) error {
+		e.mu.Lock()
 		close(started)
 		<-release
+		e.mu.Unlock()
 		return nil
 	}
 
-	job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
-	require.NoError(t, err)
+	enqueued := make(chan struct {
+		job *Job
+		err error
+	})
+	go func() {
+		job, err := e.Enqueue(Request{OrganizationID: "org", Wave: "w", Branch: "b", Brief: "brief", Worktree: "/tmp", Script: "fake"})
+		enqueued <- struct {
+			job *Job
+			err error
+		}{job: job, err: err}
+	}()
 	<-started
+	close(release)
+	result := <-enqueued
+	require.NoError(t, result.err)
+	job := result.job
 	require.Equal(t, "queued", job.State)
 	for i := 0; i < 1000; i++ {
 		require.Equal(t, "queued", job.State)
 	}
-	close(release)
 
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
