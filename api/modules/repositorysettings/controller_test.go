@@ -21,6 +21,7 @@ func TestRoutesRegisterAllSettingsOperations(t *testing.T) {
 	for _, route := range []string{
 		"GET /api/v1/repositories",
 		"POST /api/v1/repositories",
+		"POST /api/v1/repositories/test",
 		"GET /api/v1/repositories/:repository_id",
 		"PATCH /api/v1/repositories/:repository_id",
 		"DELETE /api/v1/repositories/:repository_id",

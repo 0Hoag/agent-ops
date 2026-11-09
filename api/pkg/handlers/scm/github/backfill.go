@@ -46,6 +46,42 @@ func (p *Provider) Backfill(ctx context.Context, repository string) (scm.Backfil
 	return result, nil
 }
 
+func (p *Provider) TestRepository(ctx context.Context, repository string) (string, error) {
+	owner, name, ok := strings.Cut(repository, "/")
+	if !ok || owner == "" || name == "" {
+		return "", scm.ErrProjectNotFound
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), nil)
+	if err != nil {
+		return "", scm.ErrUnreachable
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	if p.token != "" {
+		request.Header.Set("Authorization", "Bearer "+p.token)
+	}
+	response, err := p.client.Do(request)
+	if err != nil {
+		return "", scm.ErrUnreachable
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		return "", scm.ErrInvalidToken
+	}
+	if response.StatusCode == http.StatusNotFound {
+		return "", scm.ErrProjectNotFound
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return "", scm.ErrUnreachable
+	}
+	var value struct {
+		FullName string `json:"full_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&value); err != nil || value.FullName == "" {
+		return "", scm.ErrUnreachable
+	}
+	return value.FullName, nil
+}
+
 func list[T any](p *Provider, ctx context.Context, path string, allStates bool) ([]T, error) {
 	var result []T
 	for page := 1; ; page++ {

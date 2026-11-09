@@ -758,6 +758,29 @@ definitions:
       status:
         type: integer
     type: object
+  repositorysettings.TestRequest:
+    properties:
+      base_url:
+        type: string
+      full_name:
+        type: string
+      provider:
+        type: string
+      token:
+        type: string
+    type: object
+  repositorysettings.TestResponse:
+    properties:
+      data:
+        $ref: '#/definitions/repositorysettings.TestView'
+      status:
+        type: integer
+    type: object
+  repositorysettings.TestView:
+    properties:
+      project_name:
+        type: string
+    type: object
   repositorysettings.UpdateRequest:
     properties:
       backfill_token:
@@ -2084,6 +2107,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Update repository settings
+  /api/v1/repositories/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Repository connection
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/repositorysettings.TestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/repositorysettings.TestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Test repository provider access
   /api/v1/waves:
     get:
       produces:
