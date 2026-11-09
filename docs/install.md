@@ -36,13 +36,15 @@ secret values. Do not reuse these development values for a hosted deployment.
 ```sh
 export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
 export JWT_SECRET="$(openssl rand -hex 32)"
-export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 16)"
 docker compose config --quiet
 docker compose up --build -d
 ```
 
 `CLIENT_DIR`, `JWT_SECRET`, and `REPOSITORY_ENCRYPTION_KEY` are required by the
-current `docker-compose.yml`. The default host ports are client `4173`, API
+current `docker-compose.yml`. The API loader permits an empty encryption key for
+deployments that do not configure encrypted repository secrets, but any supplied
+key must be exactly 32 bytes. The default host ports are client `4173`, API
 `18080`, and PostgreSQL `5432`; override them with `SMOKE_CLIENT_PORT`,
 `SMOKE_API_PORT`, and `POSTGRES_HOST_PORT` if needed. The named
 `agent_ops_postgres` volume is persistent. Stop the stack without deleting data:
@@ -168,7 +170,7 @@ revision, plus secrets supplied through the environment:
 export CLIENT_DIR="$(cd ../agent-ops-client && pwd)"
 export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
 export JWT_SECRET="$(openssl rand -hex 32)"
-export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export REPOSITORY_ENCRYPTION_KEY="$(openssl rand -hex 16)"
 docker compose -f compose.prod.yml config --quiet
 docker compose -f compose.prod.yml up --build -d
 ```
