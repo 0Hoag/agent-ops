@@ -32,6 +32,14 @@ assert_config() {
   [[ "$actual" == "$expected" ]] || { printf 'SCM_REPOSITORIES_JSON mismatch: expected %s, got %s\n' "$expected" "$actual" >&2; return 1; }
   python3 -c 'import json,sys; value=json.loads(sys.argv[1]); assert isinstance(value,list)' "$actual"
 }
+assert_agent_run_token() {
+  local compose_path=$1 expected=$2 actual
+  actual=$(AGENT_RUN_TOKEN="$expected" CLIENT_DIR="$ROOT" POSTGRES_PASSWORD=fixture-postgres-password JWT_SECRET=fixture-jwt REPOSITORY_ENCRYPTION_KEY=01234567890123456789012345678901 \
+    docker compose -f "$compose_path" -p "$project" config --format json |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["api"]["environment"]["AGENT_RUN_TOKEN"])')
+  [[ "$actual" == "$expected" ]] || { printf 'AGENT_RUN_TOKEN mismatch in %s: expected %s, got %s\n' "$compose_path" "$expected" "$actual" >&2; return 1; }
+  printf 'PASS: %s forwards supplied AGENT_RUN_TOKEN\n' "$compose_path"
+}
 unset SCM_REPOSITORIES_JSON
 export JWT_SECRET=fixture-jwt REPOSITORY_ENCRYPTION_KEY=01234567890123456789012345678901
 if [[ ${EXPECT_OLD_DEFAULT_CONTROL:-0} == 1 ]]; then
@@ -59,6 +67,8 @@ PY
 fi
 assert_config '[]'
 printf 'PASS: unset default is JSON empty array []\n'
+assert_agent_run_token "$ROOT/docker-compose.yml" 'compose-sentinel-token'
+assert_agent_run_token "$ROOT/compose.prod.yml" 'compose-sentinel-token'
 configured='[{"provider":"github","full_name":"fixture/repo"}]'
 actual=$(SCM_REPOSITORIES_JSON="$configured" JWT_SECRET=fixture-jwt REPOSITORY_ENCRYPTION_KEY=01234567890123456789012345678901 compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["api"]["environment"]["SCM_REPOSITORIES_JSON"])')
 [[ "$actual" == "$configured" ]] || { printf 'explicit JSON changed: %s\n' "$actual" >&2; exit 1; }
