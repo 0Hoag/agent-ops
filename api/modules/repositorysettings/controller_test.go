@@ -74,7 +74,7 @@ func TestDeleteMapsRepositoryStoreErrorsToHTTPResponses(t *testing.T) {
 			t.Cleanup(func() { _ = sqlDB.Close() })
 			db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
 			require.NoError(t, err)
-			db.Callback().Delete().Before("gorm:delete").Register("repositorysettings_test_error", func(tx *gorm.DB) { tx.Error = tc.dbErr })
+			require.NoError(t, db.Callback().Delete().Before("gorm:delete").Register("repositorysettings_test_error", func(tx *gorm.DB) { tx.Error = tc.dbErr }))
 
 			orgID := "org-a"
 			accountID := "account-a"
