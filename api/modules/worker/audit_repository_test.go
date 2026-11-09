@@ -31,9 +31,11 @@ func TestAuditRepositoryUsesMigratedTableMapping(t *testing.T) {
 		Outcome:        "succeeded",
 		CreatedAt:      time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC),
 	}
+	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "worker_action_audits"`)).
 		WithArgs(audit.ID, audit.OrganizationID, audit.ActorID, audit.OccurredAt, audit.Action, audit.Wave, audit.JobID, audit.Outcome, audit.CreatedAt).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(audit.ID))
+	mock.ExpectCommit()
 
 	repo := &auditRepository{db: db}
 	require.NoError(t, repo.Create(context.Background(), audit))
