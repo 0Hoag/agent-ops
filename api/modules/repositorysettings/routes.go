@@ -12,4 +12,5 @@ func (r *Routes) Register(g *gin.RouterGroup) {
 	x.GET("/:repository_id", r.c.Get)
 	x.PATCH("/:repository_id", r.c.Update)
 	x.DELETE("/:repository_id", r.c.Delete)
+	x.POST("/:repository_id/sync", r.c.Sync)
 }

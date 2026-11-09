@@ -1846,6 +1846,28 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/repositories/{repository_id}/sync": {
+            "post": {
+                "summary": "Sync repository",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository UUID",
+                        "name": "repository_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/repositorysettings.ViewResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/waves": {
             "get": {
                 "produces": [
@@ -3528,6 +3550,15 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "last_sync_error": {
+                    "type": "string"
+                },
+                "last_sync_status": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
@@ -3589,6 +3620,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "last_sync_error": {
+                    "type": "string"
+                },
+                "last_sync_status": {
+                    "type": "string"
+                },
+                "last_synced_at": {
                     "type": "string"
                 },
                 "provider": {

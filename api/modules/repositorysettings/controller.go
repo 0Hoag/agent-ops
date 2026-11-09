@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
+	"github.com/0Hoag/agent-ops/api/modules/repositorysync"
 	"github.com/0Hoag/agent-ops/api/modules/store"
 	"github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/response"
@@ -19,10 +20,15 @@ type Controller struct {
 	orgs        *organization.Repository
 	sealer      *crypto.Sealer
 	webhookBase string
+	sync        *repositorysync.Service
 }
 
-func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string) *Controller {
-	return &Controller{repos: repos, orgs: orgs, sealer: sealer, webhookBase: strings.TrimRight(webhookBase, "/")}
+func NewController(repos *store.RepositoryRepository, orgs *organization.Repository, sealer *crypto.Sealer, webhookBase string, syncService ...*repositorysync.Service) *Controller {
+	c := &Controller{repos: repos, orgs: orgs, sealer: sealer, webhookBase: strings.TrimRight(webhookBase, "/")}
+	if len(syncService) > 0 {
+		c.sync = syncService[0]
+	}
+	return c
 }
 func (c *Controller) org(ctx *gin.Context) (string, bool) {
 	id, ok := ctx.Get("organization_id")
@@ -52,9 +58,36 @@ func (c *Controller) allowed(ctx *gin.Context, write bool) (string, bool) {
 func accountID(ctx *gin.Context) string { v, _ := ctx.Get("account_id"); s, _ := v.(string); return s }
 func (c *Controller) view(r *store.Repository) View {
 	base := c.webhookBase
-	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: base + "/api/v1/webhooks/" + r.Provider}
+	v := View{ID: string(r.ID), Provider: r.Provider, FullName: r.FullName, GitLabBaseURL: r.GitLabBaseURL, WebhookURL: base + "/api/v1/webhooks/" + r.Provider, LastSyncedAt: r.LastSyncedAt, LastSyncStatus: r.LastSyncStatus, LastSyncError: r.LastSyncError}
 	_ = json.Unmarshal(r.StatusMappings, &v.StatusMappings)
 	return v
+}
+
+// Sync performs an authenticated immediate provider sync.
+// @Summary Sync repository
+// @Param repository_id path string true "Repository UUID"
+// @Success 200 {object} ViewResponse
+// @Router /api/v1/repositories/{repository_id}/sync [post]
+func (c *Controller) Sync(ctx *gin.Context) {
+	org, ok := c.allowed(ctx, false)
+	if !ok || c.sync == nil {
+		return
+	}
+	r, err := c.repos.GetByOrganization(ctx, store.UUID(org), store.UUID(ctx.Param("repository_id")))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		response.NotFound(ctx, "repository not found")
+		return
+	}
+	if err != nil {
+		response.InternalError(ctx, "failed to get repository")
+		return
+	}
+	if err = c.sync.Sync(ctx.Request.Context(), r.ID); err != nil {
+		response.InternalError(ctx, "repository sync failed")
+		return
+	}
+	latest, _ := c.repos.Get(ctx, r.ID)
+	response.OK(ctx, c.view(latest))
 }
 
 // List returns repository settings without stored credentials.
