@@ -14,6 +14,9 @@ import (
 var ErrRepositoryHasDependencies = errors.New("repository has dependent data")
 
 func isForeignKeyViolation(err error) bool {
+	if errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return true
+	}
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
