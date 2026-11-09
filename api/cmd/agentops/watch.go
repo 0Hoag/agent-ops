@@ -40,6 +40,8 @@ func runWatch(args []string) error {
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
+	branch := fs.String("branch", "", "source branch (overrides transcript gitBranch)")
+	cwd := fs.String("cwd", ".", "working directory used to resolve the current Git branch")
 	interval := fs.Duration("interval", time.Second, "poll interval")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("invalid watch flags")
@@ -58,7 +60,11 @@ func runWatch(args []string) error {
 	if err != nil {
 		return err
 	}
-	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", client: httpClient()}
+	resolvedBranch, err := resolveBranch(*branch, "", *cwd)
+	if err != nil {
+		return err
+	}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", branch: resolvedBranch, client: httpClient()}
 	ctx, stop := signalContext()
 	defer stop()
 	for {

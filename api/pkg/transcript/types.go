@@ -10,6 +10,7 @@ type Usage struct {
 
 type Session struct {
 	ID             string
+	Branch         string
 	Model          string
 	Started, Ended time.Time
 	Usage          Usage

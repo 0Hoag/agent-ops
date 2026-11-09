@@ -14,6 +14,7 @@ type AgentRun struct {
 	Model             string        `gorm:"not null" json:"model"`
 	IssueNumbers      store.JSONB   `gorm:"type:jsonb;not null" json:"issue_numbers" swaggertype:"array,integer"`
 	PRNumber          *int64        `json:"pr_number,omitempty"`
+	Branch            string        `gorm:"not null;default:'';index" json:"branch,omitempty"`
 	InputTokens       int64         `json:"input_tokens"`
 	CachedInputTokens int64         `json:"cached_input_tokens"`
 	CacheWriteTokens  int64         `json:"cache_write_tokens"`

@@ -2457,6 +2457,9 @@ const docTemplate = `{
                 "billing_type": {
                     "type": "string"
                 },
+                "branch": {
+                    "type": "string"
+                },
                 "cache_write_tokens": {
                     "type": "integer"
                 },
@@ -2592,6 +2595,9 @@ const docTemplate = `{
             ],
             "properties": {
                 "billing_type": {
+                    "type": "string"
+                },
+                "branch": {
                     "type": "string"
                 },
                 "cache_write_tokens": {
