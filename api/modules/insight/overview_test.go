@@ -62,3 +62,30 @@ func TestOverviewControllerParsesInclusiveDateQueries(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, res.Code)
 	require.Contains(t, res.Body.String(), "from must be YYYY-MM-DD")
 }
+
+func TestCompatibleTimelinePreservesCumulativeTotalsAcrossThreeDays(t *testing.T) {
+	run := AnalyticsRun{InputTokens: 60, CachedInputTokens: 30, CacheWriteTokens: 15, OutputTokens: 9, ReasoningTokens: 6}
+	base := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	steps := []usageStep{
+		{StartedAt: timePtr(base), InputTokens: 10, CachedInputTokens: 5, CacheWriteTokens: 5, OutputTokens: 2, ReasoningTokens: 2},
+		{StartedAt: timePtr(base.Add(24 * time.Hour)), InputTokens: 20, CachedInputTokens: 10, CacheWriteTokens: 5, OutputTokens: 3, ReasoningTokens: 2},
+		{StartedAt: timePtr(base.Add(48 * time.Hour)), InputTokens: 30, CachedInputTokens: 15, CacheWriteTokens: 5, OutputTokens: 4, ReasoningTokens: 2},
+	}
+	require.True(t, compatibleTimeline(run, steps))
+	var got AnalyticsRun
+	for _, step := range steps {
+		part := stepRun(run, step)
+		got.InputTokens += part.InputTokens
+		got.CachedInputTokens += part.CachedInputTokens
+		got.CacheWriteTokens += part.CacheWriteTokens
+		got.OutputTokens += part.OutputTokens
+		got.ReasoningTokens += part.ReasoningTokens
+	}
+	require.Equal(t, run.InputTokens, got.InputTokens)
+	require.Equal(t, run.CachedInputTokens, got.CachedInputTokens)
+	require.Equal(t, run.CacheWriteTokens, got.CacheWriteTokens)
+	require.Equal(t, run.OutputTokens, got.OutputTokens)
+	require.Equal(t, run.ReasoningTokens, got.ReasoningTokens)
+}
+
+func timePtr(t time.Time) *time.Time { return &t }
