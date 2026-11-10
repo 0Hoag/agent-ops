@@ -32,9 +32,10 @@ func TestAuditRepositoryUsesMigratedTableMapping(t *testing.T) {
 		CreatedAt:      time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC),
 	}
 	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "worker_action_audits"`)).
+	// All fields, including the primary key, are supplied; GORM executes without RETURNING.
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "worker_action_audits"`)).
 		WithArgs(audit.ID, audit.OrganizationID, audit.ActorID, audit.OccurredAt, audit.Action, audit.Wave, audit.JobID, audit.Outcome, audit.CreatedAt).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(audit.ID))
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	repo := &auditRepository{db: db}
@@ -43,8 +44,8 @@ func TestAuditRepositoryUsesMigratedTableMapping(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "worker_action_audits"`)).
 		WithArgs(audit.OrganizationID).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
-	mock.ExpectQuery(`SELECT .* FROM "worker_action_audits"`).
-		WithArgs(audit.OrganizationID, 0, 10).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "worker_action_audits" WHERE organization_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT $2`)).
+		WithArgs(audit.OrganizationID, 10).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "actor_id", "occurred_at", "action", "wave", "job_id", "outcome", "created_at"}).
 			AddRow(audit.ID, audit.OrganizationID, audit.ActorID, audit.OccurredAt, audit.Action, audit.Wave, audit.JobID, audit.Outcome, audit.CreatedAt))
 
