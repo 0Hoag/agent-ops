@@ -116,6 +116,14 @@ One pass:
    `Recovery-of: <wave>` on the issue first. One recovery per issue chain: a split or follow-up of an issue that
    already had one gets none. If the recovery ends without a green PR, mark `status:blocked` with the reason and move
    on; report `AUTOPILOT: STOP` only when nothing else is runnable.
+   **Escalation run (owner 10/11: three stuck chains stopped the loop and asked for more budget):** a unit whose
+   recovery ended without a green PR gets ONE escalation run instead of an owner question: wave `<wave>-esc`,
+   `AGENT_RUN_MODEL=openai/gpt-6.1-sol`, unguarded `scripts/spawn.sh <log> <worker script> ...` (the recovery
+   reservation is not touched). The brief is self-contained: red PR, failing CI log excerpt, preserved branch, one goal.
+   For a failing correctness check, first decide whether the product or the test is wrong; never weaken the test.
+   One escalation per issue chain. If it fails, mark `status:blocked`, comment why, and continue with other work.
+   Never report `AUTOPILOT: STOP owner decision` to ask for more run budget; STOP only for product decisions,
+   credentials, irreversible actions, or when nothing is runnable.
    **Stale blocks:** in sync, for each `status:blocked` issue whose comment names blocking issues, set it back to
    `todo` once all of them are closed.
    **Red PRs are work, not a wait state.** Every pass, for each open PR with a failed check and no worker on its branch
