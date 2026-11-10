@@ -25,6 +25,7 @@
 | 06/11/2026 | **Run budget does not block on green PRs.** When a wave has used its 2 worker runs and its PR CI is green but acceptance is still unmet, the coordinator merges the PR (normal checks), opens a `found-by:agent` issue with exactly the unmet acceptance (`Split-of: #n`), and continues. At most 2 splits per original feature; the 3rd blocks and asks the owner. Product decisions, credentials and irreversible actions still go to the owner. |
 | 06/11/2026 | **One recovery run without asking.** When a unit's 2 worker runs end without a PR (or CI stays red after the CI-fix run), the coordinator dispatches one recovery run (`<wave>-rec`) from the preserved work, aimed at the exact failing command. One per issue chain; if it fails the issue is blocked and the loop moves on. Blocked issues whose named blockers are all closed go back to todo. |
 | 09/11/2026 | **Product redesign (W18).** Real use judged the dashboard unusable (unclear tables, wrong or empty numbers, no reason to use it over GitLab). Direction is in `docs/ux-principles.md`: answer three questions (cost, efficiency, what needs attention), four nav items, simple and beautiful, correct numbers, GitLab linked for detail. ROADMAP is not done until W18 is closed. Supersedes the dense-ERP guidance. |
+| 10/11/2026 | **One escalation run instead of an owner question.** After the recovery run fails, the coordinator runs one escalation (`<wave>-esc`, stronger model gpt-6.1-sol) on the same unit, then blocks it and moves on. The loop never stops only to ask for more run budget. |
 
 ## Các đợt
 
