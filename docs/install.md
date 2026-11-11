@@ -33,6 +33,9 @@ docker compose -p agent-ops-docs up --build -d
 accepted by transcript ingestion. `CLIENT_DIR` supplies the separate client source to the client image. The port variables
 only change the host bindings. Each variable is consumed by `docker-compose.yml` and is deliberately local to this run.
 
+For a responsive local setup, Docker Desktop is recommended at 4 CPUs. `nice` lowers the priority of the host command;
+it does not limit the CPU available to Docker Desktop's VM.
+
 Check both services before continuing:
 
 ```sh

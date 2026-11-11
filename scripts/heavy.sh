@@ -12,5 +12,9 @@ until mkdir "$lock" 2>/dev/null; do
   sleep 5
 done
 echo $$ > "$lock/pid"
-trap 'rm -rf "$lock"' EXIT
-nice -n 10 "$@"
+cleanup_lock() { rm -rf "$lock"; }
+trap cleanup_lock EXIT
+nice -n 10 "$@" &
+child=$!
+trap 'kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null; exit 143' INT TERM
+wait "$child"
