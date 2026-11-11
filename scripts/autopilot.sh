@@ -18,6 +18,8 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 . scripts/autopilot-state.sh
 autopilot_preflight opencode || exit 2
+pass_cleanup() { scripts/docker-pass-cleanup.sh; }
+trap pass_cleanup EXIT
 interval=${INTERVAL:-600}
 poll=${POLL:-30}
 cap=${CAP:-2}   # keep equal to the worker cap in docs/coordinator-loop.md → Dispatch
@@ -190,6 +192,7 @@ while true; do
 
 $(cat "$dir/snapshot.md")
 " < /dev/null > "$dir/$ts.jsonl" 2> "$dir/$ts.err"
+  pass_cleanup
 
   [ -s "$dir/$ts.err" ] && { echo "  opencode error:"; head -3 "$dir/$ts.err" | sed 's/^/    /'; }
   events_valid=1
