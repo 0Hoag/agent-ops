@@ -28,3 +28,10 @@ type Membership struct {
 }
 
 func (Membership) TableName() string { return "organization_memberships" }
+
+// Member is the tenant-scoped member representation returned by the list endpoint.
+// Email is selected from the associated account without exposing account credentials.
+type Member struct {
+	Membership
+	Email string `json:"email"`
+}
