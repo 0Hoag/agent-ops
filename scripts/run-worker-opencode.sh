@@ -56,6 +56,7 @@ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 set +e
 # opencode v2 has no --dir: run from the worktree.
 ( cd "$wt" && OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
+  --model "$model" \
   --agent worker \
   --format json \
   --title "$wave" \
