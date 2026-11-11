@@ -12,14 +12,28 @@ set -uo pipefail
 printf '%s\n' "$*" >>"${DOCKER_LOG:?}"
 case "${1:-}" in
   builder) exit 0 ;;
-  ps) printf '%s\n' \
-    'stopped-w97 w97-build' \
-    'stopped-run agent-run-123' \
-    'stopped-watch agent-watch-123' \
-    'stopped-smoke agent-ops-smoke-123' \
-    'running-w97 w97-running' \
-    'stopped-unrelated unrelated-project' \
-    'stopped-unlabelled ' ;;
+  ps)
+    status_filter= label_filter=false
+    for arg in "$@"; do
+      case "$arg" in
+        status=*) status_filter=${arg#status=} ;;
+        label=com.docker.compose.project) label_filter=true ;;
+      esac
+    done
+    while read -r id status project; do
+      [ -z "$status_filter" ] || [ "$status" = "$status_filter" ] || continue
+      [ "$label_filter" = false ] || [ -n "$project" ] || continue
+      printf '%s %s\n' "$id" "$project"
+    done <<'FIXTURES'
+stopped-w97 exited w97-build
+stopped-run exited agent-run-123
+stopped-watch exited agent-watch-123
+stopped-smoke exited agent-ops-smoke-123
+running-w97 running w97-running
+stopped-unrelated exited unrelated-project
+stopped-unlabelled exited
+FIXTURES
+    ;;
   rm)
     id=${2:-}
     case "$id" in
@@ -31,12 +45,52 @@ esac
 EOF
 chmod +x "$tmp/bin/docker"
 
-DOCKER_LOG=$tmp/docker.log PATH="$tmp/bin:$PATH" bash "$ROOT/scripts/docker-pass-cleanup.sh"
-grep -Fxq 'builder prune -f --filter until=24h' "$tmp/docker.log"
-grep -Fxq 'ps -a --filter status=exited --filter label=com.docker.compose.project --format {{.ID}} {{.Label "com.docker.compose.project"}}' "$tmp/docker.log"
-for id in stopped-w97 stopped-run stopped-watch stopped-smoke; do grep -Fxq "rm $id" "$tmp/docker.log"; done
-for id in running-w97 stopped-unrelated stopped-unlabelled; do ! grep -Fq "rm $id" "$tmp/docker.log"; done
-! grep -Eq 'volume|system prune|image prune|container prune' "$tmp/docker.log"
+assert_cleanup() {
+  local id
+  for id in running-w97 stopped-unrelated stopped-unlabelled; do
+    if grep -Fxq "rm $id" "$tmp/docker.log"; then
+      echo "FAIL: forbidden removal: $id" >&2
+      return 1
+    fi
+  done
+  if grep -Eq 'volume|system prune|image prune|container prune' "$tmp/docker.log"; then
+    echo 'FAIL: forbidden prune or volume command' >&2
+    return 1
+  fi
+  grep -Fxq 'builder prune -f --filter until=24h' "$tmp/docker.log" || return 1
+  grep -Fxq 'ps -a --filter status=exited --filter label=com.docker.compose.project --format {{.ID}} {{.Label "com.docker.compose.project"}}' "$tmp/docker.log" || return 1
+  for id in stopped-w97 stopped-run stopped-watch stopped-smoke; do
+    grep -Fxq "rm $id" "$tmp/docker.log" || return 1
+  done
+}
+
+run_cleanup() {
+  : >"$tmp/docker.log"
+  DOCKER_LOG=$tmp/docker.log PATH="$tmp/bin:$PATH" bash "$1" || return 1
+  assert_cleanup
+}
+
+run_cleanup "$ROOT/scripts/docker-pass-cleanup.sh"
+
+# Mutate each real guard separately; the stub and fixtures stay identical.
+sed 's/--filter status=exited //' "$ROOT/scripts/docker-pass-cleanup.sh" >"$tmp/no-status.sh"
+sed 's/w97\*|agent-run-\*|agent-watch-\*|agent-ops-smoke-\*)/*)/' "$ROOT/scripts/docker-pass-cleanup.sh" >"$tmp/no-allowlist.sh"
+for control in no-status no-allowlist; do
+  result=0
+  run_cleanup "$tmp/$control.sh" >"$tmp/$control.log" 2>&1 || result=$?
+  case "$control" in
+    no-status) expected='FAIL: forbidden removal: running-w97' ;;
+    no-allowlist) expected='FAIL: forbidden removal: stopped-unrelated' ;;
+  esac
+  if [ "$result" -ne 1 ] || ! grep -Fxq "$expected" "$tmp/$control.log"; then
+    echo "FAIL: $control control did not fail at its safety assertion (exit $result)" >&2
+    cat "$tmp/$control.log" >&2
+    exit 1
+  fi
+  echo "PASS: $control control: $expected (exit $result)"
+done
+run_cleanup "$ROOT/scripts/docker-pass-cleanup.sh"
+echo 'PASS: original helper before and after identical-input controls'
 
 # Docker unavailable is a successful no-op and does not retry.
 no_docker="$tmp/no-docker"; mkdir "$no_docker"
