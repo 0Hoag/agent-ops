@@ -238,7 +238,7 @@ docker run --rm --network "${PROJECT}_default" -v "$ROOT/api:/src:ro" -w /src \
   -e SMOKE_GITLAB_FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT" \
   -e SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used \
   -e SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used \
-  golang:1.26-alpine sh -c 'go run ./cmd/sync'
+  golang:1.26.11-alpine sh -c 'go run ./cmd/sync'
 
 assert_mapped_issue() {
   local actual
@@ -264,7 +264,7 @@ docker run --rm --network "${PROJECT}_default" -v "$ROOT/api:/src:ro" -w /src \
   -e SMOKE_GITLAB_FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT" \
   -e SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used \
   -e SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used \
-  golang:1.26-alpine sh -c 'go run ./cmd/sync'
+  golang:1.26.11-alpine sh -c 'go run ./cmd/sync'
 if assert_mapped_issue; then
   log "mapped-status control unexpectedly passed after removing the configured mapping"
   exit 1
@@ -281,7 +281,7 @@ docker run --rm --network "${PROJECT}_default" -v "$ROOT/api:/src:ro" -w /src \
   -e SMOKE_GITLAB_FIXTURE_URL="http://host.docker.internal:$FIXTURE_PORT" \
   -e SMOKE_WEBHOOK_SECRET=environment-webhook-fallback-must-not-be-used \
   -e SMOKE_BACKFILL_TOKEN=environment-fallback-must-not-be-used \
-  golang:1.26-alpine sh -c 'go run ./cmd/sync'
+  golang:1.26.11-alpine sh -c 'go run ./cmd/sync'
 assert_mapped_issue || exit 1
 log "mapped-status control restored Status::Review mapping; identical persisted issue assertion passed"
 
