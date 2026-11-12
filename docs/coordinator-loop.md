@@ -70,7 +70,8 @@ One pass:
      Do not rebuild full acceptance environments in the coordinator pass; that is the worker's job.
    - Then merge through `scripts/merge-pr.sh <owner/repo> <n> "$sha" squash` for feature PRs or
      `... merge` for `reviews/development → main`; it retries only transient failures and confirms `MERGED`
-     before linked issues are closed. Confirm the content is on `main`, then remove its worktree.
+     before linked issues are closed. `scripts/close-linked.sh` also verifies `MERGED` and the PR base before
+     closing linked issues. Confirm the content is on `main`, then remove its worktree.
    - **Hygiene is scripted, you only read it.** Before each pass `autopilot.sh` runs `scripts/worktrees.sh --prune` and `scripts/branches.sh --delete` (deletes
      only branches whose tip is exactly a merged PR's head; never `main`/`reviews/development`/PR bases) and
      `scripts/audit.sh` (missing/double status, no priority, blocked without a `Status:` note, closed issue still

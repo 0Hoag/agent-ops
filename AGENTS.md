@@ -27,7 +27,7 @@ Skill: `$orchestrator-workers` (đọc `references/roles.md`, `references/codex-
     tính năng hoặc một wave/epic lớn (project-sync đóng epic) và CI của `reviews/development` xanh. Tiêu đề
     `release: <wave>`; body liệt kê PR đã vào. Không squash promotion PR (squash làm hai nhánh lệch nhau).
   - GitHub chỉ tự đóng issue khi merge vào nhánh mặc định (`main`), nên sau khi merge vào `reviews/development` chạy
-    `scripts/close-linked.sh <owner/repo> <pr>` (script tự merge đã làm việc này).
+    `scripts/close-linked.sh <owner/repo> <pr>`; it verifies the PR is MERGED before closing anything.
   - Cả hai nhánh được bảo vệ (cấm xóa và force-push).
 - Mỗi PR có `Closes #n` cho từng issue nó đóng. Commit theo Conventional Commits (`feat(api): …`, `feat(web): …`).
 - Trạng thái issue: `node scripts/issue-status.mjs <n> <todo|in progress|review|blocked|done>`, không thêm label trần.

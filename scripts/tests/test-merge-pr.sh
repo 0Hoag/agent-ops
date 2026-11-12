@@ -11,6 +11,8 @@ case "$1 $2" in
   'pr view')
     if [[ " $* " == *' --json state,headRefOid '* ]]; then
       printf 'OPEN\t%s\n' "${HEAD:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
+    elif [[ " $* " == *' --json state,baseRefName '* ]]; then
+      if [[ "${MODE:-}" = success || "${MODE:-}" = promotion ]] && [[ -s "$count" ]]; then printf 'MERGED\treviews/development\n'; else printf '%s\treviews/development\n' "${STATE:-OPEN}"; fi
     elif [[ " $* " == *' --json state '* ]]; then
       if [[ "${MODE:-}" = success || "${MODE:-}" = promotion ]] && [[ -s "$count" ]]; then printf 'MERGED\n'; else printf '%s\n' "${STATE:-OPEN}"; fi
     elif [[ " $* " == *' --json body '* ]]; then
