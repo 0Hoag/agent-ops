@@ -89,7 +89,7 @@ is_critical() {
 # A PR is merged when CI is fully green (>=1 check, none pending or failed), no worker is still pushing to its
 # branch, it has been quiet for 3 min and has no `hold` label. Feature PRs also need `Closes #n` and must not be
 # CRITICAL; promotion PRs are exempt (their content was reviewed when it entered reviews/development).
-# After a feature merge the issues it names are closed (scripts/close-linked.sh). Prints one line per merge.
+# After a feature merge, scripts/close-linked.sh verifies MERGED before closing linked issues. Prints one line per merge.
 merge_ready() {
   local r n sha head base checks
   for r in $REPOS; do
@@ -115,7 +115,7 @@ merge_ready() {
         pgrep -f -- "$head" > /dev/null && continue
         is_critical "$r" "$n" "$sha" && continue
         scripts/merge-pr.sh "$r" "$n" "$sha" squash \
-          && { echo "  merged $r#$n into reviews/development by script"; scripts/close-linked.sh "$r" "$n" | sed 's/^/    /'; }
+          && { scripts/close-linked.sh "$r" "$n" | sed 's/^/    /' && echo "  merged $r#$n into reviews/development by script"; }
       fi
     done
   done
