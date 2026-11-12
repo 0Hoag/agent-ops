@@ -1,0 +1,204 @@
+[
+  {
+    "method": "POST",
+    "route": "/api/v1/repositories",
+    "path": "/api/v1/repositories",
+    "case": "duplicate-0",
+    "request": {
+      "provider": "gitlab",
+      "full_name": "review/duplicate-31aee47f29484d6d9943dd4881938829"
+    },
+    "status": 201,
+    "shape": "data,status",
+    "response": {
+      "status": 201,
+      "data": {
+        "id": "f182e877-11f4-47cf-8d19-6f561b7b1021",
+        "provider": "gitlab",
+        "full_name": "review/duplicate-31aee47f29484d6d9943dd4881938829",
+        "status_mappings": null,
+        "webhook_url": "/api/v1/webhooks/gitlab",
+        "last_sync_status": "",
+        "webhook_secret": "[synthetic redacted]",
+        "backfill_token": "[synthetic redacted]"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/repositories",
+    "path": "/api/v1/repositories",
+    "case": "duplicate-1",
+    "request": {
+      "provider": "gitlab",
+      "full_name": "review/duplicate-31aee47f29484d6d9943dd4881938829"
+    },
+    "status": 500,
+    "shape": "message,status",
+    "response": {
+      "status": 500,
+      "message": "failed to create repository"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/agent-runs/00000000-0000-0000-0000-000000000001/timeline",
+    "path": "/api/v1/agent-runs/00000000-0000-0000-0000-000000000001/timeline",
+    "case": "missing-run",
+    "request": {
+      "steps": []
+    },
+    "status": 500,
+    "shape": "message,status",
+    "response": {
+      "status": 500,
+      "message": "failed to store timeline: record not found"
+    }
+  },
+  {
+    "method": "GET",
+    "route": "/api/v1/agent-runs/aggregate?repository_id=invalid",
+    "path": "/api/v1/agent-runs/aggregate?repository_id=invalid",
+    "case": "invalid-uuid",
+    "request": null,
+    "status": 500,
+    "shape": "message,status",
+    "response": {
+      "status": 500,
+      "message": "failed to aggregate agent runs"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/gitlab",
+    "path": "/api/v1/webhooks/gitlab",
+    "case": "webhook-opened",
+    "request": {
+      "project": {
+        "path_with_namespace": "review/synthetic"
+      },
+      "object_attributes": {
+        "id": 3,
+        "iid": 3,
+        "title": "Webhook state control",
+        "state": "open",
+        "updated_at": "2026-11-12T00:00:00Z"
+      }
+    },
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/gitlab",
+    "path": "/api/v1/webhooks/gitlab",
+    "case": "webhook-open",
+    "request": {
+      "project": {
+        "path_with_namespace": "review/synthetic"
+      },
+      "object_attributes": {
+        "id": 3,
+        "iid": 3,
+        "title": "Webhook state control",
+        "state": "open",
+        "updated_at": "2026-11-12T00:00:00Z"
+      }
+    },
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": {
+        "accepted": true
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "path": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "case": "seed-before-clear",
+    "request": {
+      "steps": [
+        {
+          "input_tokens": 11
+        }
+      ]
+    },
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": [
+        {
+          "id": "c3954514-a35c-3f31-a07b-c64aaaa81395",
+          "run_id": "e3aaaad8-67d7-4166-bdea-96e0c2b32509",
+          "sequence": 0,
+          "input_tokens": 11,
+          "cached_input_tokens": 0,
+          "cache_write_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "cache_hit": false
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "route": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "path": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "case": "read-before-clear",
+    "request": null,
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": [
+        {
+          "id": "c3954514-a35c-3f31-a07b-c64aaaa81395",
+          "run_id": "e3aaaad8-67d7-4166-bdea-96e0c2b32509",
+          "sequence": 0,
+          "input_tokens": 11,
+          "cached_input_tokens": 0,
+          "cache_write_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "cache_hit": false,
+          "cumulative_cost_usd": 1.1e-05
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "path": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "case": "empty-timeline-after",
+    "request": {},
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": null
+    }
+  },
+  {
+    "method": "GET",
+    "route": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "path": "/api/v1/agent-runs/e3aaaad8-67d7-4166-bdea-96e0c2b32509/timeline",
+    "case": "read-after-clear",
+    "request": null,
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": []
+    }
+  }
+]

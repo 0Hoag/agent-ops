@@ -1,0 +1,82 @@
+[
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "no-token",
+    "request": "{\"repository\": {\"full_name\": \"review/github-fixture\"}, \"issue\": {\"id\": 4, \"number\": 4, \"title\": \"GitHub signature fixture\", \"state\": \"open\", \"updated_at\": \"2026-11-12T00:00:00Z\", \"labels\": []}}",
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "wrong-secret",
+    "request": "{\"repository\": {\"full_name\": \"review/github-fixture\"}, \"issue\": {\"id\": 4, \"number\": 4, \"title\": \"GitHub signature fixture\", \"state\": \"open\", \"updated_at\": \"2026-11-12T00:00:00Z\", \"labels\": []}}",
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "missing-body",
+    "request": "",
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "invalid-body",
+    "request": "{",
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "empty-data",
+    "request": "{}",
+    "status": 400,
+    "shape": "message,status",
+    "response": {
+      "status": 400,
+      "message": "webhook rejected"
+    }
+  },
+  {
+    "method": "POST",
+    "route": "/api/v1/webhooks/github",
+    "path": "/api/v1/webhooks/github",
+    "case": "valid",
+    "request": "{\"repository\": {\"full_name\": \"review/github-fixture\"}, \"issue\": {\"id\": 4, \"number\": 4, \"title\": \"GitHub signature fixture\", \"state\": \"open\", \"updated_at\": \"2026-11-12T00:00:00Z\", \"labels\": []}}",
+    "status": 200,
+    "shape": "data,status",
+    "response": {
+      "status": 200,
+      "data": {
+        "accepted": true
+      }
+    }
+  }
+]
