@@ -18,7 +18,7 @@ const dry = process.argv.includes('--dry-run')
 const STATUS = { todo: 'Todo', 'in progress': 'In progress', review: 'Review', blocked: 'Blocked' }
 const FIELDS = {
     Status: ['Todo', 'In progress', 'Review', 'Blocked', 'Done'],
-    Wave: ['WS', ...Array.from({ length: 19 }, (_, i) => `W${i}`)],
+    Wave: ['WS', ...Array.from({ length: 22 }, (_, i) => `W${i}`)],
     Area: ['api', 'client', 'ci', 'docs'],
     Priority: ['P0', 'P1', 'P2', 'P3'],
 }
