@@ -1,0 +1,69 @@
+# API route matrix
+
+Each cell is HTTP status and response shape (`n` number, `s` string, `[]` array, `{}` object). Raw sanitized bodies: [evidence](W18R1-api-501-evidence.json). Supplemental defect/control requests: [controls](W18R1-api-501-controls.json). The valid webhook payload returns 400: defect #546, not a successful test.
+
+| Method / route | No token | Other org | Missing body | Invalid body/query | Empty | Valid |
+|---|---|---|---|---|---|---|
+| GET /api/v1/agent-run-prices | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/agent-run-prices | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/agent-run-prices/missing | 401 {message:s,status:n} | 200 {data:null,status:n} | 200 {data:null,status:n} | 200 {data:null,status:n} | 200 {data:null,status:n} | 200 {data:null,status:n} |
+| PATCH /api/v1/agent-run-prices/{price_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} |
+| GET /api/v1/agent-runs | 401 {message:s,status:n} | 200 {data:[],meta:{},status:n} | 200 {data:[],meta:{},status:n} | 400 {message:s,status:n} | 200 {data:[],meta:{},status:n} | 200 {data:[],meta:{},status:n} |
+| POST /api/v1/agent-runs | 401 {message:s,status:n} | 401 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/agent-runs/aggregate | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 500 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| GET /api/v1/agent-runs/{run_id}/timeline | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/agent-runs/{run_id}/timeline | 401 {message:s,status:n} | 401 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:null,status:n} | 200 {data:[],status:n} |
+| GET /api/v1/alerts/channels | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/alerts/channels | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| PUT /api/v1/alerts/channels/{kind} | 401 {message:s,status:n} | 200 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} |
+| DELETE /api/v1/alerts/channels/{kind} | 401 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} |
+| GET /api/v1/alerts/history | 401 {message:s,status:n} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} |
+| GET /api/v1/alerts/thresholds | 401 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| PUT /api/v1/alerts/thresholds | 401 {message:s,status:n} | 200 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} |
+| POST /api/v1/auth/login | 200 {token:s} | 200 {token:s} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {token:s} |
+| POST /api/v1/auth/select-organization | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {token:s} |
+| GET /api/v1/auth/session | 401 {message:s,status:n} | 200 {account_id:s,email:s,organization_id:s} | 200 {account_id:s,email:s,organization_id:s} | 200 {account_id:s,email:s,organization_id:s} | 200 {account_id:s,email:s,organization_id:s} | 200 {account_id:s,email:s,organization_id:s} |
+| GET /api/v1/board | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:[],meta:{}} | 400 {message:s,status:n} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} |
+| GET /api/v1/board/ws | 401 text | 404 text | 101 upgrade | 400 text | 101 upgrade | 101 upgrade |
+| GET /api/v1/budgets | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/budgets | 401 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/budgets/{budget_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| DELETE /api/v1/budgets/{budget_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} |
+| PATCH /api/v1/budgets/{budget_id} | 401 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} |
+| GET /api/v1/insights | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{}} | 400 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} |
+| GET /api/v1/insights/analytics | 401 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} | 400 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} |
+| GET /api/v1/insights/delivery | 401 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} | 400 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} |
+| POST /api/v1/organization-invitations/accept | 401 {message:s,status:n} | 409 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/organizations | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/organizations | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/organizations/{organization_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| POST /api/v1/organizations/{organization_id}/invitations | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/organizations/{organization_id}/members | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/organizations/{organization_id}/members | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 204 text |
+| DELETE /api/v1/organizations/{organization_id}/members/{account_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 204 text | 204 text | 204 text | 204 text |
+| PATCH /api/v1/organizations/{organization_id}/members/{account_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 204 text |
+| GET /api/v1/overview | 401 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} | 400 {message:s,status:n} | 200 {data:{}} | 200 {data:{}} |
+| GET /api/v1/repositories | 401 {message:s,status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} | 200 {data:[],status:n} |
+| POST /api/v1/repositories | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| POST /api/v1/repositories/test | 401 {message:s,status:n} | 200 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} |
+| GET /api/v1/repositories/{repository_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| DELETE /api/v1/repositories/{repository_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 204 text | 204 text | 204 text | 204 text |
+| PATCH /api/v1/repositories/{repository_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| POST /api/v1/repositories/{repository_id}/sync | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| GET /api/v1/waves | 401 {message:s,status:n} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} |
+| POST /api/v1/waves | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/waves/{wave_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| DELETE /api/v1/waves/{wave_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 204 text | 204 text | 204 text | 204 text |
+| PATCH /api/v1/waves/{wave_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| POST /api/v1/webhooks/{provider} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} |
+| GET /api/v1/work | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:[],meta:{}} | 400 {message:s,status:n} | 200 {data:null,meta:{}} | 200 {data:[],meta:{}} |
+| GET /api/v1/work/{kind}/{number} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {item:{},runs:null} | 404 {message:s,status:n} | 404 {message:s,status:n} | 200 {item:{},runs:null} |
+| GET /api/v1/workers/audit-history | 401 {message:s,status:n} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} | 200 {data:[],meta:{}} |
+| POST /api/v1/workers/restart | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| POST /api/v1/workers/start | 401 {message:s,status:n} | 201 {data:{},status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 400 {message:s,status:n} | 201 {data:{},status:n} |
+| GET /api/v1/workers/{worker_id} | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| GET /api/v1/workers/{worker_id}/logs | 401 text | 404 text | 101 upgrade | 101 upgrade | 101 upgrade | 101 upgrade |
+| POST /api/v1/workers/{worker_id}/stop | 401 {message:s,status:n} | 404 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} | 200 {message:s,status:n} |
+| GET /healthz | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |
+| GET /metrics | 200 text | 200 text | 200 text | 200 text | 200 text | 200 text |
+| GET /readyz | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} | 200 {data:{},status:n} |

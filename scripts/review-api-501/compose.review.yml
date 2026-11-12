@@ -1,0 +1,9 @@
+services:
+  api:
+    environment:
+      WORKER_SCRIPT_ROOTS: /review
+      WORKER_WORKTREE_ROOTS: /review
+      WORKER_SCRIPTS_JSON: '{"review":"/review/worker.sh"}'
+      REVIEW_WEBHOOK_SECRET: review-secret
+    volumes:
+      - ./.agent-runs/W18R1-api-501:/review:ro

@@ -58,6 +58,9 @@ func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunSte
 		if err := tx.Exec("DELETE FROM agent_run_steps WHERE run_id = ?", id).Error; err != nil {
 			return err
 		}
+		if len(steps) == 0 {
+			return nil
+		}
 		seen := make(map[string]int, len(steps))
 		for i := range steps {
 			fingerprint := timelineStepFingerprint(steps[i])
