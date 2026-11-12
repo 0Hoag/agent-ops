@@ -101,7 +101,7 @@ func (c *Controller) Detail(ctx *gin.Context) {
 // @Summary List organization members
 // @Produce json
 // @Param organization_id path string true "Organization UUID"
-// @Success 200 {object} response.SuccessResponse
+// @Success 200 {object} response.SuccessResponse{data=[]Member}
 // @Failure 401,404 {object} response.ErrorResponse
 // @Router /api/v1/organizations/{organization_id}/members [get]
 func (c *Controller) Members(ctx *gin.Context) {

@@ -46,9 +46,13 @@ func integrationDB(t *testing.T) *gorm.DB {
 }
 
 func testAccount(t *testing.T, db *gorm.DB) string {
+	return testAccountWithEmail(t, db, uuid.NewString()+"@example.test")
+}
+
+func testAccountWithEmail(t *testing.T, db *gorm.DB, email string) string {
 	t.Helper()
 	id := uuid.NewString()
-	require.NoError(t, db.Exec("INSERT INTO accounts (id,email,password_hash) VALUES (?,?,?)", id, id+"@example.test", "fixture").Error)
+	require.NoError(t, db.Exec("INSERT INTO accounts (id,email,password_hash) VALUES (?,?,?)", id, email, "fixture-secret").Error)
 	return id
 }
 
@@ -80,7 +84,9 @@ func request(t *testing.T, router http.Handler, actor, method, path, body string
 func TestOrganizationHTTPIdentityAndIsolation(t *testing.T) {
 	db := integrationDB(t)
 	router := testRouter(db)
-	owner, outsider := testAccount(t, db), testAccount(t, db)
+	owner := testAccountWithEmail(t, db, "owner@example.test")
+	member := testAccountWithEmail(t, db, "member@example.test")
+	outsider := testAccountWithEmail(t, db, "outsider@example.test")
 	w := request(t, router, owner, "POST", "", `{"name":"Owned","account_id":"`+outsider+`"}`)
 	require.Equal(t, 201, w.Code, w.Body.String())
 	var result struct {
@@ -92,6 +98,21 @@ func TestOrganizationHTTPIdentityAndIsolation(t *testing.T) {
 	m, err := NewRepository(db).Membership(context.Background(), id, owner)
 	require.NoError(t, err)
 	require.Equal(t, RoleOwner, m.Role)
+	require.Equal(t, 204, request(t, router, owner, "POST", "/"+id+"/members", `{"account_id":"`+member+`","role":"member"}`).Code)
+	membersResponse := request(t, router, owner, "GET", "/"+id+"/members", "")
+	require.Equal(t, 200, membersResponse.Code, membersResponse.Body.String())
+	var members struct {
+		Data []Member `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(membersResponse.Body.Bytes(), &members))
+	require.Len(t, members.Data, 2)
+	require.Equal(t, owner, members.Data[0].AccountID)
+	require.Equal(t, "owner@example.test", members.Data[0].Email)
+	require.Equal(t, member, members.Data[1].AccountID)
+	require.Equal(t, "member@example.test", members.Data[1].Email)
+	require.NotContains(t, membersResponse.Body.String(), "password_hash")
+	require.NotContains(t, membersResponse.Body.String(), "fixture-secret")
+	require.NotContains(t, membersResponse.Body.String(), "outsider@example.test")
 	for _, path := range []string{"/" + id, "/" + id + "/members"} {
 		require.Equal(t, 200, request(t, router, owner, "GET", path, "").Code)
 		require.Equal(t, 404, request(t, router, outsider, "GET", path, "").Code)

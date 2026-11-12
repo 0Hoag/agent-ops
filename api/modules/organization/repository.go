@@ -73,12 +73,17 @@ func (r *Repository) Detail(ctx context.Context, orgID, accountID string) (*Orga
 	}
 	return &OrganizationDetail{Organization: o, Membership: *m}, nil
 }
-func (r *Repository) Members(ctx context.Context, orgID, accountID string) ([]Membership, error) {
+func (r *Repository) Members(ctx context.Context, orgID, accountID string) ([]Member, error) {
 	if _, err := r.Membership(ctx, orgID, accountID); err != nil {
 		return nil, err
 	}
-	var out []Membership
-	err := r.db.WithContext(ctx).Where("organization_id = ?", orgID).Order("created_at").Find(&out).Error
+	var out []Member
+	err := r.db.WithContext(ctx).
+		Table("organization_memberships m").
+		Select("m.id, m.organization_id, m.account_id, m.role, m.created_at, m.updated_at, a.email").
+		Joins("JOIN accounts a ON a.id = m.account_id").
+		Where("m.organization_id = ?", orgID).
+		Order("m.created_at").Find(&out).Error
 	return out, err
 }
 func (r *Repository) Add(ctx context.Context, orgID, actor, target, role string) error {
