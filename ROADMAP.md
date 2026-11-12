@@ -26,6 +26,7 @@
 | 06/11/2026 | **One recovery run without asking.** When a unit's 2 worker runs end without a PR (or CI stays red after the CI-fix run), the coordinator dispatches one recovery run (`<wave>-rec`) from the preserved work, aimed at the exact failing command. One per issue chain; if it fails the issue is blocked and the loop moves on. Blocked issues whose named blockers are all closed go back to todo. |
 | 09/11/2026 | **Product redesign (W18).** Real use judged the dashboard unusable (unclear tables, wrong or empty numbers, no reason to use it over GitLab). Direction is in `docs/ux-principles.md`: answer three questions (cost, efficiency, what needs attention), four nav items, simple and beautiful, correct numbers, GitLab linked for detail. ROADMAP is not done until W18 is closed. Supersedes the dense-ERP guidance. |
 | 10/11/2026 | **One escalation run instead of an owner question.** After the recovery run fails, the coordinator runs one escalation (`<wave>-esc`, stronger model gpt-6.1-sol) on the same unit, then blocks it and moves on. The loop never stops only to ask for more run budget. |
+| 13/11/2026 | **Verify by running, then file defects automatically (W19-W21).** Passing unit tests is not enough: every feature is exercised through its real interface (HTTP, CLI, browser) on a fresh stack and compared with its acceptance text; each failure becomes a `found-by:agent` bug with the exact command, a fix and a regression test. W20 automates this loop so the coordinator runs it every few passes. W21 is owner-style use with real data. The product is not done until W19-W21 are closed. |
 
 ## Các đợt
 
@@ -153,6 +154,18 @@ following only the docs (a worker does it in a fresh worktree and reports the ti
 Rules and acceptance: `docs/ux-principles.md`. Issues are many and small, one deliverable each. Order: foundation
 (design system, shell, API summary endpoints) first, then pages, then copy, QA and data-correctness checks.
 Related defects found by the first real install: #448, #449, #450, #451.
+
+### W19: feature-by-feature verification by running it
+
+One issue per feature. Each runs the feature on a fresh stack through its real interface, compares with the acceptance text, files a bug per failure and fixes small ones with a regression test and a negative control.
+
+### W20: automated verification loop and auto-filed defects
+
+`scripts/verify-all.sh` runs every feature check, de-duplicates failures by fingerprint and files `found-by:agent` issues; a scheduled CI job and the coordinator pass run it and report.
+
+### W21: owner-style use with real data
+
+Use the dashboard the way the owner does, with real GitLab data and real agent transcripts, and compare every screen with GitLab and with the raw files.
 
 ## Câu hỏi mở (owner)
 
