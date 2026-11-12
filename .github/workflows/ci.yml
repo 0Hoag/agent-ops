@@ -57,6 +57,21 @@ jobs:
       - run: go build ./...
         working-directory: api
 
+  independent-arithmetic-smoke:
+    name: Independent arithmetic smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run authenticated API arithmetic smoke
+        run: bash scripts/heavy.sh bash scripts/independent-arithmetic-smoke.sh
+      - name: Upload arithmetic smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-arithmetic-smoke
+          path: .agent-runs/independent-arithmetic
+          if-no-files-found: warn
+
   client-contract:
     name: Client contract drift
     runs-on: ubuntu-latest

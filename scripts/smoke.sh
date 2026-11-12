@@ -79,7 +79,7 @@ if [[ ! -d "$CLIENT/.git" ]]; then
 else
   [[ -z "$(git -C "$CLIENT" status --porcelain --untracked-files=all | grep -vE '^\?\? (test-results/|dist/)' || true)" ]] || { log "client checkout has user changes; refusing to update"; exit 1; }
   git -C "$CLIENT" fetch origin reviews/development
-  git -C "$CLIENT" merge --ff-only origin/reviews/development
+  git -C "$CLIENT" checkout --detach origin/reviews/development
 fi
 EXPECTED_CLIENT_SHA=${SMOKE_EXPECTED_CLIENT_SHA:-}
 if [[ -n "$EXPECTED_CLIENT_SHA" && "$(git -C "$CLIENT" rev-parse HEAD)" != "$EXPECTED_CLIENT_SHA" ]]; then
@@ -127,10 +127,10 @@ curl --fail --silent "$API_URL/readyz" >"$ARTIFACT_DIR/readyz.json" || { compose
 
 # Insert deterministic smoke-owned records into this run's isolated Compose database.
 compose exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 <<'SQL'
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000014','member@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
-INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000015','other@example.invalid','$2a$12$YFnANTVzpBZyF5Nv7KGX9.yAHCBvay6/hL8uKEF336X0dmSMHrfwS');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000010','smoke@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000013','invitee@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000014','member@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
+INSERT INTO accounts (id,email,password_hash) VALUES ('d0000000-0000-4000-8000-000000000015','other@example.invalid','$2a$12$44E5kI/4uvSgIn9MLCKYsuvskMK55ypeP4DnlJYJVOTv68jYU9wrm');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000012','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000010','owner');
 INSERT INTO organizations (id,name) VALUES ('d0000000-0000-4000-8000-000000000016','Smoke other tenant');
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES ('d0000000-0000-4000-8000-000000000017','d0000000-0000-4000-8000-000000000011','d0000000-0000-4000-8000-000000000014','member');
@@ -138,10 +138,16 @@ INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES
 INSERT INTO repositories (id,provider,full_name,webhook_secret_env_ref,organization_id) VALUES ('d0000000-0000-4000-8000-000000000001','github','smoke/agent-ops','SMOKE_WEBHOOK_SECRET','d0000000-0000-4000-8000-000000000011');
 INSERT INTO issues (id,repository_id,number,title,state,status,labels) VALUES ('d0000000-0000-4000-8000-000000000002','d0000000-0000-4000-8000-000000000001',99001,'Smoke fixture: board serves real API data','open','review','["status:review"]');
 INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes) VALUES ('d0000000-0000-4000-8000-000000000003','d0000000-0000-4000-8000-000000000001',99002,'Smoke fixture: linked pull request','open','d000000000000000000000000000000000000000','smoke/real-data','[99001]');
+INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes,merged_at,created_at,updated_at) VALUES ('d0000000-0000-4000-8000-000000000005','d0000000-0000-4000-8000-000000000001',99003,'Smoke fixture: merged arithmetic pull request','merged','e000000000000000000000000000000000000000','smoke/merged','[99001]','2026-11-08T12:00:00Z','2026-11-08T10:00:00Z','2026-11-08T12:00:00Z');
 INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion) VALUES ('d0000000-0000-4000-8000-000000000004','d0000000-0000-4000-8000-000000000001','smoke-ci-99002',99002,'d000000000000000000000000000000000000000','completed','success');
+INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion) VALUES ('d0000000-0000-4000-8000-000000000006','d0000000-0000-4000-8000-000000000001','smoke-ci-99003',99003,'e000000000000000000000000000000000000000','completed','failure');
+INSERT INTO pull_requests (id,repository_id,number,title,state,head_sha,branch,closes,created_at,updated_at) VALUES ('d0000000-0000-4000-8000-000000000007','d0000000-0000-4000-8000-000000000001',99004,'Smoke fixture: open pull request with old failing CI','open','f000000000000000000000000000000000000000','smoke/failing','[]','2026-11-01T10:00:00Z','2026-11-01T10:00:00Z');
+INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,conclusion,created_at,updated_at) VALUES ('d0000000-0000-4000-8000-000000000008','d0000000-0000-4000-8000-000000000001','smoke-ci-99004',99004,'f000000000000000000000000000000000000000','completed','failure','2026-11-01T10:00:00Z','2026-11-01T10:00:00Z');
 INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,cost_usd,started_at,ended_at,billing_type) VALUES
 ('d0000000-0000-4000-8000-000000000021','d0000000-0000-4000-8000-000000000001','W10','smoke-api','acceptance-model','[99001]',1000000,0,0,0,0,1.25,'2026-01-01T00:00:00Z','2026-01-01T00:01:00Z','api'),
-('d0000000-0000-4000-8000-000000000022','d0000000-0000-4000-8000-000000000001','W10','smoke-sub','acceptance-subscription','[99001]',1000000,0,0,0,0,12.00,'2026-01-02T00:00:00Z','2026-01-02T00:01:00Z','subscription');
+('d0000000-0000-4000-8000-000000000022','d0000000-0000-4000-8000-000000000001','W10','smoke-sub','acceptance-subscription','[99001]',1000000,0,0,0,0,12.00,'2026-01-02T00:00:00Z','2026-01-02T00:01:00Z','subscription'),
+('d0000000-0000-4000-8000-000000000023','d0000000-0000-4000-8000-000000000001','W18','smoke-in-period-a','acceptance-model','[99001]',1200,300,0,400,0,0.5,'2026-11-05T09:00:00Z','2026-11-05T09:10:00Z','api'),
+('d0000000-0000-4000-8000-000000000024','d0000000-0000-4000-8000-000000000001','W18','smoke-in-period-b','acceptance-model','[99001]',3400,0,0,700,0,0.9,'2026-11-06T09:00:00Z','2026-11-06T09:10:00Z','api');
 INSERT INTO agent_run_price_versions (id,organization_id,model,effective_date,input_per_million,cached_input_per_million,cache_write_per_million,output_per_million,reasoning_per_million) VALUES
 ('d0000000-0000-4000-8000-000000000023','d0000000-0000-4000-8000-000000000011','acceptance-model','2025-01-01',1.25,0,0,0,0),
 ('d0000000-0000-4000-8000-000000000024','d0000000-0000-4000-8000-000000000011','acceptance-subscription','2025-01-01',2.5,0,0,0,0),
@@ -154,7 +160,9 @@ run_count=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELE
 log "pricing fixture persisted exactly 2 owned agent runs"
 
 # Exercise real account authentication and the supported organization-selection endpoint.
-login=$(curl --fail --silent --show-error -H 'Content-Type: application/json' -d '{"email":"smoke@example.invalid","password":"smoke-password-not-a-secret"}' "$API_URL/api/v1/auth/login")
+login_response="$ARTIFACT_DIR/login-response.json"
+curl --fail-with-body --silent --show-error -H 'Content-Type: application/json' -d '{"email":"smoke@example.invalid","password":"smoke-password-not-a-secret"}' -o "$login_response" "$API_URL/api/v1/auth/login"
+login=$(<"$login_response")
 account_token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$login")
 selected=$(curl --fail --silent --show-error -H "Authorization: Bearer $account_token" -H 'Content-Type: application/json' -d '{"organization_id":"d0000000-0000-4000-8000-000000000011"}' "$API_URL/api/v1/auth/select-organization")
 SESSION_TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$selected")
@@ -167,6 +175,33 @@ export SMOKE_OTHER_ORGANIZATION_ID=d0000000-0000-4000-8000-000000000016
 export SMOKE_REPOSITORY_ID=d0000000-0000-4000-8000-000000000001
 export SMOKE_WEBHOOK_SECRET=fixture-webhook-secret
 export SMOKE_BACKFILL_TOKEN=fixture-backfill-token
+
+if [[ "${SMOKE_ARITHMETIC_ONLY:-0}" == 1 ]]; then
+  # Independent oracle: each expected value is recomputed from base tables, never
+  # from the product aggregation query or a mocked result.
+  oracle_work=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT (SELECT count(*) FROM pull_requests WHERE repository_id='$SMOKE_REPOSITORY_ID') + (SELECT count(*) FROM issues WHERE repository_id='$SMOKE_REPOSITORY_ID')")
+  oracle_merged=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT count(*) FROM pull_requests WHERE repository_id='$SMOKE_REPOSITORY_ID' AND state='merged' AND merged_at >= '2026-11-01' AND merged_at < '2026-11-10'")
+  oracle_runs=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT count(*) FROM agent_runs WHERE repository_id='$SMOKE_REPOSITORY_ID' AND started_at >= '2026-11-01' AND started_at < '2026-11-10'")
+  oracle_input=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT coalesce(sum(input_tokens),0) FROM agent_runs WHERE repository_id='$SMOKE_REPOSITORY_ID' AND started_at >= '2026-11-01' AND started_at < '2026-11-10'")
+  oracle_failures=$(compose exec -T postgres psql -U agent_ops -d agent_ops -At -c "SELECT count(DISTINCT pr.number) FROM pipeline_runs p JOIN pull_requests pr ON pr.repository_id=p.repository_id AND pr.number=p.pr_number WHERE p.repository_id='$SMOKE_REPOSITORY_ID' AND p.conclusion IN ('failure','failed') AND pr.state='open' AND p.updated_at <= now() - interval '24 hours'")
+  overview=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" "$API_URL/api/v1/overview?repository_id=$SMOKE_REPOSITORY_ID&from=2026-11-01&to=2026-11-09")
+  work=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" "$API_URL/api/v1/work?repository_id=$SMOKE_REPOSITORY_ID")
+  usage=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" "$API_URL/api/v1/insights/analytics?repository_id=$SMOKE_REPOSITORY_ID&from=2026-11-01&to=2026-11-09&period=daily&group_by=harness")
+  python3 - "$overview" "$work" "$usage" "$oracle_work" "$oracle_merged" "$oracle_runs" "$oracle_input" "$oracle_failures" <<'PY'
+import json, sys
+overview, work, usage = map(json.loads, sys.argv[1:4])
+work_total, merged, runs, tokens, failures = map(int, sys.argv[4:])
+assert overview['data']['current']['merged_prs'] == merged, 'Overview merged_prs arithmetic'
+assert work['meta']['total'] == work_total, 'Work total arithmetic'
+assert sum(b['runs'] for b in usage['data']['buckets']) == runs, 'Usage runs arithmetic'
+assert sum(b['input_tokens'] for b in usage['data']['buckets']) == tokens, 'Usage input_tokens arithmetic'
+assert sum(1 for item in overview['data']['attention'] if item['kind'] == 'failing_ci') == failures, 'Overview failing CI arithmetic'
+assert any(item['number'] == 99002 for item in work['data']), 'Work list includes seeded open PR'
+print('assertions: Overview merged_pull_requests, Work total, Usage runs, Usage input_tokens, Overview failing CI, Work seeded PR')
+PY
+  echo "oracle: work=$oracle_work merged=$oracle_merged runs=$oracle_runs input_tokens=$oracle_input failing_ci=$oracle_failures"
+  exit 0
+fi
 
 # Exercise the invitation contract against the same real API/PostgreSQL data.
 invite=$(curl --fail --silent --show-error -H "Authorization: Bearer $SESSION_TOKEN" -H 'Content-Type: application/json' \
