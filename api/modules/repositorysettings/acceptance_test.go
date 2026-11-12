@@ -67,6 +67,12 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 	opened, err = sealer.Open(row.BackfillTokenCiphertext)
 	require.NoError(t, err)
 	require.Equal(t, "token-a", opened)
+	duplicate := request(t, h, fixture.ownerA, fixture.orgA, http.MethodPost, "/api/v1/repositories", `{"provider":"github","full_name":"acme/a","webhook_secret":"secret-a","backfill_token":"token-a"}`)
+	require.Equal(t, http.StatusConflict, duplicate.Code, duplicate.Body.String())
+	require.NotContains(t, duplicate.Body.String(), fixture.orgA)
+	crossTenantDuplicate := request(t, h, fixture.ownerB, fixture.orgB, http.MethodPost, "/api/v1/repositories", `{"provider":"github","full_name":"acme/a","webhook_secret":"secret-b","backfill_token":"token-b"}`)
+	require.Equal(t, http.StatusConflict, crossTenantDuplicate.Code, crossTenantDuplicate.Body.String())
+	require.NotContains(t, crossTenantDuplicate.Body.String(), fixture.orgA)
 
 	for _, tc := range []struct {
 		name, actor, org string

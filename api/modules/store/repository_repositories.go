@@ -13,6 +13,7 @@ import (
 )
 
 var ErrRepositoryHasDependencies = errors.New("repository has dependent data")
+var ErrRepositoryAlreadyExists = errors.New("repository already exists")
 
 func isForeignKeyViolation(err error) bool {
 	if errors.Is(err, gorm.ErrForeignKeyViolated) {
@@ -22,10 +23,18 @@ func isForeignKeyViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }
 
+func isRepositoryIdentityViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "repositories_provider_full_name_key"
+}
+
 type RepositoryRepository struct{ db *gorm.DB }
 
 func (repository *RepositoryRepository) Create(ctx context.Context, item *Repository) error {
 	if err := repository.db.WithContext(ctx).Create(item).Error; err != nil {
+		if isRepositoryIdentityViolation(err) {
+			return fmt.Errorf("create repository: %w", ErrRepositoryAlreadyExists)
+		}
 		return fmt.Errorf("create repository: %w", err)
 	}
 	return nil
