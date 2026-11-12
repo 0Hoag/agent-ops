@@ -753,6 +753,23 @@ definitions:
     required:
     - name
     type: object
+  organization.Member:
+    properties:
+      account_id:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      organization_id:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
   organization.UpdateRoleRequest:
     properties:
       role:
@@ -1959,7 +1976,14 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.SuccessResponse'
+            allOf:
+            - $ref: '#/definitions/response.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/organization.Member'
+                  type: array
+              type: object
         "401":
           description: Unauthorized
           schema:
