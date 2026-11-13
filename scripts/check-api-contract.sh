@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-CLIENT_SHA=8c6f9250d3eae31e268b25ba014737db530607d7
+CLIENT_SHA=35a99b45757b9068f7af572032de951f0de8d37d
 CLIENT_DIR=${CLIENT_DIR:-"$ROOT/.agent-runs/agent-ops-client"}
 CLIENT_REPO=https://github.com/0Hoag/agent-ops-client.git
 case "${CONTRACT_FIXTURE:-}" in

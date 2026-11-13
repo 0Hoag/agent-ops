@@ -31,7 +31,6 @@ type View struct {
 type CreatedView struct {
 	View
 	WebhookSecret string `json:"webhook_secret"`
-	BackfillToken string `json:"backfill_token"`
 }
 
 type ListResponse struct {

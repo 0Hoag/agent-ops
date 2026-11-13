@@ -63,6 +63,38 @@ func TestViewRedactsStoredCredentialsOnSubsequentReads(t *testing.T) {
 	}
 }
 
+func TestCreateReturnsWebhookSecretOnceButNeverBackfillToken(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+	require.NoError(t, err)
+	sealer, err := crypto.New([]byte("01234567890123456789012345678901"))
+	require.NoError(t, err)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2 ORDER BY "organization_memberships"."id" LIMIT $3`)).
+		WithArgs("org-a", "account-a", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "account_id", "role"}).AddRow("membership-a", "org-a", "account-a", "owner"))
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "repositories"`)).WithArgs(sqlmock.AnyArg(), "github", "acme/app", "", "org-a", sqlmock.AnyArg(), sqlmock.AnyArg(), "", "", "", sqlmock.AnyArg(), sqlmock.AnyArg(), []byte(`null`)).
+		WillReturnRows(sqlmock.NewRows([]string{"status_mappings", "last_synced_at"}).AddRow([]byte(`null`), nil))
+	mock.ExpectCommit()
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("organization_id", "org-a"); c.Set("account_id", "account-a"); c.Next() })
+	NewRoutes(NewController(store.New(db).Repositories, organization.NewRepository(db), sealer, "https://agent.example")).Register(r.Group("/api/v1"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/repositories", bytes.NewBufferString(`{"provider":"github","full_name":"acme/app","webhook_secret":"secret-a","backfill_token":"token-a"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var payload CreatedResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	require.Equal(t, "secret-a", payload.Data.WebhookSecret)
+	require.Contains(t, w.Body.String(), "webhook_secret")
+	require.NotContains(t, w.Body.String(), "token-a")
+	require.NotContains(t, w.Body.String(), "backfill_token")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestTestRepositoryEndpointExercisesProviderAndAuthorization(t *testing.T) {
 	tests := []struct {
 		name       string

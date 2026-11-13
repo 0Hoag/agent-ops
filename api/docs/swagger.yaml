@@ -812,8 +812,6 @@ definitions:
     type: object
   repositorysettings.CreatedView:
     properties:
-      backfill_token:
-        type: string
       full_name:
         type: string
       gitlab_base_url:

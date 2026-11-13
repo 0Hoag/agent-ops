@@ -3938,9 +3938,6 @@ const docTemplate = `{
         "repositorysettings.CreatedView": {
             "type": "object",
             "properties": {
-                "backfill_token": {
-                    "type": "string"
-                },
                 "full_name": {
                     "type": "string"
                 },
