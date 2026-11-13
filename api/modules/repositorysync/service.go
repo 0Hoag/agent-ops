@@ -99,6 +99,16 @@ func (s *Service) syncOne(ctx context.Context, r *store.Repository) error {
 			return err
 		}
 	}
+	for _, run := range result.PipelineRuns {
+		var prNumber *int64
+		if run.PRNumber != nil {
+			n := int64(*run.PRNumber)
+			prNumber = &n
+		}
+		if err := s.repositories.PipelineRuns.Upsert(ctx, &store.PipelineRun{ID: store.NewUUID(), RepositoryID: r.ID, ExternalID: run.ExternalID, PRNumber: prNumber, SHA: run.SHA, Status: run.Status, Conclusion: run.Conclusion, StartedAt: nonzero(run.StartedAt), FinishedAt: run.FinishedAt, UpstreamUpdatedAt: nonzero(run.UpdatedAt), UpdatedAt: run.UpdatedAt}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 func nonzero(t time.Time) *time.Time {
