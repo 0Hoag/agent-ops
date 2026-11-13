@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/0Hoag/agent-ops/api/modules/organization"
+	"github.com/0Hoag/agent-ops/api/pkg/crypto"
 	_ "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
@@ -157,6 +158,45 @@ func TestDeleteMapsRepositoryStoreErrorsToHTTPResponses(t *testing.T) {
 			ctx.Set("account_id", accountID)
 			controller.Delete(ctx)
 			require.Equal(t, tc.wantStatus, w.Code, w.Body.String())
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestCreateMapsRepositoryIdentityConflictWithoutLeakingTenant(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		dbErr      error
+		wantStatus int
+	}{
+		{name: "repository identity conflict", dbErr: &pgconn.PgError{Code: "23505", ConstraintName: "repositories_provider_full_name_key"}, wantStatus: http.StatusConflict},
+		{name: "unrelated database error", dbErr: sqlmock.ErrCancelled, wantStatus: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{Conn: sqlDB}), &gorm.Config{})
+			require.NoError(t, err)
+			require.NoError(t, db.Callback().Create().Before("gorm:create").Register("repositorysettings_test_error", func(tx *gorm.DB) { tx.Error = tc.dbErr }))
+			sealer, err := crypto.New([]byte("01234567890123456789012345678901"))
+			require.NoError(t, err)
+			controller := NewController(store.New(db).Repositories, organization.NewRepository(db), sealer, "")
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/repositories", bytes.NewBufferString(`{"provider":"github","full_name":"acme/app"}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = req
+			ctx.Set("organization_id", "org-a")
+			ctx.Set("account_id", "account-a")
+			mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2 ORDER BY "organization_memberships"."id" LIMIT $3`)).
+				WithArgs("org-a", "account-a", 1).
+				WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "account_id", "role"}).AddRow("membership-a", "org-a", "account-a", "owner"))
+			controller.Create(ctx)
+			require.Equal(t, tc.wantStatus, w.Code, w.Body.String())
+			if tc.wantStatus == http.StatusConflict {
+				require.NotContains(t, w.Body.String(), "org-a")
+			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}

@@ -212,6 +212,7 @@ func (c *Controller) Get(ctx *gin.Context) {
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 401 {object} response.ErrorResponse
 // @Failure 403 {object} response.ErrorResponse
+// @Failure 409 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Security BearerAuth
 // @Router /api/v1/repositories [post]
@@ -238,6 +239,12 @@ func (c *Controller) Create(ctx *gin.Context) {
 	mapping, _ := json.Marshal(req.StatusMappings)
 	r := &store.Repository{ID: store.NewUUID(), OrganizationID: org, Provider: req.Provider, FullName: req.FullName, WebhookSecretEnvRef: "", WebhookSecretCiphertext: secret, BackfillTokenCiphertext: token, GitLabBaseURL: req.GitLabBaseURL, StatusMappings: store.JSONB(mapping)}
 	if err = c.repos.Create(ctx, r); err != nil {
+		if errors.Is(err, store.ErrRepositoryAlreadyExists) {
+			// The identity is globally unique by provider and full name. Keep this
+			// response generic so it does not reveal another organization's row.
+			response.Conflict(ctx, "repository already exists")
+			return
+		}
 		response.InternalError(ctx, "failed to create repository")
 		return
 	}
