@@ -61,4 +61,30 @@ func TestListReturnsNotFoundWithoutQueryingWorkForOtherOrganization(t *testing.T
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDetailScopesRequestedIdentityAndTenant(t *testing.T) {
+	repo, mock := mockWorkRepository(t)
+	ctx := WithOrganization(context.Background(), "org-a")
+
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "repositories" WHERE id = $1 AND organization_id = $2`)).
+		WithArgs("repo-a", "org-a").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(`WITH work AS[\s\S]*WHERE EXISTS \(SELECT 1 FROM repositories WHERE id=x\.repository_id AND organization_id=\$5\)[\s\S]*AND x\.kind=\$6[\s\S]*AND x\.number = \$7`).
+		WithArgs("repo-a", "repo-a", "repo-a", "org-a", "org-a", "pr", int64(320)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"kind", "number", "title", "url", "author", "state", "ci_status", "created_at", "updated_at",
+			"runs_count", "cost_usd", "tokens", "last_activity",
+		}).AddRow("pr", 320, "Requested pull request", "", "", "open", "", time.Now(), time.Now(), 1, nil, 1, time.Now()))
+	mock.ExpectQuery(`SELECT agent_runs\.[\s\S]*FROM "agent_runs"[\s\S]*WHERE agent_runs\.repository_id=\$1 AND pr_number=\$2`).
+		WithArgs("repo-a", int64(320)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "repository_id", "wave", "worker", "model", "issue_numbers", "pr_number", "input_tokens",
+			"cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "calculated_cost",
+		}))
+
+	detail, err := repo.Detail(ctx, "repo-a", "pr", 320)
+	require.NoError(t, err)
+	require.EqualValues(t, 320, detail.Item.Number)
+	require.Empty(t, detail.Runs)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func floatPtr(v float64) *float64 { return &v }
