@@ -6,6 +6,7 @@ import (
 
 	"github.com/0Hoag/agent-ops/api/pkg/response"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,10 @@ func NewController(r *Repository) *Controller { return &Controller{r: r} }
 // @Router /api/v1/work [get]
 func (c *Controller) List(x *gin.Context) {
 	id := x.Query("repository_id")
+	if _, e := uuid.Parse(id); e != nil {
+		response.BadRequest(x, "invalid repository_id")
+		return
+	}
 	p, _ := strconv.Atoi(x.DefaultQuery("page", "1"))
 	if p < 1 {
 		response.BadRequest(x, "invalid page")
@@ -50,6 +55,10 @@ func (c *Controller) List(x *gin.Context) {
 // @Success 200 {object} Detail
 // @Router /api/v1/work/{kind}/{number} [get]
 func (c *Controller) Detail(x *gin.Context) {
+	if _, e := uuid.Parse(x.Query("repository_id")); e != nil {
+		response.BadRequest(x, "invalid repository_id")
+		return
+	}
 	n, e := strconv.ParseInt(x.Param("number"), 10, 64)
 	if e != nil {
 		response.BadRequest(x, "invalid number")

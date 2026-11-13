@@ -38,6 +38,8 @@ type fakeRepository struct {
 	listFilter      Filter
 	aggregates      []Aggregate
 	aggregateFilter Filter
+	listCalls       int
+	aggregateCalls  int
 	aggregatePrices map[string]Price
 	configured      bool
 	err             error
@@ -70,17 +72,39 @@ func TestCreateRejectsRepositoryOutsideConfiguredMachineSet(t *testing.T) {
 	require.Zero(t, repo.creates)
 }
 func (f *fakeRepository) List(_ context.Context, filter Filter) ([]AgentRun, error) {
+	f.listCalls++
 	f.listFilter = filter
 	return f.list, f.err
 }
 func (f *fakeRepository) ListPage(_ context.Context, filter Filter, page, perPage int) ([]AgentRun, int64, error) {
+	f.listCalls++
 	f.pageFilter, f.page, f.perPage = filter, page, perPage
 	return f.pageItems, f.pageTotal, f.err
 }
 func (f *fakeRepository) Aggregate(_ context.Context, filter Filter, prices map[string]Price) ([]Aggregate, error) {
+	f.aggregateCalls++
 	f.aggregateFilter = filter
 	f.aggregatePrices = prices
 	return f.aggregates, f.err
+}
+
+func TestListAndAggregateRejectInvalidRepositoryBeforeRepositoryAccess(t *testing.T) {
+	for _, path := range []string{"/", "/aggregate"} {
+		repo := &fakeRepository{}
+		r := gin.New()
+		c := NewController(repo, "", nil)
+		if path == "/" {
+			r.GET(path, c.List)
+		} else {
+			r.GET(path, c.Aggregate)
+		}
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path+"?repository_id=invalid", nil))
+		require.Equal(t, http.StatusBadRequest, res.Code, path)
+		require.Contains(t, res.Body.String(), "invalid repository_id")
+		require.Zero(t, repo.listCalls, path)
+		require.Zero(t, repo.aggregateCalls, path)
+	}
 }
 
 func TestControllerReturnsHTTPErrorsAndRejectsInvalidIssueFilter(t *testing.T) {
@@ -129,9 +153,9 @@ func TestAggregateReturnsResultsAndForwardsFilters(t *testing.T) {
 	r := gin.New()
 	r.GET("/", NewController(repo, "", prices).Aggregate)
 	recorder := httptest.NewRecorder()
-	r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/?repository_id=repo-id&wave=w3a&issue_number=24", nil))
+	r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/?repository_id=7e57d004-2b97-0e7a-b45f-5387367791cd&wave=w3a&issue_number=24", nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Equal(t, Filter{RepositoryID: "repo-id", Wave: "w3a", IssueNumber: 24}, repo.aggregateFilter)
+	require.Equal(t, Filter{RepositoryID: "7e57d004-2b97-0e7a-b45f-5387367791cd", Wave: "w3a", IssueNumber: 24}, repo.aggregateFilter)
 	require.Equal(t, prices, repo.aggregatePrices)
 	var envelope struct {
 		Data []Aggregate `json:"data"`
@@ -148,11 +172,11 @@ func TestListForwardsConjunctiveFiltersAndExactPaginationMeta(t *testing.T) {
 	repo := &fakeRepository{pageItems: []AgentRun{{Wave: "w11a"}}, pageTotal: 37}
 	r := gin.New()
 	r.GET("/", NewController(repo, "", nil).List)
-	req := httptest.NewRequest(http.MethodGet, "/?repository_id=repo-a&wave=w11a&harness=codex&model=gpt&issue_number=66&pr_number=357&started_after=2026-10-01T00:00:00Z&started_before=2026-10-02T00:00:00Z&page=3&per_page=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?repository_id=7e57d004-2b97-0e7a-b45f-5387367791cd&wave=w11a&harness=codex&model=gpt&issue_number=66&pr_number=357&started_after=2026-10-01T00:00:00Z&started_before=2026-10-02T00:00:00Z&page=3&per_page=10", nil)
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, req)
 	require.Equal(t, http.StatusOK, res.Code)
-	require.Equal(t, Filter{RepositoryID: "repo-a", Wave: "w11a", Harness: "codex", Model: "gpt", IssueNumber: 66, PRNumber: 357, StartedAfter: &after, StartedBefore: &before}, repo.pageFilter)
+	require.Equal(t, Filter{RepositoryID: "7e57d004-2b97-0e7a-b45f-5387367791cd", Wave: "w11a", Harness: "codex", Model: "gpt", IssueNumber: 66, PRNumber: 357, StartedAfter: &after, StartedBefore: &before}, repo.pageFilter)
 	require.Equal(t, 3, repo.page)
 	require.Equal(t, 10, repo.perPage)
 	var got ListResponse

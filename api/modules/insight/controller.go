@@ -55,6 +55,10 @@ func (c *Controller) Get(ctx *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse
 // @Router /api/v1/insights/analytics [get]
 func (c *Controller) Analytics(ctx *gin.Context) {
+	if err := validateRepositoryID(ctx.Query("repository_id")); err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
 	group := ctx.DefaultQuery("group_by", "harness")
 	period := ctx.DefaultQuery("period", "daily")
 	from, err := time.Parse("2006-01-02", ctx.Query("from"))
@@ -87,6 +91,10 @@ func (c *Controller) Analytics(ctx *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse
 // @Router /api/v1/insights/delivery [get]
 func (c *Controller) Delivery(ctx *gin.Context) {
+	if err := validateRepositoryID(ctx.Query("repository_id")); err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
 	from, err := time.Parse("2006-01-02", ctx.Query("from"))
 	if err != nil {
 		response.BadRequest(ctx, "from must be YYYY-MM-DD")
@@ -120,6 +128,10 @@ func (c *Controller) Delivery(ctx *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse
 // @Router /api/v1/overview [get]
 func (c *Controller) Overview(ctx *gin.Context) {
+	if err := validateRepositoryID(ctx.Query("repository_id")); err != nil {
+		response.BadRequest(ctx, err.Error())
+		return
+	}
 	from, err := time.Parse("2006-01-02", ctx.Query("from"))
 	if err != nil {
 		response.BadRequest(ctx, "from must be YYYY-MM-DD")
@@ -136,4 +148,13 @@ func (c *Controller) Overview(ctx *gin.Context) {
 		return
 	}
 	response.JSON(ctx, http.StatusOK, gin.H{"data": data})
+}
+
+func validateRepositoryID(id string) error {
+	if id != "" {
+		if _, err := uuid.Parse(id); err != nil {
+			return errors.New("invalid repository_id")
+		}
+	}
+	return nil
 }

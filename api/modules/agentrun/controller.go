@@ -150,7 +150,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 func (c *Controller) List(ctx *gin.Context) {
 	filter, err := requestFilter(ctx)
 	if err != nil {
-		response.BadRequest(ctx, "invalid issue_number")
+		response.BadRequest(ctx, err.Error())
 		return
 	}
 	page, perPage, err := parsePagination(ctx)
@@ -186,7 +186,7 @@ func (c *Controller) List(ctx *gin.Context) {
 func (c *Controller) Aggregate(ctx *gin.Context) {
 	filter, err := requestFilter(ctx)
 	if err != nil {
-		response.BadRequest(ctx, "invalid issue_number")
+		response.BadRequest(ctx, err.Error())
 		return
 	}
 	var items []Aggregate
@@ -213,6 +213,11 @@ func (c *Controller) Aggregate(ctx *gin.Context) {
 
 func requestFilter(ctx *gin.Context) (Filter, error) {
 	filter := Filter{RepositoryID: ctx.Query("repository_id"), Wave: ctx.Query("wave"), Harness: ctx.Query("harness"), Model: ctx.Query("model")}
+	if filter.RepositoryID != "" {
+		if _, err := uuid.Parse(filter.RepositoryID); err != nil {
+			return Filter{}, fmt.Errorf("invalid repository_id")
+		}
+	}
 	if raw := ctx.Query("pr_number"); raw != "" {
 		n, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || n < 1 {
