@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -31,4 +32,21 @@ func TestReplaceStepsClearsEmptyTimeline(t *testing.T) {
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func TestReplaceStepsPreservesDatabaseLookupFailure(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	gdb, err := gorm.Open(postgres.New(postgres.Config{Conn: db}), &gorm.Config{})
+	require.NoError(t, err)
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT .* FROM agent_runs ar`).WithArgs("00000000-0000-0000-0000-000000000001", 1).
+		WillReturnError(errors.New("database unavailable"))
+	mock.ExpectRollback()
+	err = NewRepository(gdb).ReplaceSteps(context.Background(), "00000000-0000-0000-0000-000000000001", nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "database unavailable")
+	require.NotErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.NoError(t, mock.ExpectationsWereMet())
 }

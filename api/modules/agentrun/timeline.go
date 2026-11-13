@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+var ErrTimelineRunNotFound = errors.New("timeline run not found")
 
 type TimelineRepository interface {
 	Steps(context.Context, string) ([]RunStep, error)
@@ -53,7 +56,10 @@ func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunSte
 			query = query.Where("repo.organization_id = ?", org)
 		}
 		if err := query.First(&run).Error; err != nil {
-			return gorm.ErrRecordNotFound
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTimelineRunNotFound
+			}
+			return fmt.Errorf("find timeline run: %w", err)
 		}
 		if err := tx.Exec("DELETE FROM agent_run_steps WHERE run_id = ?", id).Error; err != nil {
 			return err
@@ -134,13 +140,22 @@ func (c *Controller) IngestTimeline(ctx *gin.Context) {
 		response.Error(ctx, 500, "timeline unavailable")
 		return
 	}
+	id := ctx.Param("run_id")
+	if _, err := uuid.Parse(id); err != nil {
+		response.BadRequest(ctx, "invalid run id")
+		return
+	}
 	var in TimelineInput
 	if ctx.ShouldBindJSON(&in) != nil || len(in.Steps) > 10000 {
 		response.BadRequest(ctx, "invalid steps")
 		return
 	}
-	if err := repo.ReplaceSteps(ctx, ctx.Param("run_id"), in.Steps); err != nil {
-		response.Error(ctx, 500, fmt.Sprintf("failed to store timeline: %v", err))
+	if err := repo.ReplaceSteps(ctx, id, in.Steps); err != nil {
+		if errors.Is(err, ErrTimelineRunNotFound) {
+			response.NotFound(ctx, "run not found")
+			return
+		}
+		response.InternalError(ctx, "failed to store timeline")
 		return
 	}
 	response.OK(ctx, in.Steps)
