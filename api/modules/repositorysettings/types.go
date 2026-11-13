@@ -28,11 +28,7 @@ type View struct {
 	LastSyncError  string            `json:"last_sync_error,omitempty"`
 }
 
-type CreatedView struct {
-	View
-	WebhookSecret string `json:"webhook_secret"`
-	BackfillToken string `json:"backfill_token"`
-}
+type CreatedView = View
 
 type ListResponse struct {
 	Status int    `json:"status"`

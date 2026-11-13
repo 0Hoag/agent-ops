@@ -248,8 +248,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 		response.InternalError(ctx, "failed to create repository")
 		return
 	}
-	v := CreatedView{View: c.view(r), WebhookSecret: req.WebhookSecret, BackfillToken: req.BackfillToken}
-	response.Created(ctx, v)
+	response.Created(ctx, c.view(r))
 }
 
 // Update changes repository settings and returns a redacted view.

@@ -55,8 +55,10 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 	require.Equal(t, http.StatusCreated, create.Code, create.Body.String())
 	var created CreatedResponse
 	require.NoError(t, json.Unmarshal(create.Body.Bytes(), &created))
-	require.Equal(t, "secret-a", created.Data.WebhookSecret)
-	require.Equal(t, "token-a", created.Data.BackfillToken)
+	require.NotContains(t, create.Body.String(), "secret-a")
+	require.NotContains(t, create.Body.String(), "token-a")
+	require.NotContains(t, create.Body.String(), "webhook_secret")
+	require.NotContains(t, create.Body.String(), "backfill_token")
 	var row store.Repository
 	require.NoError(t, db.First(&row, "id = ?", created.Data.ID).Error)
 	require.NotEqual(t, "secret-a", row.WebhookSecretCiphertext)
