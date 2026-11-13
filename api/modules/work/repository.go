@@ -24,7 +24,7 @@ func (r *Repository) repoOK(ctx context.Context, id string) (bool, error) {
 	return n == 1, err
 }
 func org(ctx context.Context) string { v, _ := ctx.Value(organizationKey).(string); return v }
-func (r *Repository) query(ctx context.Context, id, kind, state, q string) *gorm.DB {
+func (r *Repository) query(ctx context.Context, id, kind, state, q string, number *int64) *gorm.DB {
 	base := `WITH work AS (
 SELECT 'pr' kind, p.number, p.title, p.state,
  COALESCE((SELECT conclusion FROM pipeline_runs c WHERE c.repository_id=p.repository_id AND c.pr_number=p.number ORDER BY c.started_at DESC NULLS LAST LIMIT 1),'') ci_status,
@@ -67,6 +67,10 @@ WHERE EXISTS (SELECT 1 FROM repositories WHERE id=x.repository_id AND organizati
 		base += " AND x.title ILIKE ?"
 		args = append(args, "%"+q+"%")
 	}
+	if number != nil {
+		base += " AND x.number = ?"
+		args = append(args, *number)
+	}
 	base += " ORDER BY last_activity DESC, x.kind, x.number DESC"
 	return r.db.WithContext(ctx).Raw(base, args...)
 }
@@ -79,7 +83,7 @@ func (r *Repository) List(ctx context.Context, id, state, q string, page, per in
 		return nil, 0, gorm.ErrRecordNotFound
 	}
 	var total int64
-	countQuery := r.query(ctx, id, "", state, q)
+	countQuery := r.query(ctx, id, "", state, q, nil)
 	if e = r.db.WithContext(ctx).Raw(
 		"SELECT COUNT(*) FROM ("+countQuery.Statement.SQL.String()+") AS work_count",
 		countQuery.Statement.Vars...,
@@ -87,7 +91,7 @@ func (r *Repository) List(ctx context.Context, id, state, q string, page, per in
 		return nil, 0, e
 	}
 	var out []Item
-	listQuery := r.query(ctx, id, "", state, q)
+	listQuery := r.query(ctx, id, "", state, q, nil)
 	if e = r.db.WithContext(ctx).Raw(
 		listQuery.Statement.SQL.String()+" LIMIT "+strconv.Itoa(per)+" OFFSET "+strconv.Itoa((page-1)*per),
 		listQuery.Statement.Vars...,
@@ -102,7 +106,7 @@ func (r *Repository) Detail(ctx context.Context, id, kind string, n int64) (*Det
 		return nil, gorm.ErrRecordNotFound
 	}
 	var items []Item
-	if e = r.query(ctx, id, kind, "", "").Where("x.number = ?", n).Scan(&items).Error; e != nil {
+	if e = r.query(ctx, id, kind, "", "", &n).Scan(&items).Error; e != nil {
 		return nil, e
 	}
 	if len(items) == 0 {
