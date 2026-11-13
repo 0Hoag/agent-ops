@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -22,6 +23,8 @@ import (
 type timelineFixtureRepository struct {
 	steps []RunStep
 	gotID string
+	err   error
+	calls int
 }
 
 func (f *timelineFixtureRepository) Create(context.Context, *AgentRun) error { return nil }
@@ -39,7 +42,11 @@ func (f *timelineFixtureRepository) Steps(_ context.Context, id string) ([]RunSt
 	return f.steps, nil
 }
 func (f *timelineFixtureRepository) ReplaceSteps(_ context.Context, id string, steps []RunStep) error {
+	f.calls++
 	f.gotID = id
+	if f.err != nil {
+		return f.err
+	}
 	f.steps = append([]RunStep(nil), steps...)
 	for i := range f.steps {
 		f.steps[i].ID = uuid.NewMD5(uuid.Nil, []byte(id+":"+strconv.Itoa(i))).String()
@@ -47,6 +54,50 @@ func (f *timelineFixtureRepository) ReplaceSteps(_ context.Context, id string, s
 		f.steps[i].Sequence = i
 	}
 	return nil
+}
+
+func TestIngestTimelineRejectsInvalidRunIDBeforeRepositoryAccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &timelineFixtureRepository{}
+	r := gin.New()
+	r.POST("/:run_id/timeline", func(c *gin.Context) {
+		NewController(repo, "token", nil).IngestTimeline(c)
+	})
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/not-a-uuid/timeline", strings.NewReader(`{"steps":[]}`))
+	req.Header.Set("X-Agent-Run-Token", "token")
+	r.ServeHTTP(res, req)
+	require.Equal(t, http.StatusBadRequest, res.Code)
+	require.JSONEq(t, `{"status":400,"message":"invalid run id"}`, res.Body.String())
+	require.Zero(t, repo.calls)
+}
+
+func TestIngestTimelineSanitizesNotFoundAndRepositoryFailure(t *testing.T) {
+	for name, repoErr := range map[string]error{
+		"missing run":      ErrTimelineRunNotFound,
+		"database failure": fmt.Errorf("find timeline run: connection refused"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			repo := &timelineFixtureRepository{err: repoErr}
+			r := gin.New()
+			r.POST("/:run_id/timeline", func(c *gin.Context) {
+				NewController(repo, "token", nil).IngestTimeline(c)
+			})
+			res := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/00000000-0000-0000-0000-000000000001/timeline", strings.NewReader(`{"steps":[]}`))
+			req.Header.Set("X-Agent-Run-Token", "token")
+			r.ServeHTTP(res, req)
+			if name == "missing run" {
+				require.Equal(t, http.StatusNotFound, res.Code)
+				require.JSONEq(t, `{"status":404,"message":"run not found"}`, res.Body.String())
+			} else {
+				require.Equal(t, http.StatusInternalServerError, res.Code)
+				require.JSONEq(t, `{"status":500,"message":"failed to store timeline"}`, res.Body.String())
+				require.NotContains(t, res.Body.String(), "connection refused")
+			}
+		})
+	}
 }
 
 func TestTimelineReturnsOrderedSanitizedFiftyStepFixtureWithinBudget(t *testing.T) {
@@ -88,7 +139,7 @@ func TestTimelineIngestIsRepeatableAndDoesNotReturnSensitiveFields(t *testing.T)
 	payload := `{"steps":[{"sequence":99,"input_tokens":2,"tool_name":"shell","arguments":"SECRET","result":"SECRET"}]}`
 	for i := 0; i < 2; i++ {
 		res := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/run-1/timeline", strings.NewReader(payload))
+		req := httptest.NewRequest(http.MethodPost, "/00000000-0000-0000-0000-000000000001/timeline", strings.NewReader(payload))
 		req.Header.Set("X-Agent-Run-Token", "token")
 		r.ServeHTTP(res, req)
 		require.Equal(t, http.StatusOK, res.Code)
@@ -99,7 +150,7 @@ func TestTimelineIngestIsRepeatableAndDoesNotReturnSensitiveFields(t *testing.T)
 	require.NotEmpty(t, repo.steps[0].ID)
 	firstID := repo.steps[0].ID
 	res := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/run-1/timeline", strings.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/00000000-0000-0000-0000-000000000001/timeline", strings.NewReader(payload))
 	req.Header.Set("X-Agent-Run-Token", "token")
 	r.ServeHTTP(res, req)
 	require.Equal(t, firstID, repo.steps[0].ID)
