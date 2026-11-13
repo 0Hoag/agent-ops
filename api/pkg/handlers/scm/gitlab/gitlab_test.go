@@ -41,6 +41,7 @@ func TestParseEventsAndStatuses(t *testing.T) {
 		e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Issue Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(body))
 		require.NoError(t, err)
 		require.Equal(t, test.want, e.Issue.Status, test.label)
+		require.Equal(t, "open", e.Issue.State)
 	}
 	mr := `{"object_attributes":{"id":4,"iid":7,"title":"mr","state":"opened","last_commit":{"id":"abc"},"source_branch":"feature","description":"closes #9 and fixes group/project#10","updated_at":"2026-01-01T00:00:00Z"},"project":{"path_with_namespace":"group/project"}}`
 	e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Merge Request Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(mr))
@@ -49,8 +50,13 @@ func TestParseEventsAndStatuses(t *testing.T) {
 	require.Equal(t, []int{9, 10}, e.PullRequest.ClosingIssueNumbers)
 	for _, state := range []string{"opened", "updated", "merged", "closed"} {
 		payload := `{"object_attributes":{"id":4,"iid":7,"title":"mr","state":"` + state + `","sha":"abc","updated_at":"2026-01-01T00:00:00Z"},"project":{"path_with_namespace":"group/project"}}`
-		_, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Merge Request Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(payload))
+		e, err := New(Config{WebhookSecret: "secret"}).ParseEvent(context.Background(), "Merge Request Hook", http.Header{"X-Gitlab-Token": []string{"secret"}}, []byte(payload))
 		require.NoError(t, err)
+		if state == "opened" {
+			require.Equal(t, "open", e.PullRequest.State)
+		} else {
+			require.Equal(t, state, e.PullRequest.State)
+		}
 	}
 	for _, status := range []string{"running", "success", "failed", "canceled"} {
 		payload := `{"object_attributes":{"id":5,"sha":"def","status":"` + status + `","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T01:00:00Z"},"merge_request":{"iid":7},"project":{"path_with_namespace":"group/project"}}`
@@ -110,6 +116,7 @@ func TestBackfillHTTPContractPaginationAndCancellation(t *testing.T) {
 	require.Equal(t, 2, len(got.PipelineRuns))
 	require.Equal(t, scm.StatusDone, got.Issues[0].Status)
 	require.Equal(t, scm.StatusReview, got.Issues[1].Status)
+	require.Equal(t, "open", got.Issues[1].State)
 	require.Equal(t, "closed", got.PullRequests[1].State)
 	require.Equal(t, 4, *got.PipelineRuns[1].PRNumber)
 	require.Equal(t, "failed", got.PipelineRuns[1].Conclusion)

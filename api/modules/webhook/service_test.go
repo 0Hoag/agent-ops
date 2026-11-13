@@ -21,6 +21,7 @@ import (
 	appcrypto "github.com/0Hoag/agent-ops/api/pkg/crypto"
 	"github.com/0Hoag/agent-ops/api/pkg/handlers/scm"
 	githubprovider "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/github"
+	gitlabprovider "github.com/0Hoag/agent-ops/api/pkg/handlers/scm/gitlab"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -38,6 +39,9 @@ func TestValidEntity(t *testing.T) {
 		{"issue", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t", State: "open"}}, true},
 		{"issue zero", scm.Event{Issue: &scm.Issue{Title: "t", State: "open"}}, false},
 		{"issue state empty", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t"}}, false},
+		{"issue vendor state rejected", scm.Event{Issue: &scm.Issue{Number: 1, Title: "t", State: "opened"}}, false},
+		{"pull merged", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "merged", HeadSHA: "sha", HeadBranch: "main"}}, true},
+		{"pull closed", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "closed", HeadSHA: "sha", HeadBranch: "main"}}, true},
 		{"pull", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadSHA: "sha", HeadBranch: "main"}}, true},
 		{"pull sha empty", scm.Event{PullRequest: &scm.PullRequest{Number: 1, Title: "t", State: "open", HeadBranch: "main"}}, false},
 		{"run", scm.Event{PipelineRun: &scm.PipelineRun{ExternalID: "42", SHA: "sha", Status: "completed", StartedAt: time.Now()}}, true},
@@ -99,10 +103,41 @@ func (badRegistry) Build(string, scm.Config) (scm.SCMProvider, error) {
 type configuredRegistry struct{}
 
 func (configuredRegistry) Build(name string, config scm.Config) (scm.SCMProvider, error) {
+	if name == "gitlab" {
+		return gitlabprovider.New(config), nil
+	}
 	if name != "github" {
 		return nil, errors.New("unknown provider")
 	}
 	return githubprovider.New(config), nil
+}
+
+func TestGitLabOpenedIssueRouteNormalizesState(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mock, db := newWebhookMockDB(t)
+	repoID := "11111111-1111-1111-1111-111111111111"
+	rows := func() *sqlmock.Rows {
+		return sqlmock.NewRows([]string{"id", "provider", "full_name", "webhook_secret_env_ref", "created_at", "updated_at"}).AddRow(repoID, "gitlab", "review/synthetic", "SECRET", nil, nil)
+	}
+	payload := []byte(`{"project":{"path_with_namespace":"review/synthetic"},"object_attributes":{"id":3,"iid":3,"title":"Webhook state control","state":"opened","updated_at":"2026-11-12T00:00:00Z"}}`)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("gitlab", "review/synthetic", 1).WillReturnRows(rows())
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("gitlab", "review/synthetic", 1).WillReturnRows(rows())
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "repositories" WHERE provider = $1 AND full_name = $2 ORDER BY "repositories"."id" LIMIT $3`)).WithArgs("gitlab", "review/synthetic", 1).WillReturnRows(rows())
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "webhook_events"`)).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "issues"`)).WithArgs(sqlmock.AnyArg(), repoID, int64(3), "Webhook state control", "open", "todo", sqlmock.AnyArg(), "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	router := gin.New()
+	NewRoutes(NewController(NewService(db, configuredRegistry{}), map[string][]Config{"gitlab": {{Repository: "review/synthetic", SecretEnv: "W18_GITLAB_SECRET"}}})).Register(router.Group("/api/v1"))
+	t.Setenv("W18_GITLAB_SECRET", "review-secret")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/gitlab", strings.NewReader(string(payload)))
+	req.Header.Set("X-Gitlab-Token", "review-secret")
+	req.Header.Set("X-Gitlab-Event", "Issue Hook")
+	req.Header.Set("X-Gitlab-Event-UUID", "synthetic-opened-control")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestIngestRejectsRepoMismatchAndWrongSecret(t *testing.T) {

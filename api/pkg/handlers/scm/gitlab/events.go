@@ -126,6 +126,7 @@ func (p *Provider) ParseEvent(ctx context.Context, eventType string, headers htt
 }
 
 func ptrIssue(r issueJSON, repo string) *scm.Issue {
+	state := normalizeState(r.State)
 	status := scm.StatusTodo
 	labels := make([]string, 0, len(r.Labels))
 	for _, raw := range r.Labels {
@@ -152,7 +153,17 @@ func ptrIssue(r issueJSON, repo string) *scm.Issue {
 	if r.Assignee != nil {
 		a = r.Assignee.Username
 	}
-	return &scm.Issue{ExternalID: strconv.FormatInt(r.ID, 10), Number: r.IID, Repository: repo, Title: r.Title, State: r.State, Status: status, Labels: labels, Assignee: a, UpdatedAt: r.UpdatedAt}
+	if state == "closed" {
+		status = scm.StatusDone
+	}
+	return &scm.Issue{ExternalID: strconv.FormatInt(r.ID, 10), Number: r.IID, Repository: repo, Title: r.Title, State: state, Status: status, Labels: labels, Assignee: a, UpdatedAt: r.UpdatedAt}
+}
+
+func normalizeState(state string) string {
+	if state == "opened" {
+		return "open"
+	}
+	return state
 }
 func mapStatus(label string) (scm.IssueStatus, bool) {
 	switch strings.ToLower(strings.TrimSpace(label)) {
@@ -170,7 +181,7 @@ func mapStatus(label string) (scm.IssueStatus, bool) {
 	return "", false
 }
 func ptrMR(r mrJSON, repo string) *scm.PullRequest {
-	state := r.State
+	state := normalizeState(r.State)
 	merged := r.MergedAt != nil || state == "merged"
 	if merged {
 		state = "merged"
