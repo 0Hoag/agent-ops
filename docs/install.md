@@ -118,6 +118,35 @@ Attach a browser screenshot at desktop width and at 390 px width, plus the timed
 real GitLab credentials prevent a step, record the exact failing command, mark the result unverified, and stop; never retry
 against a shared stack or claim real GitLab acceptance from synthetic data.
 
+## First-run acceptance checklist
+
+Record this checklist in the acceptance evidence for each fresh clone. Replace every bracketed value with the observed
+result; do not write `pass` for a command that was not run.
+
+```text
+Run started (UTC): [timestamp]
+Total elapsed seconds: [measured seconds] (target: under 600; this guide makes no duration promise)
+
+[ ] Clone agent-ops — exit [0/non-zero], [seconds]
+[ ] Clone agent-ops-client — exit [0/non-zero], [seconds]
+[ ] Compose config — exit [0/non-zero], [seconds]
+[ ] Compose up --build -d — exit [0/non-zero], [seconds]
+[ ] /healthz — exit [0/non-zero], [seconds]
+[ ] /readyz — exit [0/non-zero], [seconds]
+[ ] Client /healthz — exit [0/non-zero], [seconds]
+[ ] Bootstrap account — exit [0/non-zero], [seconds]
+[ ] Login and select organization — exit [0/non-zero], [seconds]
+[ ] Create GitLab project settings — exit [0/non-zero], [seconds]
+[ ] Build and push transcript — exit [0/non-zero], [seconds]
+[ ] Overview populated with the synthetic run — observed [yes/no/unverified]
+[ ] First-run checklist screenshot at 1280 px — [path or not captured]
+[ ] Overview screenshot at 1280 px — [path or not captured]
+[ ] Overview screenshot at 390 px — [path or not captured]
+```
+
+The checklist is evidence, not a substitute for executing the flow. A blocked command leaves subsequent items
+unverified, and the exact command, output, and blocker must remain in the timed log.
+
 ## Stop and preserve data
 
 Stop this isolated stack without deleting its data while investigating:
