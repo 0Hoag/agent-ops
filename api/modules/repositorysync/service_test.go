@@ -21,14 +21,17 @@ import (
 
 const exposedSecrets = "Bearer bearer-test-secret https://url-user:url-password@example.test hook=webhook-test-secret"
 
-type backfillProvider struct{ err error }
+type backfillProvider struct {
+	err    error
+	result scm.BackfillResult
+}
 
 func (p backfillProvider) VerifyWebhook(context.Context, http.Header, []byte) error { return nil }
 func (p backfillProvider) ParseEvent(context.Context, string, http.Header, []byte) (scm.Event, error) {
 	return scm.Event{}, nil
 }
 func (p backfillProvider) Backfill(context.Context, string) (scm.BackfillResult, error) {
-	return scm.BackfillResult{}, p.err
+	return p.result, p.err
 }
 func (p backfillProvider) TestRepository(context.Context, string) (string, error) { return "", nil }
 
@@ -56,6 +59,26 @@ func TestSyncSuccessPersistsSuccessfulStatus(t *testing.T) {
 	mock.ExpectExec(`UPDATE "repositories"`).
 		WithArgs("", "success", sqlmock.AnyArg(), sqlmock.AnyArg(), repository.ID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	require.NoError(t, service.Sync(context.Background(), repository.ID))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestSyncPersistsPipelineRunsWithProviderIdentity(t *testing.T) {
+	service, mock, repository := syncFixture(t, nil)
+	service.providers = builder.NewRegistry()
+	runAt := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	prNumber := 17
+	run := scm.PipelineRun{ExternalID: "run-42", PRNumber: &prNumber, SHA: "sha-42", Status: "completed", Conclusion: "success", StartedAt: runAt, FinishedAt: &runAt, UpdatedAt: runAt}
+	require.NoError(t, service.providers.Register("test", func(scm.Config) scm.SCMProvider {
+		return backfillProvider{result: scm.BackfillResult{PipelineRuns: []scm.PipelineRun{run}}}
+	}))
+	expectRepositoryGet(mock, repository)
+	mock.ExpectBegin()
+	mock.ExpectExec(`INSERT INTO "pipeline_runs"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "repositories"`).WithArgs("", "success", sqlmock.AnyArg(), sqlmock.AnyArg(), repository.ID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	require.NoError(t, service.Sync(context.Background(), repository.ID))
 	require.NoError(t, mock.ExpectationsWereMet())
