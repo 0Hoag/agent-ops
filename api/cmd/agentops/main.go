@@ -17,9 +17,9 @@ import (
 )
 
 type submitter struct {
-	endpoint, token, repository, wave, worker, harness, branch, cwd string
-	issues                                                          []int64
-	client                                                          *http.Client
+	endpoint, token, repository, wave, worker, harness, branch, cwd, billingType string
+	issues                                                                       []int64
+	client                                                                       *http.Client
 }
 
 type createdRun struct {
@@ -33,7 +33,7 @@ func (s submitter) submit(ctx context.Context, session transcript.Session) error
 	if err != nil {
 		return err
 	}
-	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch}
+	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch, "billing_type": s.billingType}
 	b, err := json.Marshal(p)
 	if err != nil {
 		return err
@@ -128,6 +128,7 @@ func run(args []string) error {
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
+	billingType := fs.String("billing-type", "api", "billing type: api or subscription")
 	issues := fs.String("issue-numbers", os.Getenv("AGENT_RUN_ISSUES"), "JSON issue-number array")
 	branch := fs.String("branch", "", "source branch (overrides transcript gitBranch)")
 	cwd := fs.String("cwd", ".", "working directory used to resolve the current Git branch")
@@ -152,6 +153,9 @@ func run(args []string) error {
 	}
 	if *worker == "" {
 		return fmt.Errorf("--worker is required")
+	}
+	if *billingType != "api" && *billingType != "subscription" {
+		return fmt.Errorf("--billing-type must be api or subscription")
 	}
 	f, err := os.Open(filepath.Clean(fs.Arg(0)))
 	if err != nil {
@@ -188,7 +192,7 @@ func run(args []string) error {
 			return fmt.Errorf("invalid issue-numbers JSON: %w", err)
 		}
 	}
-	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: *harness, branch: *branch, cwd: *cwd, issues: issueNumbers, client: http.DefaultClient}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: *harness, branch: *branch, cwd: *cwd, billingType: *billingType, issues: issueNumbers, client: http.DefaultClient}
 	for _, session := range sessions {
 		if err := s.submit(context.Background(), session); err != nil {
 			return err

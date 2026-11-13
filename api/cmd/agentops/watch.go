@@ -40,6 +40,7 @@ func runWatch(args []string) error {
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "", "wave metadata")
 	worker := fs.String("worker", "", "worker metadata")
+	billingType := fs.String("billing-type", "api", "billing type: api or subscription")
 	branch := fs.String("branch", "", "source branch (overrides transcript gitBranch)")
 	cwd := fs.String("cwd", ".", "working directory used to resolve the current Git branch")
 	interval := fs.Duration("interval", time.Second, "poll interval")
@@ -52,6 +53,9 @@ func runWatch(args []string) error {
 	if *interval <= 0 {
 		return fmt.Errorf("--interval must be positive")
 	}
+	if *billingType != "api" && *billingType != "subscription" {
+		return fmt.Errorf("--billing-type must be api or subscription")
+	}
 	token := os.Getenv("AGENT_RUN_TOKEN")
 	if token == "" {
 		return fmt.Errorf("AGENT_RUN_TOKEN is required")
@@ -60,7 +64,7 @@ func runWatch(args []string) error {
 	if err != nil {
 		return err
 	}
-	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", branch: *branch, cwd: *cwd, client: httpClient()}
+	s := submitter{endpoint: *endpoint, token: token, repository: *repository, wave: *wave, worker: *worker, harness: "claude", branch: *branch, cwd: *cwd, billingType: *billingType, client: httpClient()}
 	ctx, stop := signalContext()
 	defer stop()
 	for {

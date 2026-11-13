@@ -192,6 +192,32 @@ func TestRunSuppliesModelMetadataWithoutChangingSourceModel(t *testing.T) {
 	}
 }
 
+func TestRunPreservesSubscriptionBillingType(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "session.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"step_finish","timestamp":1761526800000,"sessionID":"native","part":{"tokens":{"input":18}}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	oldToken := os.Getenv("AGENT_RUN_TOKEN")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	if err := run([]string{"push", "--harness", "opencode", "--billing-type", "subscription", "--model", "model", "--endpoint", server.URL, "--repository-id", "repo", "--wave", "W9", "--worker", "worker", path}); err != nil {
+		t.Fatal(err)
+	}
+	if payload["billing_type"] != "subscription" {
+		t.Fatalf("billing_type=%v, want subscription", payload["billing_type"])
+	}
+}
+
 func TestRunUsesEnvironmentModelFallbackAndPreservesCodexSourceModel(t *testing.T) {
 	root := t.TempDir()
 	opencodePath := filepath.Join(root, "opencode.jsonl")
