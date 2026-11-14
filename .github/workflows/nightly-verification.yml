@@ -1,0 +1,37 @@
+name: Nightly verification
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Run verification without filing GitHub issues
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  issues: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run verification
+        env:
+          DEFECT_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_ALL_RUN_ID: run-${{ github.run_id }}
+        run: |
+          if [[ "${{ inputs.dry-run || false }}" == "true" ]]; then
+            bash scripts/ci/scheduled-job.sh --dry-run
+          else
+            bash scripts/ci/scheduled-job.sh
+          fi
+      - name: Upload verification summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-verification-${{ github.run_id }}
+          path: .agent-runs/verify/run-${{ github.run_id }}
+          if-no-files-found: error
