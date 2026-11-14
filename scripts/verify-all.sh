@@ -12,7 +12,7 @@ cleanup_shared() {
   local rc=$?
   trap - EXIT INT TERM
   if [[ ${VERIFY_ALL_SHARED_STACK:-0} == 1 && -n ${VERIFY_SHARED_PROJECT:-} ]]; then
-    shared_stack_cleanup "$root" "$VERIFY_SHARED_PROJECT" || rc=1
+    shared_stack_cleanup "$root" "$VERIFY_SHARED_PROJECT" "$shared_context" || rc=1
   fi
   exit "$rc"
 }
