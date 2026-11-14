@@ -19,7 +19,7 @@ esac
 EOF
 chmod +x "$bin/gh"
 protocol_assertion=$tmp/protocol-assertion
-run() { extra=(); [[ ${4:-} ]] && extra=(--classification "$4"); env PATH="$bin:$PATH" DB="$db" COMMENTS="$comments" PROTOCOL_ASSERTION="$protocol_assertion" FILE_DEFECT_STATE_DIR="$tmp/state" "$root/scripts/file-defect.sh" --repo fixture/repo --run run1 --feature "$1" --check "$2" --command 'make verify' --expected pass --actual "$3" --evidence /tmp/evidence.log "${extra[@]}"; }
+run() { env PATH="$bin:$PATH" DB="$db" COMMENTS="$comments" PROTOCOL_ASSERTION="$protocol_assertion" FILE_DEFECT_STATE_DIR="$tmp/state" "$root/scripts/file-defect.sh" --repo fixture/repo --run run1 --feature "$1" --check "$2" --command 'make verify' --expected pass --actual "$3" --evidence /tmp/evidence.log ${4:+--classification "$4"}; }
 out=$(run Login auth 'failure with token=ghp_SYNTHETIC_SECRET'); grep -q 'issues/1' <<<"$out"
 out=$(run Login auth 'failure with token=ghp_SYNTHETIC_SECRET'); grep -q 'updated issue #1' <<<"$out"; test "$(grep -c '^COMMENT|' "$comments")" = 1
 run Other check failure >/dev/null; printf '10\n' >"$tmp/state/run1.count"
