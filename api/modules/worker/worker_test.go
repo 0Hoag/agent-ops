@@ -65,6 +65,15 @@ func TestEnqueueReturnsStableSnapshotWhileJobExecutes(t *testing.T) {
 		<-started
 		close(release)
 		<-done
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			stored, getErr := e.Get("worker-1")
+			require.NoError(t, getErr)
+			if stored.State == "succeeded" {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
 		e.mu.Lock()
 		for _, stored := range e.jobs {
 			require.Equal(t, "succeeded", stored.State)
