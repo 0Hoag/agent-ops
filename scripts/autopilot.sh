@@ -110,12 +110,12 @@ merge_ready() {
         (.state == "SUCCESS" or .state == "SKIPPED" or .state == "NEUTRAL"))' \
         <<<"$checks" >/dev/null 2>&1 || continue
       if [ "$base" = main ]; then
-        scripts/merge-pr.sh "$r" "$n" "$sha" merge && echo "  promoted $r#$n to main by script"
+        scripts/merge-pr.sh "$r" "$n" "$sha" merge && { echo "  promoted $r#$n to main by script"; echo "merge:$r#$n@$sha" >> "${PERIODIC_MERGE_EVENTS_FILE:-/dev/null}"; }
       else
         pgrep -f -- "$head" > /dev/null && continue
         is_critical "$r" "$n" "$sha" && continue
         scripts/merge-pr.sh "$r" "$n" "$sha" squash \
-          && { scripts/close-linked.sh "$r" "$n" | sed 's/^/    /' && echo "  merged $r#$n into reviews/development by script"; }
+          && { scripts/close-linked.sh "$r" "$n" | sed 's/^/    /'; echo "  merged $r#$n into reviews/development by script"; echo "merge:$r#$n@$sha" >> "${PERIODIC_MERGE_EVENTS_FILE:-/dev/null}"; }
       fi
     done
   done
@@ -179,7 +179,15 @@ wait_for_event() {
 while true; do
   ts=$(date +%Y%m%d-%H%M%S)
   echo "[$ts] pass start"
+  PERIODIC_MERGE_EVENTS_FILE="$dir/merge-events.$ts"
+  export PERIODIC_MERGE_EVENTS_FILE
+  : > "$PERIODIC_MERGE_EVENTS_FILE"
   merge_ready
+  while IFS= read -r merge_event; do
+    [ -n "$merge_event" ] || continue
+    scripts/periodic-verification.sh "$merge_event" "$ts" || true
+  done < "$PERIODIC_MERGE_EVENTS_FILE"
+  scripts/periodic-verification.sh cadence "$ts" || true
   scripts/worktrees.sh --prune > "$dir/worktrees.txt" 2>&1
   scripts/branches.sh --delete > "$dir/branches.txt" 2>&1; scripts/audit.sh > "$dir/audit.txt" 2>&1   # no tokens; the pass reads the two files
   pre=$(results_stamp)
