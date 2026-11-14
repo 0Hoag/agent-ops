@@ -25,10 +25,20 @@ func (s *Service) EvaluateAndDeliver(ctx context.Context, now time.Time, observa
 		if err != nil {
 			return err
 		}
+		eligible := s.channels
 		if !inserted {
-			continue
+			eligible = make(map[string]notification.Notifier, len(s.channels))
+			for channel, sender := range s.channels {
+				delivery, found, err := s.repository.GetDelivery(ctx, row.ID, channel)
+				if err != nil {
+					return err
+				}
+				if !found || !delivery.Success {
+					eligible[channel] = sender
+				}
+			}
 		}
-		for channel, sender := range s.channels {
+		for channel, sender := range eligible {
 			if err := ctx.Err(); err != nil {
 				return err
 			}

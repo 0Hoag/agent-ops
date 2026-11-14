@@ -41,4 +41,27 @@ func TestEvaluateAndDeliverPersistsSuccessAndFailure(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestEvaluateAndDeliverRetriesFailedDeliveryWithoutRepeatingSuccess(t *testing.T) {
+	db, mock := alertDB(t)
+	mock.MatchExpectationsInOrder(false)
+	repo := NewRepository(db)
+	now := time.Now()
+	occurrenceSQL := regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")
+	deliverySQL := regexp.QuoteMeta("ON CONFLICT (occurrence_id, channel) DO UPDATE SET")
+	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", false, "down", now).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT "success" FROM "alert_deliveries" WHERE occurrence_id = $1 AND channel = $2 LIMIT $3`)).
+		WithArgs(sqlmock.AnyArg(), "email").WillReturnRows(sqlmock.NewRows([]string{"success"}).AddRow(false))
+	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", true, "", now).WillReturnResult(sqlmockResult(1))
+	notifier := &fakeNotifier{err: errors.New("down")}
+	svc := NewService(NewEvaluator(Thresholds{MinCacheHit: 0.9}), repo, map[string]notification.Notifier{"email": notifier})
+	obs := Observation{OrganizationID: "org-a", Repository: "repo", Runs: []RunObservation{{Worker: "worker", InputTokens: 100, CachedInputTokens: 0}}}
+	require.NoError(t, svc.EvaluateAndDeliver(context.Background(), now, obs))
+	notifier.err = nil
+	require.NoError(t, svc.EvaluateAndDeliver(context.Background(), now, obs))
+	require.Equal(t, 2, notifier.calls)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func sqlmockResult(rows int64) driver.Result { return sqlmock.NewResult(0, rows) }
