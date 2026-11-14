@@ -21,7 +21,7 @@ fingerprint=$(printf '%s\037%s\037%s' "$(norm "$feature")" "$(norm "$check_name"
 gh() { command gh "$@" --repo "$repo"; }
 state_root=${FILE_DEFECT_STATE_DIR:-"$(git rev-parse --git-common-dir 2>/dev/null)/file-defect"}; mkdir -p "$state_root"; state_file="$state_root/$run_id.count"
 count=0; [[ -f $state_file ]] && read -r count <"$state_file" || true; [[ $count =~ ^[0-9]+$ ]] || die 'invalid run state'
-issues=$(gh issue list --state all --search "$fingerprint" --json number,state,title,body,repository 2>/dev/null) || die 'GitHub search failed; no issue created'
+issues=$(gh issue list --state all --search "$fingerprint" --json number,state,title,body 2>/dev/null) || die 'GitHub search failed; no issue created'
 issue=$(node -e 'const x=JSON.parse(process.argv[1]); const f=process.argv[2]; const a=x.filter(i=>JSON.stringify(i).includes(f)); if(a.length) process.stdout.write(String(a[0].number))' "$issues" "$fingerprint") || die 'invalid GitHub search response'
 if [[ $issue ]]; then
   state=$(node -e 'const x=JSON.parse(process.argv[1]); const n=process.argv[2]; const i=x.find(v=>String(v.number)===n); process.stdout.write(i?.state||"")' "$issues" "$issue")
