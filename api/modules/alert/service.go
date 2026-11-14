@@ -43,6 +43,9 @@ func (s *Service) EvaluateAndDeliver(ctx context.Context, now time.Time, observa
 				return err
 			}
 			err := sender.Notify(ctx, notification.Message{Subject: a.Rule, Body: a.Message})
+			if err != nil {
+				s.evaluator.AllowRetry(a.Key)
+			}
 			d := Delivery{OccurrenceID: row.ID, Channel: channel, Success: err == nil, DeliveredAt: now}
 			if err != nil {
 				d.Error = err.Error()
