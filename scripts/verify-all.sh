@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+[[ -f "$root/scripts/verify-lifecycle/shared-stack.sh" ]] || root=$(git rev-parse --show-toplevel)
 verify_dir=${VERIFY_ALL_CHECK_DIR:-"$root/scripts/verify"}
 stamp=${VERIFY_ALL_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}
 artifact_dir="${VERIFY_ALL_ARTIFACT_ROOT:-$root/.agent-runs/verify}/$stamp"
 mkdir -p "$artifact_dir/logs"
+shared_context="$artifact_dir/shared-stack.env"
+source "$root/scripts/verify-lifecycle/shared-stack.sh"
+cleanup_shared() {
+  local rc=$?
+  trap - EXIT INT TERM
+  if [[ ${VERIFY_ALL_SHARED_STACK:-0} == 1 && -n ${VERIFY_SHARED_PROJECT:-} ]]; then
+    shared_stack_cleanup "$root" "$VERIFY_SHARED_PROJECT" || rc=1
+  fi
+  exit "$rc"
+}
+trap cleanup_shared EXIT INT TERM
+if [[ ${VERIFY_ALL_SHARED_STACK:-0} == 1 ]]; then
+  shared_stack_start "$root" "$shared_context"
+fi
 source_sha=$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)
 summary="$artifact_dir/summary.json"; table="$artifact_dir/table.txt"
 python3 - "$summary" "$source_sha" "$verify_dir" <<'PY'

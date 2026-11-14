@@ -2,29 +2,33 @@
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+if [[ ${VERIFY_SHARED_STACK:-0} == 1 ]]; then
+  PROJECT=$VERIFY_SHARED_PROJECT; API_PORT=$VERIFY_SHARED_API_PORT; PG_PORT=$VERIFY_SHARED_PG_PORT
+else
+  PROJECT="agent-ops-insights-$(id -u)-$$"
+  API_PORT=${INSIGHTS_VERIFY_API_PORT:-$((21400 + RANDOM % 400))}; PG_PORT=${INSIGHTS_VERIFY_PG_PORT:-$((18400 + RANDOM % 400))}
+fi
 # This verifier serializes each heavy operation itself. Invoke this script
 # directly; wrapping the whole script in scripts/heavy.sh is unsupported.
 ARTIFACT_DIR=${INSIGHTS_VERIFY_ARTIFACT_DIR:-/Users/zeross/agent-ops/.agent-runs/W19h-insights-516}
 RUN_DIR="$ROOT/.agent-runs/insights-verify-$$"
 mkdir -p "$ARTIFACT_DIR" "$RUN_DIR"/{cache,modcache,buildx}
 export GOCACHE="$RUN_DIR/cache" GOMODCACHE="$RUN_DIR/modcache" BUILDX_CONFIG="$RUN_DIR/buildx"
-PROJECT="agent-ops-insights-$(id -u)-$$"
-API_PORT=${INSIGHTS_VERIFY_API_PORT:-$((21400 + RANDOM % 400))}; PG_PORT=${INSIGHTS_VERIFY_PG_PORT:-$((18400 + RANDOM % 400))}
 API="http://127.0.0.1:$API_PORT"; KEY=01234567890123456789012345678901
 ORG=51600000-0000-4000-8000-000000000001; REPO=51600000-0000-4000-8000-000000000002
 ACCOUNT="insights-verify-$(date +%s)-$$@example.invalid"; PASSWORD=insights-verify-password
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/insights-verify.XXXXXX")
-COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_PORT="$API_PORT" JWT_SECRET=insights-verify-jwt REPOSITORY_ENCRYPTION_KEY="$KEY" SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
+COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_PORT="$API_PORT" JWT_SECRET=verify-shared-jwt REPOSITORY_ENCRYPTION_KEY="$KEY" SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
 log() { printf 'insights: %s\n' "$*" | tee -a "$ARTIFACT_DIR/commands.log"; }
 fail() { log "FAIL: $*"; exit 1; }
 sql() { "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" exec -T postgres psql -At -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "$1" | tr -d '\r'; }
-cleanup() { local rc=$?; trap - EXIT INT TERM; "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1; local c v n; c=$("$ROOT/scripts/heavy.sh" docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true); v=$("$ROOT/scripts/heavy.sh" docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true); n=$("$ROOT/scripts/heavy.sh" docker network ls -q --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true); [[ -z "$c$v$n" ]] || { log "FAIL: cleanup left owned resources containers=${c:-none} volumes=${v:-none} networks=${n:-none}"; rc=1; }; cp "$RUN_DIR/commands.log" "$ARTIFACT_DIR/commands.log" 2>/dev/null || true; rm -rf "$TMP" "$RUN_DIR"; [[ $rc -eq 0 ]] && log "PASS: cleanup verified zero owned containers, volumes, and networks ($PROJECT)"; exit "$rc"; }
+cleanup() { local rc=$?; trap - EXIT INT TERM; if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1; fi; cp "$RUN_DIR/commands.log" "$ARTIFACT_DIR/commands.log" 2>/dev/null || true; rm -rf "$TMP" "$RUN_DIR"; exit "$rc"; }
 trap cleanup EXIT INT TERM
 request() { CODE=$(curl -sS -o "$TMP/body" -w '%{http_code}' "$@"); BODY=$(tr '\n' ' ' <"$TMP/body"); }
 expect() { [[ "$CODE" == "$1" ]] || fail "$2 expected HTTP $1 got $CODE body=$BODY"; log "PASS: $2 HTTP=$CODE"; }
 check() { jq -e "$1" "$TMP/body" >/dev/null || fail "$2 body=$BODY"; log "PASS: $2"; }
 
-"$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d --build api
+if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d --build api; fi
 for _ in $(seq 1 90); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/readyz" >/dev/null || fail 'API did not become ready'
 log "PASS: isolated real API/Postgres stack ready project=$PROJECT api=$API"
