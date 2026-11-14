@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+ROOT=${INSIGHTS_VERIFY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 if [[ ${VERIFY_SHARED_STACK:-0} == 1 ]]; then
   PROJECT=$VERIFY_SHARED_PROJECT; API_PORT=$VERIFY_SHARED_API_PORT; PG_PORT=$VERIFY_SHARED_PG_PORT
 else
@@ -22,11 +22,36 @@ COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_
 log() { printf 'insights: %s\n' "$*" | tee -a "$ARTIFACT_DIR/commands.log"; }
 fail() { log "FAIL: $*"; exit 1; }
 sql() { "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" exec -T postgres psql -At -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 -c "$1" | tr -d '\r'; }
-cleanup() { local rc=$?; trap - EXIT INT TERM; if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1; fi; cp "$RUN_DIR/commands.log" "$ARTIFACT_DIR/commands.log" 2>/dev/null || true; rm -rf "$TMP" "$RUN_DIR"; exit "$rc"; }
+cleanup() {
+  local rc=$?; trap - EXIT INT TERM
+  if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then
+    "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1
+    local kind ids
+    for kind in containers volumes networks; do
+      case "$kind" in
+        containers) ids=$("$ROOT/scripts/heavy.sh" docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true) ;;
+        volumes) ids=$("$ROOT/scripts/heavy.sh" docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true) ;;
+        networks) ids=$("$ROOT/scripts/heavy.sh" docker network ls -q --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null || true) ;;
+      esac
+      if [[ -n "$ids" ]]; then
+        log "FAIL: cleanup left owned $kind for project=$PROJECT ids=$(tr '\n' ',' <<<"$ids" | sed 's/,$//')"
+        rc=1
+      fi
+    done
+    [[ $rc -eq 0 ]] && log "PASS: cleanup verified zero owned containers, volumes, and networks ($PROJECT)"
+  fi
+  cp "$RUN_DIR/commands.log" "$ARTIFACT_DIR/commands.log" 2>/dev/null || true
+  rm -rf "$TMP" "$RUN_DIR"
+  exit "$rc"
+}
 trap cleanup EXIT INT TERM
 request() { CODE=$(curl -sS -o "$TMP/body" -w '%{http_code}' "$@"); BODY=$(tr '\n' ' ' <"$TMP/body"); }
 expect() { [[ "$CODE" == "$1" ]] || fail "$2 expected HTTP $1 got $CODE body=$BODY"; log "PASS: $2 HTTP=$CODE"; }
 check() { jq -e "$1" "$TMP/body" >/dev/null || fail "$2 body=$BODY"; log "PASS: $2"; }
+
+if [[ ${INSIGHTS_VERIFY_CLEANUP_ONLY:-0} == 1 ]]; then
+  exit 0
+fi
 
 if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d --build api; fi
 for _ in $(seq 1 90); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
