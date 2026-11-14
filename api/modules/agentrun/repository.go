@@ -31,6 +31,13 @@ func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
 	if err := q.Create(run).Error; err != nil {
 		return fmt.Errorf("create agent run: %w", err)
 	}
+	if run.Harness != nil && run.SessionID != nil && *run.Harness != "" && *run.SessionID != "" {
+		var persisted AgentRun
+		if err := r.db.WithContext(ctx).Where("repository_id = ? AND harness = ? AND session_id = ?", run.RepositoryID, *run.Harness, *run.SessionID).First(&persisted).Error; err != nil {
+			return fmt.Errorf("reload persisted agent run: %w", err)
+		}
+		run.ID = persisted.ID
+	}
 	return nil
 }
 
