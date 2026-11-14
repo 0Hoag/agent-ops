@@ -1,0 +1,6 @@
+services:
+  api:
+    environment:
+      REPOSITORIES_VERIFY_TOKEN: ${REPOSITORIES_VERIFY_TOKEN:?REPOSITORIES_VERIFY_TOKEN must be set for repository verification}
+      REPOSITORIES_VERIFY_SECRET: ${REPOSITORIES_VERIFY_SECRET:?REPOSITORIES_VERIFY_SECRET must be set for repository verification}
+      REPOSITORIES_VERIFY_BASE: ${REPOSITORIES_VERIFY_BASE:?REPOSITORIES_VERIFY_BASE must be set for repository verification}
