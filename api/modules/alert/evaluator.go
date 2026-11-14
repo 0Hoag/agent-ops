@@ -54,3 +54,9 @@ func (e *Evaluator) Evaluate(ctx context.Context, now time.Time, observation Obs
 	}
 	return alerts
 }
+
+func (e *Evaluator) AllowRetry(key string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.active, key)
+}
