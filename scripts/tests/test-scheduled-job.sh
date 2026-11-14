@@ -12,7 +12,7 @@ printf '%s\n' "$*" >>"${GH_CALLS:?}"
 if [[ $1 == issue && $2 == list ]]; then printf '[]\n'; fi
 exit 0
 EOF
-chmod +x "$bin/gh"; export PATH="$bin:$PATH" GH_CALLS="$tmp/gh.calls" DEFECT_REPO=fixture/repo
+chmod +x "$bin/gh"; export PATH="$bin:$PATH" GH_CALLS="$tmp/gh.calls" DEFECT_REPO=fixture/repo FILE_DEFECT_STATE_DIR="$tmp/state"
 VERIFY_ALL_CHECK_DIR="$checks/green" VERIFY_ALL_ARTIFACT_ROOT="$artifacts" VERIFY_ALL_RUN_ID=green bash "$root/scripts/ci/scheduled-job.sh" --dry-run >/dev/null
 test ! -s "$GH_CALLS"; test -s "$artifacts/green/summary.json"
 set +e; VERIFY_ALL_CHECK_DIR="$checks/failed" VERIFY_ALL_ARTIFACT_ROOT="$artifacts" VERIFY_ALL_RUN_ID=failed bash "$root/scripts/ci/scheduled-job.sh" --dry-run >"$tmp/dry.out" 2>&1; rc=$?; set -e
