@@ -7,9 +7,9 @@ RUN_DIR="$ROOT/.agent-runs/pricing-verify-$$"
 mkdir -p "$ARTIFACT_DIR" "$RUN_DIR"
 mkdir -p "$RUN_DIR"/{cache,modcache,buildx}
 export GOCACHE="$RUN_DIR/cache" GOMODCACHE="$RUN_DIR/modcache" BUILDX_CONFIG="$RUN_DIR/buildx"
-PROJECT="agent-ops-pricing-$(id -u)-$$"
-API_PORT=${PRICING_VERIFY_API_PORT:-$((20600 + RANDOM % 300))}
-PG_PORT=${PRICING_VERIFY_PG_PORT:-$((17600 + RANDOM % 300))}
+PROJECT=${VERIFY_SHARED_PROJECT:-"agent-ops-pricing-$(id -u)-$$"}
+API_PORT=${VERIFY_SHARED_API_PORT:-${PRICING_VERIFY_API_PORT:-$((20600 + RANDOM % 300))}}
+PG_PORT=${VERIFY_SHARED_PG_PORT:-${PRICING_VERIFY_PG_PORT:-$((17600 + RANDOM % 300))}}
 API="http://127.0.0.1:$API_PORT"
 ORG=51500000-0000-4000-8000-000000000001
 REPO=51500000-0000-4000-8000-000000000002
@@ -18,18 +18,20 @@ PASSWORD=pricing-verify-password
 TOKEN=pricing-verify-token
 KEY=01234567890123456789012345678901
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pricing-verify.XXXXXX")
-COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_PORT="$API_PORT" JWT_SECRET=pricing-verify-jwt REPOSITORY_ENCRYPTION_KEY="$KEY" AGENT_RUN_TOKEN="$TOKEN" EXCHANGE_RATE_VND_PER_USD=25000 SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
+COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_PORT="$API_PORT" JWT_SECRET=verify-shared-jwt REPOSITORY_ENCRYPTION_KEY="$KEY" AGENT_RUN_TOKEN="$TOKEN" EXCHANGE_RATE_VND_PER_USD=25000 SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
 
 log() { printf 'pricing: %s\n' "$*" | tee -a "$ARTIFACT_DIR/commands.log" >&2; }
 fail() { log "FAIL: $*"; exit 1; }
 cleanup() {
   local rc=$?; trap - EXIT INT TERM
-  "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1
+  if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || rc=1; fi
   local c v n
-  c=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT")
-  v=$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")
-  n=$(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT")
-  [[ -z $c && -z $v && -z $n ]] || { log "FAIL: cleanup left owned resources containers=${c:-none} volumes=${v:-none} networks=${n:-none}"; rc=1; }
+  if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then
+    c=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT")
+    v=$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")
+    n=$(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT")
+    [[ -z $c && -z $v && -z $n ]] || { log "FAIL: cleanup left owned resources containers=${c:-none} volumes=${v:-none} networks=${n:-none}"; rc=1; }
+  fi
   cp "$RUN_DIR/commands.log" "$ARTIFACT_DIR/commands.log" 2>/dev/null || true
   rm -rf "$TMP" "$RUN_DIR"
   [[ $rc -eq 0 ]] && log "PASS: cleanup verified zero owned containers, volumes, and networks ($PROJECT)"
@@ -41,10 +43,10 @@ request() { CODE=$(curl -sS -o "$TMP/body" -w '%{http_code}' "$@"); BODY=$(tr '\
 expect() { [[ $CODE == "$1" ]] || fail "$2 expected HTTP $1 got $CODE body=$BODY"; log "PASS: $2 HTTP=$CODE"; }
 json() { jq -e "$1" "$TMP/body" >/dev/null || fail "$2 body=$BODY"; log "PASS: $2"; }
 
-"$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d postgres
+if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d postgres; fi
 for _ in $(seq 1 60); do "${COMPOSE[@]}" exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null 2>&1 && break; sleep 1; done
 "${COMPOSE[@]}" exec -T postgres pg_isready -U agent_ops -d agent_ops >/dev/null || fail 'postgres did not become ready'
-"$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d --build api
+if [[ ${VERIFY_SHARED_STACK:-0} != 1 ]]; then "$ROOT/scripts/heavy.sh" "${COMPOSE[@]}" up -d --build api; fi
 for _ in $(seq 1 90); do curl -fsS "$API/readyz" >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS "$API/readyz" >/dev/null || fail 'api did not become ready'
 
