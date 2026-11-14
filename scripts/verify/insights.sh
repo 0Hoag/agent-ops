@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+# This verifier serializes each heavy operation itself. Invoke this script
+# directly; wrapping the whole script in scripts/heavy.sh is unsupported.
 ARTIFACT_DIR=${INSIGHTS_VERIFY_ARTIFACT_DIR:-/Users/zeross/agent-ops/.agent-runs/W19h-insights-516}
 RUN_DIR="$ROOT/.agent-runs/insights-verify-$$"
 mkdir -p "$ARTIFACT_DIR" "$RUN_DIR"/{cache,modcache,buildx}
