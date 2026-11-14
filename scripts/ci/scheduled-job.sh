@@ -25,6 +25,7 @@ for check in checks:
     name, log = check.get('name'), check.get('log')
     if not name or not log: raise SystemExit('scheduled-job: failed check lacks name or log')
     args = ['bash', str(Path(root) / 'scripts/file-defect.sh'), '--repo', os.environ.get('DEFECT_REPO', ''), '--run', run_id, '--feature', 'nightly verification', '--check', name, '--command', 'scripts/verify-all.sh', '--expected', 'exit 0', '--actual', f'exit {status}', '--evidence', log]
+    if check.get('classification') == 'flaky': args += ['--classification', 'flaky']
     if dry_run == 'true': print('DRY RUN: ' + ' '.join(args))
     else: subprocess.run(args, check=True)
 PY

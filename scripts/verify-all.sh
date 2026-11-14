@@ -52,5 +52,6 @@ import json,sys
 from pathlib import Path
 p=Path(sys.argv[1]); d=json.loads(p.read_text()); d['table']=sys.argv[2]; p.write_text(json.dumps(d,indent=2)+'\n')
 PY
+VERIFY_HISTORY_FILE="${VERIFY_HISTORY_FILE:-$root/.agent-runs/verify-history.json}" "$root/scripts/verify-history.sh" "$summary"
 printf 'summary=%s\n' "$summary"
 exit "$overall"

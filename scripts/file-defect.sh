@@ -2,14 +2,15 @@
 set -Eeuo pipefail
 # Usage: file-defect.sh --repo OWNER/REPO --run RUN_ID --feature F --check C --command CMD --expected TEXT --actual TEXT --evidence PATH [--area AREA]
 die() { printf 'file-defect: %s\n' "$*" >&2; exit 1; }
-repo= run_id= feature= check_name= command= expected= actual= evidence= area=ci
+repo= run_id= feature= check_name= command= expected= actual= evidence= area=ci classification=
 while (($#)); do
   case $1 in
-    --repo|--run|--feature|--check|--command|--expected|--actual|--evidence|--area)
+    --repo|--run|--feature|--check|--command|--expected|--actual|--evidence|--area|--classification)
       (($# >= 2)) || die "missing value for $1"; key=${1#--}; [[ $key == check ]] && key=check_name; [[ $key == run ]] && key=run_id; printf -v "$key" '%s' "$2"; shift 2 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
+[[ -z $classification || $classification == flaky ]] || die 'invalid classification'
 [[ $repo && $run_id && $feature && $check_name && $command && $expected && $actual && $evidence ]] || die 'all required options must be provided'
 [[ $repo =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]] || die 'invalid repository identity'
 [[ $run_id =~ ^[A-Za-z0-9._-]+$ ]] || die 'invalid run id'
@@ -32,5 +33,6 @@ if [[ $issue ]]; then
 fi
 (( count < 10 )) || die 'run cap of 10 newly filed issues reached'
 title="[$safe_feature] $safe_check failed ($fingerprint)"; body="Found by automated verification.\n\nFeature: $safe_feature\nCheck: $safe_check\nCommand: $safe_command\nExpected: $safe_expected\nActual: $safe_actual\nEvidence: $safe_evidence\nFingerprint: $fingerprint"
-new_issue=$(gh issue create --title "$title" --body "$body" --label found-by:agent --label type:bug --label wave:W19 --label area:"$area" --label priority:P2 --label status:todo) || die 'GitHub create failed'
+issue_type=type:bug; [[ $classification == flaky ]] && issue_type=type:ci
+new_issue=$(gh issue create --title "$title" --body "$body" --label found-by:agent --label "$issue_type" --label wave:W19 --label area:"$area" --label priority:P2 --label status:todo) || die 'GitHub create failed'
 printf '%s\n' "$((count + 1))" >"$state_file"; printf '%s\n' "$new_issue"
