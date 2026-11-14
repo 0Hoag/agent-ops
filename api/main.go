@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/0Hoag/agent-ops/api/docs"
@@ -78,7 +79,11 @@ func main() {
 	configured := store.New(db)
 	sealer, _ := appcrypto.New(cfg.EncryptionKey)
 	for _, repository := range cfg.Repositories {
-		if err := configured.Repositories.UpsertConfigured(context.Background(), &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv}); err != nil {
+		item, err := configuredRepository(repository, sealer)
+		if err != nil {
+			logger.Fatal(fmt.Errorf("configure repository: %w", err))
+		}
+		if err := configured.Repositories.UpsertConfigured(context.Background(), item); err != nil {
 			logger.Fatal(fmt.Errorf("configure repository: %w", err))
 		}
 	}
@@ -104,6 +109,29 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal(fmt.Errorf("server stopped: %w", err))
 	}
+}
+
+func configuredRepository(repository config.RepositoryConfig, sealer *appcrypto.Sealer) (*store.Repository, error) {
+	item := &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv}
+	for _, credential := range []struct {
+		env   string
+		store func(string)
+		name  string
+	}{{repository.TokenEnv, func(value string) { item.BackfillTokenCiphertext = value }, "token"}, {repository.WebhookSecretEnv, func(value string) { item.WebhookSecretCiphertext = value }, "webhook secret"}} {
+		value := os.Getenv(credential.env)
+		if credential.env == "" || value == "" {
+			continue
+		}
+		if sealer == nil {
+			return nil, fmt.Errorf("repository %s credential requires repository encryption", credential.name)
+		}
+		sealed, err := sealer.Seal(value)
+		if err != nil {
+			return nil, fmt.Errorf("seal repository %s: %w", credential.name, err)
+		}
+		credential.store(sealed)
+	}
+	return item, nil
 }
 
 type repositorySyncer interface {
