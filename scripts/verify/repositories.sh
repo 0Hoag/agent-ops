@@ -26,7 +26,7 @@ CONFIG_COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMO
   JWT_SECRET=repository-verify-jwt REPOSITORY_ENCRYPTION_KEY="$KEY" SYNC_INTERVAL=1s \
   SCM_REPOSITORIES_JSON="[{\"provider\":\"gitlab\",\"full_name\":\"fixture/group/scheduled\",\"organization_id\":\"$ORG\",\"token_env\":\"REPOSITORIES_VERIFY_TOKEN\",\"webhook_secret_env\":\"REPOSITORIES_VERIFY_SECRET\",\"base_url_env\":\"REPOSITORIES_VERIFY_BASE\"}]" \
   REPOSITORIES_VERIFY_TOKEN="$TOKEN" REPOSITORIES_VERIFY_SECRET=synthetic-secret REPOSITORIES_VERIFY_BASE="$STUB" \
-  docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
+  docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.verify-repositories.yml")
 
 log() { printf 'repositories: %s\n' "$*"; }
 cleanup() {
