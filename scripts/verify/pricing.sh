@@ -76,27 +76,32 @@ rows=json.load(open(sys.argv[1]))['data']; rows=sorted(rows,key=lambda x:(x['wor
 for r in rows: print(r['worker'],r['runs'],r.get('cost_usd'),r.get('equivalent_cost_usd'),r.get('billed_cost_usd'),r.get('cost_vnd','null'))
 PY
 cat "$ARTIFACT_DIR/check-table.tsv" | tee -a "$ARTIFACT_DIR/commands.log"
-python3 - "$TMP/body" <<'PY'
+normal_oracle() {
+python3 - "$1" <<'PY'
 import json,sys,math
 d=json.load(open(sys.argv[1]))['data']
 known=[x for x in d if x['worker'].startswith('pricing-')]
-assert len(known)==5
+assert len(known)==5, 'expected five known pricing aggregates'
 vals=sorted([(x.get('cost_usd'),x.get('equivalent_cost_usd'),x.get('billed_cost_usd')) for x in known], key=lambda x: (x[0] is not None, x[0] or 0))
 expected=[(None,None,None),(1,1,1),(8,8,8),(10,10,10),(40,40,0)]
 for got,want in zip(vals,expected):
-  assert got[0] is None if want[0] is None else math.isclose(got[0],want[0],rel_tol=1e-9)
-  if want[0] is not None: assert math.isclose(got[1],want[1],rel_tol=1e-9) and math.isclose(got[2],want[2],rel_tol=1e-9)
-assert any(math.isclose(x.get('cost_vnd',-1),25000,rel_tol=1e-9) for x in known)
+  assert got[0] is None if want[0] is None else math.isclose(got[0],want[0],rel_tol=1e-9), f'cost_usd expected {want[0]!r}, got {got[0]!r}'
+  if want[0] is not None:
+    assert math.isclose(got[1],want[1],rel_tol=1e-9), f'equivalent_cost_usd expected {want[1]}, got {got[1]}'
+    assert math.isclose(got[2],want[2],rel_tol=1e-9), f'billed_cost_usd expected {want[2]}, got {got[2]}'
+assert any(math.isclose(x.get('cost_vnd',-1),25000,rel_tol=1e-9) for x in known), 'cost_vnd expected 25000'
 PY
-log 'PASS: five independently hand-calculated runs: effective dates, null missing price, API/subscription billing, USD-to-VND conversion'
-
+}
 if [[ ${PRICING_VERIFY_CONTROL:-0} == 1 ]]; then
-  sql "UPDATE agent_run_price_versions SET input_per_million=400 WHERE id='$P2';"
-  request "${H[@]}" "$API/api/v1/agent-runs/aggregate?repository_id=$REPO"; expect 200 'control aggregate HTTP'
-  set +e; python3 - "$TMP/body" <<'PY'
-import json,sys,math
-d=json.load(open(sys.argv[1]))['data']; assert any(math.isclose(x.get('cost_usd',-1),.01,rel_tol=1e-9) for x in d)
-PY
-  rc=$?; set -e; [[ $rc -ne 0 ]] || fail 'negative control unexpectedly passed mutated price assertion'; log 'PASS: negative control failed intended cost assertion with identical HTTP inputs after persisted price mutation'
+  set +e
+  normal_oracle "$TMP/body" 2>"$ARTIFACT_DIR/control-oracle.stderr"
+  rc=$?
+  set -e
+  [[ $rc -ne 0 ]] || fail 'negative control unexpectedly passed the named pricing oracle with identical HTTP inputs'
+  grep -Eq 'cost_usd expected|equivalent_cost_usd expected|billed_cost_usd expected|cost_vnd expected|expected five known' "$ARTIFACT_DIR/control-oracle.stderr" || fail 'negative control failed outside the named numeric pricing assertion'
+  log "PASS: negative control failed named numeric pricing assertion with identical HTTP inputs rc=$rc"
+else
+  normal_oracle "$TMP/body"
 fi
+log 'PASS: five independently hand-calculated runs: effective dates, null missing price, API/subscription billing, USD-to-VND conversion'
 log "PASS: all #515 acceptance checks completed source=$(git -C "$ROOT" rev-parse HEAD)"
