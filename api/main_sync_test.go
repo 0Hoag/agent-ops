@@ -51,3 +51,16 @@ func TestConfiguredRepositorySealsStartupCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "webhook-test-secret", secret)
 }
+
+func TestConfiguredRepositoryMapsStartupBaseURL(t *testing.T) {
+	t.Setenv("STARTUP_BASE_URL", "https://gitlab.synthetic.test")
+
+	repository, err := configuredRepository(config.RepositoryConfig{
+		Provider:       "gitlab",
+		FullName:       "fixture/group/scheduled",
+		OrganizationID: "org-id",
+		BaseURLEnv:     "STARTUP_BASE_URL",
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "https://gitlab.synthetic.test", repository.GitLabBaseURL)
+}

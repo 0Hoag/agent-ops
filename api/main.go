@@ -112,7 +112,7 @@ func main() {
 }
 
 func configuredRepository(repository config.RepositoryConfig, sealer *appcrypto.Sealer) (*store.Repository, error) {
-	item := &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv}
+	item := &store.Repository{ID: store.NewUUID(), Provider: repository.Provider, FullName: repository.FullName, OrganizationID: repository.OrganizationID, WebhookSecretEnvRef: repository.WebhookSecretEnv, GitLabBaseURL: os.Getenv(repository.BaseURLEnv)}
 	for _, credential := range []struct {
 		env   string
 		store func(string)
