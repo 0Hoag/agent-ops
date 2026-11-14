@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
     repo = tmp / 'repo'
     scripts = repo / 'scripts'
     scripts.mkdir(parents=True)
-    for name in ('autopilot.sh', 'autopilot-state.sh', 'spawn.sh', 'autopilot-snapshot.py'):
+    for name in ('autopilot.sh', 'autopilot-state.sh', 'spawn.sh', 'autopilot-snapshot.py', 'periodic-verification.sh'):
         shutil.copy2(source / 'scripts' / name, scripts / name)
     sp.run(['git', 'init', '-q', str(repo)], check=True)
     bin = tmp / 'bin'

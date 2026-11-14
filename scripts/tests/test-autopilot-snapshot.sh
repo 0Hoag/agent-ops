@@ -6,10 +6,11 @@ import json, os, pathlib, shutil, subprocess as sp, sys, tempfile, time
 source=pathlib.Path(sys.argv[1])
 with tempfile.TemporaryDirectory() as temp:
  root=pathlib.Path(temp); repo=root/'repo'; scripts=repo/'scripts'; scripts.mkdir(parents=True)
- for name in ('autopilot.sh','autopilot-state.sh','autopilot-snapshot.py'): shutil.copy2(source/'scripts'/name,scripts/name)
+ for name in ('autopilot.sh','autopilot-state.sh','autopilot-snapshot.py','periodic-verification.sh'): shutil.copy2(source/'scripts'/name,scripts/name)
  sp.run(['git','init','-q',str(repo)],check=True)
  bin=root/'bin'; bin.mkdir()
  def exe(path,text): path.write_text(text); path.chmod(0o755)
+ exe(scripts/'verify-all.sh', '#!/bin/sh\nmkdir -p "$VERIFY_ALL_ARTIFACT_ROOT/$VERIFY_ALL_RUN_ID"\nprintf \'{"checks":[]}\\n\' > "$VERIFY_ALL_ARTIFACT_ROOT/$VERIFY_ALL_RUN_ID/summary.json"\n')
  for name in ('worktrees.sh','branches.sh','audit.sh'): exe(scripts/name,'#!/bin/sh\nexit 0\n')
  exe(bin/'pgrep','#!/bin/sh\ncase "$*" in *-fl*) echo "123 scripts/run-worker.sh W17p fixture";; *) exit 1;; esac\n')
  exe(bin/'ps','#!/bin/sh\necho "opencode 20200101-000004.jsonl"\n')
@@ -32,7 +33,7 @@ assert 'Do not list .agent-runs/coordinator/' in sys.argv[-1]
 pathlib.Path('prompt.txt').write_text(sys.argv[-1])
 print(json.dumps({'type':'text','part':{'text':'AUTOPILOT: STOP fixture finished'}}))
 ''')
- env=dict(os.environ,PATH=str(bin)+os.pathsep+os.environ['PATH'],REPOS='fixture/api fixture/client')
+ env=dict(os.environ,PATH=str(bin)+os.pathsep+os.environ['PATH'],REPOS='fixture/api fixture/client',VERIFY_EVERY='1')
  env.pop('AUTOPILOT_REQUIRED_TOOLS',None); env.pop('AUTOPILOT_PREFLIGHT_PROBE',None)
  directory=repo/'.agent-runs/coordinator'
  def fixture():
@@ -52,6 +53,7 @@ print(json.dumps({'type':'text','part':{'text':'AUTOPILOT: STOP fixture finished
   assert snapshot.count('"issue": 430')==2 and 'status:todo' in snapshot and 'wave:W17p' in snapshot
   assert 'area:docs' not in snapshot and '"base": "reviews/development"' in snapshot and 'a'*40 in snapshot
   assert 'SUCCESS' in snapshot and 'IN_PROGRESS' in snapshot and '123 scripts/run-worker.sh' in snapshot
+  assert '## Periodic verification' in snapshot and '"status": "pass"' in snapshot
   assert '### 20200101-000005' in snapshot and '### 20200101-000004' in snapshot and '### 20200101-000002' in snapshot
   assert '### 20200101-000001' not in snapshot and 'active or raw transcript' not in snapshot
   for n in (1,2): assert (directory/'archive'/f'20200101-00000{n}.jsonl').exists(), 'old completed pass not archived'
