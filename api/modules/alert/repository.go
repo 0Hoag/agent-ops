@@ -27,6 +27,25 @@ type Repository struct{ db *gorm.DB }
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 func (r *Repository) Record(ctx context.Context, a Alert) (Occurrence, bool, error) {
+	var row Occurrence
+	var inserted bool
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// A transaction-scoped lock also covers keys with no incident state yet.
+		// JSON encoding keeps the organization/key pair unambiguous.
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(json_build_array(?::text, ?::text)::text, 0))`, a.OrganizationID, a.Key).Error; err != nil {
+			return fmt.Errorf("lock alert incident: %w", err)
+		}
+		var err error
+		row, inserted, err = NewRepository(tx).record(ctx, a)
+		return err
+	})
+	if err != nil {
+		return Occurrence{}, false, fmt.Errorf("acquire alert incident: %w", err)
+	}
+	return row, inserted, nil
+}
+
+func (r *Repository) record(ctx context.Context, a Alert) (Occurrence, bool, error) {
 	row := Occurrence{ID: uuid.NewString(), OrganizationID: a.OrganizationID, AlertKey: a.Key,
 		Repository: a.Repository, Rule: a.Rule, Subject: a.Subject, Message: a.Message, DetectedAt: a.DetectedAt}
 	query := `INSERT INTO alert_occurrences (id, organization_id, alert_key, repository, rule, subject, message, detected_at)
@@ -40,7 +59,7 @@ func (r *Repository) Record(ctx context.Context, a Alert) (Occurrence, bool, err
 	if result.RowsAffected == 0 {
 		var persisted Occurrence
 		if err := r.db.WithContext(ctx).Table("alert_occurrences").
-			Where("organization_id = ? AND alert_key = ?", row.OrganizationID, row.AlertKey).Order("detected_at DESC").
+			Where("organization_id = ? AND alert_key = ?", row.OrganizationID, row.AlertKey).Order("created_at DESC, id DESC").
 			Take(&persisted).Error; err != nil {
 			return Occurrence{}, false, fmt.Errorf("get recorded alert occurrence: %w", err)
 		}
