@@ -20,14 +20,25 @@ func NewEvaluator(thresholds Thresholds) *Evaluator {
 }
 
 func (e *Evaluator) Evaluate(ctx context.Context, now time.Time, observation Observation) []Alert {
+	alerts, _ := e.evaluate(ctx, now, observation)
+	return alerts
+}
+
+func (e *Evaluator) EvaluateWithState(ctx context.Context, now time.Time, observation Observation) ([]Alert, []IncidentState) {
+	return e.evaluate(ctx, now, observation)
+}
+
+func (e *Evaluator) evaluate(ctx context.Context, now time.Time, observation Observation) ([]Alert, []IncidentState) {
 	if err := ctx.Err(); err != nil {
-		return nil
+		return nil, nil
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	alerts := make([]Alert, 0)
+	states := make([]IncidentState, 0)
 	add := func(rule, subject, message string, qualifies bool) {
 		key := fmt.Sprintf("%s|%s|%s|%s", observation.OrganizationID, observation.Repository, rule, subject)
+		states = append(states, IncidentState{Key: key, Active: qualifies})
 		if !qualifies {
 			delete(e.active, key)
 			return
@@ -61,7 +72,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, now time.Time, observation Obs
 		add("budget_usd_80", b.ID+"|usd_80", "budget reached 80% of USD limit", b.USD != nil && threshold.USD80)
 		add("budget_usd_100", b.ID+"|usd_100", "budget reached 100% of USD limit", b.USD != nil && threshold.USD100)
 	}
-	return alerts
+	return alerts, states
 }
 
 func valueOrZero(value *float64) float64 {

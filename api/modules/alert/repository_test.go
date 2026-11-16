@@ -26,9 +26,9 @@ func TestRecordUsesOrganizationAlertConflictKey(t *testing.T) {
 	db, mock := alertDB(t)
 	repo := NewRepository(db)
 	at := time.Now()
-	mock.ExpectExec(regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at).
+	mock.ExpectExec(`INSERT INTO alert_occurrences`).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at, "org-a", "same").
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 LIMIT $3`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 ORDER BY detected_at DESC LIMIT $3`)).
 		WithArgs("org-a", "same", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
 			AddRow("persisted-occurrence", "org-a", "same", "repo", "rule", "subject", "message", at))
@@ -44,9 +44,9 @@ func TestRecordReturnsPersistedOccurrenceIDOnConflict(t *testing.T) {
 	repo := NewRepository(db)
 	at := time.Now()
 	persistedID := "persisted-occurrence"
-	mock.ExpectExec(regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at).
+	mock.ExpectExec(`INSERT INTO alert_occurrences`).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at, "org-a", "same").
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 LIMIT $3`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 ORDER BY detected_at DESC LIMIT $3`)).
 		WithArgs("org-a", "same", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
 			AddRow(persistedID, "org-a", "same", "repo", "rule", "subject", "message", at))
@@ -61,11 +61,14 @@ func TestRecordReturnsPersistedOccurrenceIDOnConflict(t *testing.T) {
 
 func TestRecordKeepsDistinctOccurrencesAndDeliveryUpsert(t *testing.T) {
 	db, mock := alertDB(t)
+	mock.MatchExpectationsInOrder(false)
 	repo := NewRepository(db)
 	at := time.Now()
-	insert := regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")
-	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "first", "repo", "rule", "subject", "message", at).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "second", "repo", "rule", "subject", "message", at).WillReturnResult(sqlmock.NewResult(0, 1))
+	insert := `INSERT INTO alert_occurrences`
+	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "first", "repo", "rule", "subject", "message", at, "org-a", "first").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "second", "repo", "rule", "subject", "message", at, "org-a", "second").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", "first").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", "second").WillReturnResult(sqlmock.NewResult(0, 1))
 	first, inserted, err := repo.Record(context.Background(), Alert{Key: "first", OrganizationID: "org-a", Repository: "repo", Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
 	require.NoError(t, err)
 	require.True(t, inserted)

@@ -25,9 +25,11 @@ func TestEvaluateAndDeliverPersistsSuccessAndFailure(t *testing.T) {
 	mock.MatchExpectationsInOrder(false)
 	repo := NewRepository(db)
 	now := time.Now()
-	occurrenceSQL := regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")
+	occurrenceSQL := `INSERT INTO alert_occurrences`
 	deliverySQL := regexp.QuoteMeta("ON CONFLICT (occurrence_id, channel) DO UPDATE SET")
-	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now, "org-a", sqlmock.AnyArg()).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", sqlmock.AnyArg(), false).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", sqlmock.AnyArg()).WillReturnResult(sqlmockResult(1))
 	// Map iteration order is deliberately avoided by testing each possible outcome through the same SQL contract.
 	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", true, "", now).WillReturnResult(sqlmockResult(1))
 	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "slack", false, "down", now).WillReturnResult(sqlmockResult(1))
@@ -46,12 +48,15 @@ func TestEvaluateAndDeliverRetriesFailedDeliveryWithoutRepeatingSuccess(t *testi
 	mock.MatchExpectationsInOrder(false)
 	repo := NewRepository(db)
 	now := time.Now()
-	occurrenceSQL := regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")
+	occurrenceSQL := `INSERT INTO alert_occurrences`
 	deliverySQL := regexp.QuoteMeta("ON CONFLICT (occurrence_id, channel) DO UPDATE SET")
-	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now, "org-a", sqlmock.AnyArg()).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", sqlmock.AnyArg(), false).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", sqlmock.AnyArg(), false).WillReturnResult(sqlmockResult(1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", sqlmock.AnyArg()).WillReturnResult(sqlmockResult(1))
 	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", false, "down", now).WillReturnResult(sqlmockResult(1))
-	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(0))
-	mock.ExpectQuery(`SELECT .* FROM "alert_occurrences" WHERE organization_id = \$1 AND alert_key = \$2 LIMIT \$3`).
+	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now, "org-a", sqlmock.AnyArg()).WillReturnResult(sqlmockResult(0))
+	mock.ExpectQuery(`SELECT .* FROM "alert_occurrences" WHERE organization_id = \$1 AND alert_key = \$2 ORDER BY detected_at DESC LIMIT \$3`).
 		WithArgs("org-a", sqlmock.AnyArg(), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
 			AddRow("persisted-occurrence", "org-a", "key", "repo", RuleLowCache, "worker", "cache hit below threshold", now))
