@@ -37,7 +37,13 @@ func (r *Repository) Record(ctx context.Context, a Alert) (Occurrence, bool, err
 		return Occurrence{}, false, fmt.Errorf("record alert occurrence: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return row, false, nil
+		var persisted Occurrence
+		if err := r.db.WithContext(ctx).Table("alert_occurrences").
+			Where("organization_id = ? AND alert_key = ?", row.OrganizationID, row.AlertKey).
+			Take(&persisted).Error; err != nil {
+			return Occurrence{}, false, fmt.Errorf("get recorded alert occurrence: %w", err)
+		}
+		return persisted, false, nil
 	}
 	return row, true, nil
 }
