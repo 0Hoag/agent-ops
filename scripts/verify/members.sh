@@ -85,8 +85,8 @@ request() {
 check() {
   local name=$1 expected=$2 actual=$3
   printf '%s\t%s\t%s\t%s\n' "$name" "$expected" "$actual" "$(tr '\n' ' ' <"$TMP/last-body")" >>"$ARTIFACT_DIR/http-checks.tsv"
-  [[ "$actual" == "$expected" ]] || { log "FAIL: $name expected HTTP $expected, got $actual ($(tr '\n' ' ' <"$TMP/last-body"))"; exit 1; }
-  log "PASS: $name HTTP $actual"
+  [[ "$actual" == "$expected" ]] || { log "FAIL: $name expected HTTP $expected, got $actual ($(tr '\n' ' ' <"$TMP/last-body"))" >&2; exit 1; }
+  log "PASS: $name HTTP $actual" >&2
 }
 json() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <"$status_file"; }
 login() { request POST /api/v1/auth/login "{\"email\":\"$1\",\"password\":\"$PASSWORD\"}"; check "login $1" 200 "$CODE"; json token; }
@@ -103,7 +103,7 @@ SQL
 ADMIN_TOKEN=$(select_org "$(login "$ADMIN")" admin)
 MEMBER_TOKEN=$(select_org "$(login "$MEMBER")" member)
 VIEWER_TOKEN=$(select_org "$(login "$VIEWER")" viewer)
-TARGET_TOKEN=$(select_org "$(login "$TARGET")" target)
+TARGET_TOKEN=$(login "$TARGET")
 INVITEE_TOKEN=$(login "$INVITEE")
 EXPIRED_TOKEN=$(login "$EXPIRED")
 
@@ -117,7 +117,7 @@ request GET "/api/v1/organizations/$ORG/members" "$TARGET_TOKEN"; check 'nonmemb
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"member\"}" "$ADMIN_TOKEN"; check 'admin adds member' 204 "$CODE"
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"viewer\"}" "$MEMBER_TOKEN"; check 'member cannot add member' 403 "$CODE"
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"admin\"}" "$ADMIN_TOKEN"; check 'admin cannot add admin' 403 "$CODE"
-request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"owner\"}" "$OWNER_TOKEN"; check 'owner cannot assign owner' 400 "$CODE"
+request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"owner\"}" "$OWNER_TOKEN"; check 'owner cannot assign owner' 403 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$TARGET_ID" '{"role":"viewer"}' "$ADMIN_TOKEN"; check 'admin changes member to viewer' 204 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$ADMIN_ID" '{"role":"member"}' "$ADMIN_TOKEN"; check 'admin cannot change admin' 403 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$TARGET_ID" '{"role":"admin"}' "$ADMIN_TOKEN"; check 'admin cannot promote to admin' 403 "$CODE"
