@@ -66,6 +66,12 @@ def main():
     lines.append('\n## Last three final pass reports')
     for stamp, final in sorted(reports, reverse=True)[:3]:
         lines.extend([f'### {stamp}', '\n'.join(final.splitlines()[:10])])
+    periodic = directory / 'periodic-verification.json'
+    if periodic.exists():
+        data = json.loads(periodic.read_text())
+        if not isinstance(data, dict) or not isinstance(data.get('checks'), list):
+            raise ValueError('invalid periodic verification result')
+        lines.extend(['\n## Periodic verification', json.dumps(data, sort_keys=True)])
     temporary = directory / 'snapshot.md.tmp'
     temporary.write_text('\n'.join(lines) + '\n')
     os.replace(temporary, directory / 'snapshot.md')

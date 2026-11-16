@@ -2,6 +2,7 @@ package alert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,9 @@ type Delivery struct {
 	ID, OccurrenceID, Channel, Error string
 	Success                          bool
 	DeliveredAt                      time.Time
+}
+type DeliveryResult struct {
+	Success bool
 }
 type Repository struct{ db *gorm.DB }
 
@@ -48,6 +52,19 @@ func (r *Repository) RecordDelivery(ctx context.Context, d Delivery) error {
 		return fmt.Errorf("record alert delivery: %w", result.Error)
 	}
 	return nil
+}
+
+func (r *Repository) GetDelivery(ctx context.Context, occurrenceID, channel string) (DeliveryResult, bool, error) {
+	var delivery DeliveryResult
+	err := r.db.WithContext(ctx).Table("alert_deliveries").Select("success").
+		Where("occurrence_id = ? AND channel = ?", occurrenceID, channel).Take(&delivery).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return DeliveryResult{}, false, nil
+	}
+	if err != nil {
+		return DeliveryResult{}, false, fmt.Errorf("get alert delivery: %w", err)
+	}
+	return delivery, true, nil
 }
 
 func (r *Repository) List(ctx context.Context, organizationID string, page, perPage int) ([]Occurrence, int64, error) {

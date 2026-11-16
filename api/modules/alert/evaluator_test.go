@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0Hoag/agent-ops/api/modules/budget"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,5 +27,16 @@ func TestEvaluateDoesNotFireNonQualifyingInputs(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	e := NewEvaluator(Thresholds{MinCacheHit: .5, SilentAfter: time.Hour, PRStaleAfter: 24 * time.Hour})
 	o := Observation{Runs: []RunObservation{{Worker: "zero", InputTokens: 0, CachedInputTokens: 0, Active: true}, {Worker: "idle", LastActivityAt: now.Add(-2 * time.Hour), Active: false}, {Worker: "fresh", InputTokens: 50, CachedInputTokens: 50, LastActivityAt: now, Active: true}}, Pipelines: []PipelineObservation{{ID: "feature", Branch: "feature", Status: "completed", Conclusion: "failure"}, {ID: "pending", Branch: "main", Status: "pending", Conclusion: ""}, {ID: "ok", Branch: "main", Status: "completed", Conclusion: "success"}}, PullRequests: []PullRequestObservation{{Number: 1, State: "closed", UpdatedAt: now.Add(-48 * time.Hour)}, {Number: 2, State: "open", Merged: true, UpdatedAt: now.Add(-48 * time.Hour)}, {Number: 3, State: "open", UpdatedAt: now.Add(-24 * time.Hour)}}}
+	require.Empty(t, e.Evaluate(context.Background(), now, o))
+}
+
+func TestEvaluateFiresPersistedBudgetThresholdsAtExactCrossings(t *testing.T) {
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	limit := int64(100)
+	e := NewEvaluator(Thresholds{})
+	o := Observation{OrganizationID: "org-a", Repository: "repo-a", Budgets: []BudgetObservation{{ID: "budget-a", Tokens: 100, Limit: budget.Budget{TokenLimit: &limit}}}}
+	got := e.Evaluate(context.Background(), now, o)
+	require.Len(t, got, 2)
+	require.ElementsMatch(t, []string{"budget_token_80", "budget_token_100"}, []string{got[0].Rule, got[1].Rule})
 	require.Empty(t, e.Evaluate(context.Background(), now, o))
 }

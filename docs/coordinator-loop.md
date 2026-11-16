@@ -52,7 +52,7 @@ One pass:
    dozens, not a handful. Labels `status:*`, `priority:*`, `type:*`, `wave:*`, `area:api|client|ci|docs`.
    A wave = several issues in the same area, given to one worker; its PR closes all of them.
    Mark dependencies (`status:blocked` + `Status:` comment).
-   **Real defects discovered while running become a new issue**, never an inline fix: a bug, a test that
+   **Prioritize runnable `found-by:agent` bug issues before new feature work.** A blocked bug remains blocked under the existing dependency and budget rules; do not dispatch it until its blocker is cleared. Real defects discovered while running become a new issue, never an inline fix: a bug, a test that
    cannot fail, a security or data-loss risk, an acceptance criterion a merged PR missed. Label it
    `found-by:agent`, put it in a later wave. "Would be nice to also have" is **not** an issue: skip it.
 3. **Finish open PRs: spot-check, do not redo the work.**

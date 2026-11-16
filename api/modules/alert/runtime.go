@@ -73,7 +73,7 @@ func (r *Runtime) triggerAt(ctx context.Context, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		observation, err := r.observation(ctx, repo)
+		observation, err := r.observation(ctx, repo, now)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func (r *Runtime) service(org string, thresholds Thresholds, channels map[string
 	return s
 }
 
-func (r *Runtime) observation(ctx context.Context, repo struct{ ID, OrganizationID, FullName string }) (Observation, error) {
+func (r *Runtime) observation(ctx context.Context, repo struct{ ID, OrganizationID, FullName string }, now time.Time) (Observation, error) {
 	o := Observation{OrganizationID: repo.OrganizationID, Repository: repo.FullName}
 	var runs []struct {
 		Worker                         string
@@ -156,6 +156,11 @@ func (r *Runtime) observation(ctx context.Context, repo struct{ ID, Organization
 		}
 		o.PullRequests = append(o.PullRequests, PullRequestObservation{Number: v.Number, State: v.State, Merged: v.MergedAt != nil, UpdatedAt: updated})
 	}
+	budgets, err := r.budgetObservations(ctx, repo, now)
+	if err != nil {
+		return o, err
+	}
+	o.Budgets = budgets
 	return o, nil
 }
 

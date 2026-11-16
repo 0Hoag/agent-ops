@@ -1,6 +1,10 @@
 package alert
 
-import "time"
+import (
+	"time"
+
+	"github.com/0Hoag/agent-ops/api/modules/budget"
+)
 
 const (
 	RuleLowCache = "low_cache_hit"
@@ -21,6 +25,14 @@ type Observation struct {
 	Runs           []RunObservation
 	Pipelines      []PipelineObservation
 	PullRequests   []PullRequestObservation
+	Budgets        []BudgetObservation
+}
+
+type BudgetObservation struct {
+	ID     string
+	Tokens int64
+	USD    *float64
+	Limit  budget.Budget
 }
 
 type RunObservation struct {
