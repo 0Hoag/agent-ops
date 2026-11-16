@@ -195,7 +195,7 @@ sleep 3
 assert_eq 'new incident after recovery gets new occurrence' 2 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule='low_cache_hit' AND repository='verify/alerts-2'")"
 sql "SELECT rule,repository,subject,alert_key FROM alert_occurrences ORDER BY repository,rule; SELECT occurrence_id,channel,success,error FROM alert_deliveries ORDER BY occurrence_id;" >"$ARTIFACT_DIR/persisted-results.txt"
 # Validate every external request, including the newly implemented budget messages.
-read -r CONTRACT SUCCEEDED FAILED LOW_SUCCEEDED < <(python3 - "$ARTIFACT_DIR/channel.jsonl" <<'PYCHANNEL'
+CHANNEL_COUNTS=$(python3 - "$ARTIFACT_DIR/channel.jsonl" <<'PYCHANNEL'
 import json,sys
 rows=[json.loads(s) for s in open(sys.argv[1])]
 messages={
@@ -209,6 +209,7 @@ print(int(valid), sum(r['status']==204 for r in rows), sum(r['status']==502 for 
     sum(r['status']==204 and r['body'].get('text')=='low_cache_hit\ncache hit below threshold' for r in rows))
 PYCHANNEL
 )
+read -r CONTRACT SUCCEEDED FAILED LOW_SUCCEEDED <<<"$CHANNEL_COUNTS"
 assert_eq 'exact channel path and JSON payload contract' 1 "$CONTRACT"
 assert_eq 'external channel observed one failed request' 1 "$FAILED"
 assert_eq 'external low-cache successes once per occurrence including recovery' 102 "$LOW_SUCCEEDED"
