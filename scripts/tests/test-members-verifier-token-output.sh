@@ -6,6 +6,11 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/members-verifier-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
+ARTIFACT_DIR="$TMP/artifacts"
+mkdir -p "$ARTIFACT_DIR"
+status_file="$TMP/body"
+printf '%s\n' '{}' >"$status_file"
+touch "$TMP/last-body"
 
 extract_check() {
   sed -n '/^check()/,/^json()/p' "$1" | sed '$d'
@@ -13,9 +18,6 @@ extract_check() {
 
 run_case() {
   local verifier=$1 expected=$2 output
-  status_file="$TMP/body"
-  TMP="$TMP"
-  printf '%s\n' '{}' >"$status_file"
   log() { printf 'members: %s\n' "$*"; }
   # shellcheck disable=SC1090
   eval "$(extract_check "$verifier")"
@@ -31,7 +33,7 @@ cp "$ROOT/scripts/verify/members.sh" "$baseline"
 run_case "$baseline" ''
 
 mutant="$TMP/members-mutant.sh"
-sed 's/" >&2;/";/' "$baseline" >"$mutant"
+sed 's/log "PASS: \$name HTTP \$actual" >&2/log "PASS: $name HTTP $actual"/' "$baseline" >"$mutant"
 if run_case "$mutant" 'members: PASS: login fixture@example.invalid HTTP 200'; then
   :
 else
