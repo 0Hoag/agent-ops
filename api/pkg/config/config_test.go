@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadEncryptionKeyLength(t *testing.T) {
@@ -34,5 +35,19 @@ func TestLoadEncryptionKeyLength(t *testing.T) {
 				t.Fatalf("Load() error = %v, want %q", err, tt.wantError)
 			}
 		})
+	}
+}
+
+func TestLoadForwardsSyncInterval(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-jwt-secret")
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("SYNC_INTERVAL", "1s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if cfg.SyncInterval != time.Second {
+		t.Fatalf("SyncInterval = %v, want %v", cfg.SyncInterval, time.Second)
 	}
 }
