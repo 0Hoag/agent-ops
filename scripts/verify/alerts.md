@@ -16,6 +16,10 @@ Set `ALERTS_VERIFY_ARTIFACT_DIR` to a new absolute directory to retain HTTP resp
 requests, expected/actual comparisons, API logs, source SHA and cleanup inventory. Redirect stdout
 and stderr to a sibling command log if desired. Keep each invocation's evidence separate.
 The final checks also cross 100% and observe recovery followed by a fresh failure.
+Delivery counts join occurrences and select the low-cache rule so a successful budget notification
+cannot mask a missing retry. History expects 101 low-cache alerts plus the 80% budget alert.
+The stub validates exact messages for both budget thresholds and low-cache alerts, and counts
+successful requests independently to detect duplicate sends after restart.
 
 Copy evidence to `/Users/zeross/agent-ops/.agent-runs/W19i-alerts-517/` before worktree removal.
 The exit trap removes owned Compose containers, volumes, networks and locally built images and terminates the stub.

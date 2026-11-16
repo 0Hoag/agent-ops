@@ -153,7 +153,7 @@ assert_eq 'HTTP persisted run tokens cross 80 percent budget' 81 "$(jq -r '.data
 # Restart makes the normal initial tick observe the complete fixture immediately.
 dc restart api
 ready
-for _ in $(seq 1 30); do [[ $(sql "SELECT count(*) FROM alert_occurrences") == 100 ]] && break; sleep 1; done
+for _ in $(seq 1 30); do [[ $(sql "SELECT count(*) FROM alert_occurrences WHERE rule='low_cache_hit'") == 100 ]] && break; sleep 1; done
 assert_eq 'low-cache occurrence first scan' 100 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule='low_cache_hit'")"
 # Fail fast at the normal assertion under the production mutation, never at an induced crash.
 if [[ ${ALERTS_VERIFY_CONTROL:-0} == 1 && $FAILURES -gt 0 ]]; then exit 1; fi
@@ -168,20 +168,20 @@ dc restart api
 ready
 sleep 3
 # Allow two full pages so the failed occurrence's repository has been revisited.
-for _ in $(seq 1 125); do [[ $(sql "SELECT count(*) FROM alert_deliveries WHERE success=true") == 101 ]] && break; sleep 1; done
-assert_eq 'channel failure retried after recovery' 101 "$(sql "SELECT count(*) FROM alert_deliveries WHERE success=true")"
+for _ in $(seq 1 125); do [[ $(sql "SELECT count(*) FROM alert_deliveries d JOIN alert_occurrences o ON o.id=d.occurrence_id WHERE d.success=true AND o.rule='low_cache_hit'") == 101 ]] && break; sleep 1; done
+assert_eq 'channel failure retried after recovery' 101 "$(sql "SELECT count(*) FROM alert_deliveries d JOIN alert_occurrences o ON o.id=d.occurrence_id WHERE d.success=true AND o.rule='low_cache_hit'")"
 assert_eq 'restart preserves one occurrence per key' '101|101' "$(sql "SELECT count(*)||'|'||count(DISTINCT alert_key) FROM alert_occurrences WHERE rule='low_cache_hit'")"
 http GET 'alerts/history?per_page=1&page=1'
-assert_eq 'HTTP alert history scan total' 101 "$(jq -r .meta.total "$ARTIFACT_DIR/response.json")"
+assert_eq 'HTTP alert history scan total including budget' 102 "$(jq -r .meta.total "$ARTIFACT_DIR/response.json")"
 # Budget threshold is a separate contract from cache-hit alerts. Never substitute low_cache_hit.
-assert_eq 'budget threshold alert from persisted usage' 1 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule <> 'low_cache_hit' AND repository='verify/alerts-2'")"
+assert_eq 'budget threshold alert from persisted usage' 1 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule IN ('budget_token_80','budget_token_100') AND repository='verify/alerts-2'")"
 # Cross 100% independently with 20 additional cached tokens (no new low-cache subject).
 sql "INSERT INTO agent_runs(id,repository_id,wave,worker,model,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at,updated_at) VALUES ('51900000-0000-4000-8000-000000000002','$REPO','W19','budget-second','fixture',0,20,0,0,0,'2026-11-14T00:02:00Z','2026-11-14T00:03:00Z','2026-11-14T00:03:00Z');" >/dev/null
 assert_eq 'persisted tokens cross 100 percent budget' 101 "$(sql "SELECT sum(input_tokens+cached_input_tokens) FROM agent_runs WHERE repository_id='$REPO'")"
 dc restart api
 ready
 sleep 3
-assert_eq 'budget 80 and 100 percent occurrences' 2 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule <> 'low_cache_hit' AND repository='verify/alerts-2'")"
+assert_eq 'budget 80 and 100 percent occurrences' 2 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule IN ('budget_token_80','budget_token_100') AND repository='verify/alerts-2'")"
 # The README promises a new occurrence after a healthy observation and a new failure.
 sql "UPDATE agent_runs SET input_tokens=0,cached_input_tokens=81 WHERE id='51800000-0000-4000-8000-000000000002';" >/dev/null
 dc restart api
@@ -194,13 +194,24 @@ ready
 sleep 3
 assert_eq 'new incident after recovery gets new occurrence' 2 "$(sql "SELECT count(*) FROM alert_occurrences WHERE rule='low_cache_hit' AND repository='verify/alerts-2'")"
 sql "SELECT rule,repository,subject,alert_key FROM alert_occurrences ORDER BY repository,rule; SELECT occurrence_id,channel,success,error FROM alert_deliveries ORDER BY occurrence_id;" >"$ARTIFACT_DIR/persisted-results.txt"
-python3 - "$ARTIFACT_DIR/channel.jsonl" <<'PY'
+# Validate every external request, including the newly implemented budget messages.
+read -r CONTRACT SUCCEEDED FAILED LOW_SUCCEEDED < <(python3 - "$ARTIFACT_DIR/channel.jsonl" <<'PYCHANNEL'
 import json,sys
 rows=[json.loads(s) for s in open(sys.argv[1])]
-assert rows and all(r['path']=='/hook' and r['content_type']=='application/json' and r['body']['text']=='low_cache_hit\ncache hit below threshold' for r in rows), 'channel HTTP request contract'
-assert any(r['status']==204 for r in rows), 'successful external channel delivery'
-assert any(r['status']==502 for r in rows), 'failing external channel delivery'
-print('alerts: PASS: exact channel path, JSON payload, success and failure boundary')
-PY
+messages={
+    'low_cache_hit\ncache hit below threshold',
+    'budget_token_80\nbudget reached 80% of token limit',
+    'budget_token_100\nbudget reached 100% of token limit',
+}
+valid=bool(rows) and all(r['path']=='/hook' and r['content_type']=='application/json'
+    and r['body']=={'text':r['body'].get('text')} and r['body']['text'] in messages for r in rows)
+print(int(valid), sum(r['status']==204 for r in rows), sum(r['status']==502 for r in rows),
+    sum(r['status']==204 and r['body'].get('text')=='low_cache_hit\ncache hit below threshold' for r in rows))
+PYCHANNEL
+)
+assert_eq 'exact channel path and JSON payload contract' 1 "$CONTRACT"
+assert_eq 'external channel observed one failed request' 1 "$FAILED"
+assert_eq 'external low-cache successes once per occurrence including recovery' 102 "$LOW_SUCCEEDED"
+assert_eq 'external successful deliveries including both budget thresholds' 104 "$SUCCEEDED"
 log "Completed strict acceptance failures=$FAILURES artifacts=$ARTIFACT_DIR"
 [[ $FAILURES == 0 ]]
