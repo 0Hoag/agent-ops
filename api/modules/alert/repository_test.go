@@ -28,10 +28,34 @@ func TestRecordUsesOrganizationAlertConflictKey(t *testing.T) {
 	at := time.Now()
 	mock.ExpectExec(regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 LIMIT $3`)).
+		WithArgs("org-a", "same", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
+			AddRow("persisted-occurrence", "org-a", "same", "repo", "rule", "subject", "message", at))
 	_, inserted, err := repo.Record(context.Background(), Alert{Key: "same", OrganizationID: "org-a", Repository: "repo",
 		Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
 	require.NoError(t, err)
 	require.False(t, inserted)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRecordReturnsPersistedOccurrenceIDOnConflict(t *testing.T) {
+	db, mock := alertDB(t)
+	repo := NewRepository(db)
+	at := time.Now()
+	persistedID := "persisted-occurrence"
+	mock.ExpectExec(regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 LIMIT $3`)).
+		WithArgs("org-a", "same", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
+			AddRow(persistedID, "org-a", "same", "repo", "rule", "subject", "message", at))
+
+	row, inserted, err := repo.Record(context.Background(), Alert{Key: "same", OrganizationID: "org-a", Repository: "repo",
+		Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
+	require.NoError(t, err)
+	require.False(t, inserted)
+	require.Equal(t, persistedID, row.ID)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

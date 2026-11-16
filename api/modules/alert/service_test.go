@@ -51,6 +51,10 @@ func TestEvaluateAndDeliverRetriesFailedDeliveryWithoutRepeatingSuccess(t *testi
 	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(1))
 	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", false, "down", now).WillReturnResult(sqlmockResult(1))
 	mock.ExpectExec(occurrenceSQL).WithArgs(sqlmock.AnyArg(), "org-a", sqlmock.AnyArg(), "repo", RuleLowCache, "worker", "cache hit below threshold", now).WillReturnResult(sqlmockResult(0))
+	mock.ExpectQuery(`SELECT .* FROM "alert_occurrences" WHERE organization_id = \$1 AND alert_key = \$2 LIMIT \$3`).
+		WithArgs("org-a", sqlmock.AnyArg(), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
+			AddRow("persisted-occurrence", "org-a", "key", "repo", RuleLowCache, "worker", "cache hit below threshold", now))
 	mock.ExpectQuery(`SELECT .*"success".*FROM "alert_deliveries".*WHERE occurrence_id = \$1 AND channel = \$2.*`).
 		WithArgs(sqlmock.AnyArg(), "email", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"success"}).AddRow(false))
 	mock.ExpectExec(deliverySQL).WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "email", true, "", now).WillReturnResult(sqlmockResult(1))
