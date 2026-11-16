@@ -53,9 +53,9 @@ INSERT INTO organization_memberships (id,organization_id,account_id,role)
 SELECT 'd0000000-0000-4000-8000-000000000017','$ORG_B',id,'owner' FROM accounts WHERE email='$ACCOUNT_B';
 INSERT INTO organization_memberships (id,organization_id,account_id,role)
 SELECT 'd0000000-0000-4000-8000-000000000018','$ORG_B',id,'member' FROM accounts WHERE email='$ACCOUNT_A';
-INSERT INTO repositories (id,provider,full_name,organization_id) VALUES
-('d0000000-0000-4000-8000-000000000001','github','auth-verify/a','$ORG_A'),
-('d0000000-0000-4000-8000-000000000002','github','auth-verify/b','$ORG_B');
+INSERT INTO repositories (id,provider,full_name,organization_id,webhook_secret_env_ref) VALUES
+('d0000000-0000-4000-8000-000000000001','github','auth-verify/a','$ORG_A','AUTH_VERIFY_SECRET_A'),
+('d0000000-0000-4000-8000-000000000002','github','auth-verify/b','$ORG_B','AUTH_VERIFY_SECRET_B');
 SQL
 
 status() { curl -sS -o "$TMP/body" -w '%{http_code}' "$@"; }
