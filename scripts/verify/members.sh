@@ -136,14 +136,25 @@ request POST "/api/v1/organizations/$ORG/invitations" '{"role":"owner","expires_
 request POST "/api/v1/organizations/$ORG/invitations" '{"role":"member","expires_in_seconds":1}' "$OWNER_TOKEN"; check 'owner creates expiring invitation' 201 "$CODE"; EXPIRED_INVITE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])' <"$status_file"); sleep 2
 request POST /api/v1/organization-invitations/accept "{\"token\":\"$EXPIRED_INVITE\"}" "$EXPIRED_TOKEN"; check 'expired invitation rejected' 409 "$CODE"
 
-# Last-owner protection is exercised after adding a second owner only through the
-# database fixture, because the public API must never grant owner role.
+# Last-owner protection starts with the persisted sole-owner invariant. The
+# public API must never grant owner role, so a database fixture adds a second
+# owner only for the separate allowed-demotion check.
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 1 ]] || { log "FAIL: expected one persisted owner before sole-owner checks, got $owner_count" >&2; exit 1; }
+log 'PASS: one persisted owner before sole-owner checks'
+request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'sole owner demotion rejected' 409 "$CODE"
+request DELETE "/api/v1/organizations/$ORG/members/$OWNER_ID" "$OWNER_TOKEN"; check 'sole owner removal rejected' 409 "$CODE"
+
 "${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 >/dev/null <<SQL
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES (gen_random_uuid(),'$ORG','$ADMIN_ID','owner');
 SQL
-request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'owner demotion preserves final owner' 409 "$CODE"
-request DELETE "/api/v1/organizations/$ORG/members/$OWNER_ID" "$OWNER_TOKEN"; check 'owner removal preserves final owner' 409 "$CODE"
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 2 ]] || { log "FAIL: expected two persisted owners for allowed demotion, got $owner_count" >&2; exit 1; }
+log 'PASS: two persisted owners before allowed demotion'
 request PATCH "/api/v1/organizations/$ORG/members/$ADMIN_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'owner demotes second owner' 204 "$CODE"
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 1 ]] || { log "FAIL: expected one persisted owner after allowed demotion, got $owner_count" >&2; exit 1; }
+log 'PASS: one persisted owner after allowed demotion'
 request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'last owner demotion rejected' 409 "$CODE"
 
 cp "$ARTIFACT_DIR/http-checks.tsv" "$ARTIFACT_DIR/http-checks-$(git -C "$ROOT" rev-parse --short HEAD).tsv"
