@@ -20,7 +20,11 @@ func (s *Service) EvaluateAndDeliver(ctx context.Context, now time.Time, observa
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	for _, a := range s.evaluator.Evaluate(ctx, now, observation) {
+	alerts, states := s.evaluator.EvaluateWithState(ctx, now, observation)
+	if err := s.repository.ReconcileStates(ctx, states, observation.OrganizationID); err != nil {
+		return err
+	}
+	for _, a := range alerts {
 		row, inserted, err := s.repository.Record(ctx, a)
 		if err != nil {
 			return err

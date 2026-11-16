@@ -67,3 +67,8 @@ type Alert struct {
 	DetectedAt     time.Time
 	Message        string
 }
+
+type IncidentState struct {
+	Key    string
+	Active bool
+}
