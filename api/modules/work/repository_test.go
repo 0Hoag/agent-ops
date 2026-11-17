@@ -77,7 +77,7 @@ func TestDetailScopesRequestedIdentityAndTenant(t *testing.T) {
 		WithArgs("repo-a", int64(320)).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "repository_id", "wave", "worker", "model", "issue_numbers", "pr_number", "input_tokens",
-			"cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "calculated_cost",
+			"cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "cost_usd", "started_at", "ended_at",
 		}))
 
 	detail, err := repo.Detail(ctx, "repo-a", "pr", 320)
@@ -95,6 +95,7 @@ func TestWorkQueryAttributesSessionsByKindAndNumber(t *testing.T) {
 	require.Contains(t, listSQL, "SELECT DISTINCT a.*, 'issue' kind, issue_number::bigint number")
 	require.Contains(t, listSQL, "a.kind=x.kind AND a.number=x.number")
 	require.NotContains(t, listSQL, "a.pr_number IS NULL")
+	require.Contains(t, listSQL, "CASE WHEN COUNT(ar.cost_usd) = COUNT(*) THEN SUM(ar.cost_usd) END cost_usd")
 
 	where, args := runAttribution("issue", "repo-a", 10)
 	require.Equal(t, "repository_id=? AND issue_numbers @> ?::jsonb", where)
