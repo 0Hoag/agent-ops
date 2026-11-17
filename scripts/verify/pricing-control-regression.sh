@@ -7,7 +7,11 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/pricing-control.XXXXXX")
 cleanup() {
   local rc=$?
   trap - EXIT INT TERM
-  rm -rf "$TMP" "$ROOT/.agent-runs/pricing-control-readonly-fixture"
+  rm -rf "$TMP"
+  if [[ -n ${readonly_fixture:-} && -e $readonly_fixture ]]; then
+    chmod -R u+rwX "$readonly_fixture" 2>/dev/null || true
+    rm -rf "$readonly_fixture"
+  fi
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
@@ -39,13 +43,22 @@ printf 'source_sha=%s\n' "$SOURCE_SHA" | tee "$ARTIFACT_DIR/summary.txt"
 run_verifier "$ROOT" healthy
 
 readonly_fixture="$ROOT/.agent-runs/pricing-control-readonly-fixture"
+if [[ -e $readonly_fixture ]]; then
+  echo 'owner fixture path already exists; refusing to modify ignored evidence' >&2
+  exit 1
+fi
 mkdir -p "$readonly_fixture"
 printf 'must remain in the original checkout\n' >"$readonly_fixture/evidence.log"
 chmod 444 "$readonly_fixture/evidence.log"
 before_evidence=$(shasum -a 256 "$readonly_fixture/evidence.log" | awk '{print $1}')
 
-cp -a "$ROOT" "$TMP/legacy"
-if [[ -e "$TMP/legacy/.agent-runs/pricing-control-readonly-fixture/evidence.log" ]]; then
+legacy_fixture="$TMP/legacy-source"
+mkdir -p "$legacy_fixture/scripts/verify" "$legacy_fixture/.agent-runs/synthetic-cache/deep"
+printf 'tracked source\n' >"$legacy_fixture/scripts/verify/pricing.sh"
+printf 'synthetic ignored cache\n' >"$legacy_fixture/.agent-runs/synthetic-cache/deep/cache.log"
+chmod 444 "$legacy_fixture/.agent-runs/synthetic-cache/deep/cache.log"
+cp -a "$legacy_fixture" "$TMP/legacy"
+if [[ -e "$TMP/legacy/.agent-runs/synthetic-cache/deep/cache.log" ]]; then
   printf 'old_copy_control=fail (ignored evidence was copied)\n' >>"$ARTIFACT_DIR/summary.txt"
 else
   echo 'old copy control did not reproduce the known defect' >&2
