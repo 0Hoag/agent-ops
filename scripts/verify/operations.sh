@@ -6,7 +6,7 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 PROJECT="agent-ops-operations-${USER:-user}-$$"
 CLIENT_DIR=${CLIENT_DIR:-$ROOT/../agent-ops-client}
-PREVIOUS_RELEASE_REF=${PREVIOUS_RELEASE_REF:-}
+PREVIOUS_RELEASE_REF=$(bash "$ROOT/scripts/verify/resolve-previous-release.sh" "$ROOT")
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/agent-ops-operations.XXXXXX")
 ARCHIVE="$TMP/application.dump"
 CORRUPT="$TMP/corrupt.dump"
@@ -43,14 +43,6 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 command -v docker >/dev/null || { printf 'BLOCKED: docker is required\n' >&2; exit 2; }
-if [[ -z $PREVIOUS_RELEASE_REF ]]; then
-  printf 'BLOCKED: PREVIOUS_RELEASE_REF must identify an actual previous release; no usable release was discovered\n' >&2
-  exit 2
-fi
-git -C "$ROOT" rev-parse --verify "$PREVIOUS_RELEASE_REF^{commit}" >/dev/null 2>&1 || {
-  printf 'BLOCKED: PREVIOUS_RELEASE_REF does not resolve to a Git commit: %s\n' "$PREVIOUS_RELEASE_REF" >&2
-  exit 2
-}
 [[ -d "$CLIENT_DIR" ]] || { printf 'BLOCKED: CLIENT_DIR is not a usable client checkout: %s\n' "$CLIENT_DIR" >&2; exit 2; }
 git -C "$ROOT" archive --format=tar "$PREVIOUS_RELEASE_REF" api >"$TMP/previous-api.tar" || {
   printf 'BLOCKED: previous release has no usable api tree: %s\n' "$PREVIOUS_RELEASE_REF" >&2
