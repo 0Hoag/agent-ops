@@ -51,3 +51,17 @@ func TestLoadForwardsSyncInterval(t *testing.T) {
 		t.Fatalf("SyncInterval = %v, want %v", cfg.SyncInterval, time.Second)
 	}
 }
+
+func TestLoadForwardsJWTExpiration(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-jwt-secret")
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("JWT_EXPIRATION", "2s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if cfg.JWTExpiration != 2*time.Second {
+		t.Fatalf("JWTExpiration = %v, want %v", cfg.JWTExpiration, 2*time.Second)
+	}
+}
