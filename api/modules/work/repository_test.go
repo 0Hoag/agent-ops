@@ -87,4 +87,21 @@ func TestDetailScopesRequestedIdentityAndTenant(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestWorkQueryAttributesSessionsByKindAndNumber(t *testing.T) {
+	repo, _ := mockWorkRepository(t)
+	ctx := WithOrganization(context.Background(), "org-a")
+
+	listSQL := repo.query(ctx, "repo-a", "", "", "", nil).Statement.SQL.String()
+	require.Contains(t, listSQL, "SELECT DISTINCT a.*, 'issue' kind, issue_number::bigint number")
+	require.Contains(t, listSQL, "a.kind=x.kind AND a.number=x.number")
+	require.NotContains(t, listSQL, "a.pr_number IS NULL")
+
+	where, args := runAttribution("issue", "repo-a", 10)
+	require.Equal(t, "repository_id=? AND issue_numbers @> ?::jsonb", where)
+	require.Equal(t, []any{"repo-a", "[10]"}, args)
+	where, args = runAttribution("pr", "repo-a", 10)
+	require.Equal(t, "repository_id=? AND pr_number=?", where)
+	require.Equal(t, []any{"repo-a", int64(10)}, args)
+}
+
 func floatPtr(v float64) *float64 { return &v }
