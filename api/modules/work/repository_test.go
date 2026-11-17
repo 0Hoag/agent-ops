@@ -95,6 +95,7 @@ func TestWorkQueryAttributesSessionsByKindAndNumber(t *testing.T) {
 	require.Contains(t, listSQL, "SELECT DISTINCT a.*, 'issue' kind, issue_number::bigint number")
 	require.Contains(t, listSQL, "a.kind=x.kind AND a.number=x.number")
 	require.NotContains(t, listSQL, "a.pr_number IS NULL")
+	require.Contains(t, listSQL, "CASE WHEN COUNT(ar.cost_usd) = COUNT(*) THEN SUM(ar.cost_usd) END cost_usd")
 
 	where, args := runAttribution("issue", "repo-a", 10)
 	require.Equal(t, "repository_id=? AND issue_numbers @> ?::jsonb", where)
