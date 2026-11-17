@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ARTIFACT_DIR=${PRICING_CONTROL_ARTIFACT_DIR:-$ROOT/.agent-runs/W19g-pricing-control-576}
+readonly_fixture=
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pricing-control.XXXXXX")
 cleanup() {
   local rc=$?
@@ -19,11 +20,12 @@ mkdir -p "$ARTIFACT_DIR"
 
 run_verifier() {
   local source=$1 mode=$2 artifact="$ARTIFACT_DIR/$2"
+  local verifier=${PRICING_CONTROL_VERIFIER_SCRIPT:-$source/scripts/verify/pricing.sh}
   mkdir -p "$artifact"
   local control=0
   [[ $mode == mutant ]] && control=1
   PRICING_VERIFY_ARTIFACT_DIR="$artifact" PRICING_VERIFY_CONTROL="$control" \
-    bash "$source/scripts/verify/pricing.sh" >"$artifact/stdout.log" 2>"$artifact/stderr.log"
+    bash "$verifier" >"$artifact/stdout.log" 2>"$artifact/stderr.log"
 }
 
 prepare_source_tree() {
@@ -42,11 +44,12 @@ SOURCE_SHA=$(git -C "$ROOT" rev-parse HEAD)
 printf 'source_sha=%s\n' "$SOURCE_SHA" | tee "$ARTIFACT_DIR/summary.txt"
 run_verifier "$ROOT" healthy
 
-readonly_fixture="$ROOT/.agent-runs/pricing-control-readonly-fixture"
-if [[ -e $readonly_fixture ]]; then
+readonly_fixture_candidate=${PRICING_CONTROL_READONLY_FIXTURE:-$TMP/readonly-fixture}
+if [[ -e $readonly_fixture_candidate ]]; then
   echo 'owner fixture path already exists; refusing to modify ignored evidence' >&2
   exit 1
 fi
+readonly_fixture=$readonly_fixture_candidate
 mkdir -p "$readonly_fixture"
 printf 'must remain in the original checkout\n' >"$readonly_fixture/evidence.log"
 chmod 444 "$readonly_fixture/evidence.log"
