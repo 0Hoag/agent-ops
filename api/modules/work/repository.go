@@ -32,27 +32,28 @@ SELECT 'pr' kind, p.number, p.title, p.state,
 UNION ALL SELECT 'issue', i.number, i.title, i.state, '', i.created_at, i.updated_at, i.repository_id
  FROM issues i WHERE i.repository_id=?
 ), run_costs AS (
- SELECT ar.repository_id, ar.pr_number, ar.issue_number, COUNT(*) runs_count,
+ SELECT ar.repository_id, ar.kind, ar.number, COUNT(*) runs_count,
   SUM(ar.input_tokens+ar.cached_input_tokens+ar.cache_write_tokens+ar.output_tokens+ar.reasoning_tokens) tokens,
   MAX(ar.ended_at) last_activity,
   CASE WHEN COUNT(pv.id) = COUNT(*) THEN SUM(
    ar.input_tokens*pv.input_per_million/1000000.0 + ar.cached_input_tokens*pv.cached_input_per_million/1000000.0 +
    ar.cache_write_tokens*pv.cache_write_per_million/1000000.0 + ar.output_tokens*pv.output_per_million/1000000.0 +
    ar.reasoning_tokens*pv.reasoning_per_million/1000000.0) END cost_usd
- FROM (SELECT a.*, NULL::bigint issue_number FROM agent_runs a WHERE a.pr_number IS NOT NULL
-       UNION ALL SELECT a.*, issue_number::bigint FROM agent_runs a CROSS JOIN LATERAL jsonb_array_elements_text(a.issue_numbers) issue_number
-       WHERE a.pr_number IS NULL AND jsonb_array_length(a.issue_numbers)>0) ar
+ FROM (SELECT a.*, 'pr' kind, a.pr_number number FROM agent_runs a WHERE a.pr_number IS NOT NULL
+       UNION ALL SELECT DISTINCT a.*, 'issue' kind, issue_number::bigint number
+       FROM agent_runs a CROSS JOIN LATERAL jsonb_array_elements_text(a.issue_numbers) issue_number
+       WHERE jsonb_array_length(a.issue_numbers)>0) ar
  LEFT JOIN repositories repo ON repo.id=ar.repository_id
  LEFT JOIN LATERAL (SELECT pv.id, pv.input_per_million, pv.cached_input_per_million, pv.cache_write_per_million, pv.output_per_million, pv.reasoning_per_million
    FROM agent_run_price_versions pv WHERE pv.organization_id=repo.organization_id AND pv.model=ar.model AND pv.effective_date<=ar.started_at::date
    ORDER BY pv.effective_date DESC LIMIT 1) pv ON true
  WHERE ar.repository_id=? AND repo.organization_id=?
- GROUP BY ar.repository_id, ar.pr_number, ar.issue_number
+ GROUP BY ar.repository_id, ar.kind, ar.number
 )
 SELECT x.kind, x.number, x.title, '' AS url, '' AS author, x.state, x.ci_status, x.created_at, x.updated_at,
  COALESCE(a.runs_count,0) runs_count, a.cost_usd, COALESCE(a.tokens,0) tokens,
  GREATEST(x.updated_at, COALESCE(a.last_activity,x.updated_at)) last_activity
-FROM work x LEFT JOIN run_costs a ON a.repository_id=x.repository_id AND ((x.kind='pr' AND a.pr_number=x.number) OR (x.kind='issue' AND a.pr_number IS NULL AND a.issue_number=x.number))
+FROM work x LEFT JOIN run_costs a ON a.repository_id=x.repository_id AND a.kind=x.kind AND a.number=x.number
 WHERE EXISTS (SELECT 1 FROM repositories WHERE id=x.repository_id AND organization_id=?)`
 	args := []any{id, id, id, org(ctx), org(ctx)}
 	if kind != "" {
@@ -118,7 +119,7 @@ func (r *Repository) Detail(ctx context.Context, id, kind string, n int64) (*Det
 	if kind == "pr" {
 		where += "pr_number=?"
 	} else {
-		where += "pr_number IS NULL AND issue_numbers @> ?::jsonb"
+		where += "issue_numbers @> ?::jsonb"
 		args = append(args, fmt.Sprintf("[%d]", n))
 	}
 	if kind == "pr" {
