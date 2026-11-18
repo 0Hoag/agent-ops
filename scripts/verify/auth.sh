@@ -2,8 +2,21 @@
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-API_PORT=${AUTH_VERIFY_API_PORT:-$((18080 + (${RANDOM:-1} % 1000)))}
-PG_PORT=${AUTH_VERIFY_PG_PORT:-$((15432 + (${RANDOM:-1} % 1000)))}
+port_available() {
+  ! lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+allocate_port() {
+  local base=$1 candidate offset=0 seed=${AUTH_VERIFY_PORT_SEED:-${RANDOM:-1}}
+  candidate=$((base + (seed % 1000)))
+  while ! port_available "$candidate"; do
+    offset=$((offset + 1))
+    candidate=$((base + ((candidate - base + 1) % 1000)))
+    [[ $offset -lt 1000 ]] || { log "no available port in range ${base}-$((base + 999))" >&2; return 1; }
+  done
+  printf '%s' "$candidate"
+}
+API_PORT=${AUTH_VERIFY_API_PORT:-$(allocate_port 18080)}
+PG_PORT=${AUTH_VERIFY_PG_PORT:-$(allocate_port 15432)}
 PROJECT="agent-ops-auth-$(id -u)-$$"
 API="http://127.0.0.1:$API_PORT"
 COMPOSE=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" SMOKE_API_PORT="$API_PORT" \
@@ -33,6 +46,11 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT INT TERM
+
+if [[ ${AUTH_VERIFY_ALLOCATE_ONLY:-0} == 1 ]]; then
+  printf 'API_PORT=%s PG_PORT=%s\n' "$API_PORT" "$PG_PORT"
+  exit 0
+fi
 
 mkdir -p "$ARTIFACT_DIR"
 log "source SHA $(git -C "$ROOT" rev-parse HEAD)"
