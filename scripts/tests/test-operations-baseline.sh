@@ -31,3 +31,22 @@ if test "$mutated_result" = "$development"; then
 fi
 printf 'PASS promotion parent=%s explicit override=%s missing-baseline=blocked\n' "$resolved" "$override"
 echo 'CONTROL PASS: identical override input fails when precedence guard is mutated'
+
+# Exercise the verifier's real Git archive layout: archiving api/ preserves the
+# api/ prefix, so extraction must strip exactly that one component.
+archive_repo="$tmp/archive-repo"; mkdir "$archive_repo"; git -C "$archive_repo" init -q
+git -C "$archive_repo" config user.email test@example.invalid; git -C "$archive_repo" config user.name test
+mkdir "$archive_repo/api"; printf 'module example.invalid/api\n\ngo 1.23\n' >"$archive_repo/api/go.mod"
+printf 'package main\n' >"$archive_repo/api/main.go"
+git -C "$archive_repo" add api; git -C "$archive_repo" commit -qm api; archive_ref=$(git -C "$archive_repo" rev-parse HEAD)
+git -C "$archive_repo" archive --format=tar "$archive_ref" api >"$tmp/api.tar"
+mkdir "$tmp/fixed-api"; tar -xf "$tmp/api.tar" -C "$tmp/fixed-api" --strip-components=1
+test -f "$tmp/fixed-api/go.mod" && test -f "$tmp/fixed-api/main.go"
+printf 'PASS Git archive API extraction exposes go.mod and main.go at verifier root\n'
+
+mkdir "$tmp/original-api"; tar -xf "$tmp/api.tar" -C "$tmp/original-api"
+if test -f "$tmp/original-api/go.mod" && test -f "$tmp/original-api/main.go"; then
+  echo 'CONTROL FAIL: original extraction unexpectedly exposed API files at verifier root' >&2; exit 1
+fi
+test -f "$tmp/original-api/api/go.mod" && test -f "$tmp/original-api/api/main.go"
+echo 'CONTROL PASS: identical archive input fails original extraction with extra api/ prefix'
