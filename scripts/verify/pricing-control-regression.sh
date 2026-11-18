@@ -40,6 +40,15 @@ prepare_source_tree() {
   git -C "$destination" commit -q -m 'fixture: pricing verifier source'
 }
 
+git_storage_identity() {
+  local source=$1 common_dir
+  common_dir=$(git -C "$source" rev-parse --git-common-dir)
+  if [[ $common_dir != /* ]]; then
+    common_dir="$source/$common_dir"
+  fi
+  (cd "$common_dir" && pwd -P)
+}
+
 SOURCE_SHA=$(git -C "$ROOT" rev-parse HEAD)
 printf 'source_sha=%s\n' "$SOURCE_SHA" | tee "$ARTIFACT_DIR/summary.txt"
 run_verifier "$ROOT" healthy
@@ -69,8 +78,8 @@ else
 fi
 
 prepare_source_tree "$ROOT" "$TMP/mutant"
-original_git_marker=$(git -C "$ROOT" rev-parse --git-dir)
-mutant_git_marker=$(git -C "$TMP/mutant" rev-parse --git-dir)
+original_git_marker=$(git_storage_identity "$ROOT")
+mutant_git_marker=$(git_storage_identity "$TMP/mutant")
 if [[ -e "$TMP/mutant/.agent-runs" || "$original_git_marker" == "$mutant_git_marker" ]]; then
   echo 'bounded source tree copied ignored evidence or original Git internals' >&2
   exit 1
