@@ -49,7 +49,7 @@ git -C "$ROOT" archive --format=tar "$PREVIOUS_RELEASE_REF" api >"$TMP/previous-
   exit 2
 }
 mkdir "$TMP/previous-api"
-tar -xf "$TMP/previous-api.tar" -C "$TMP/previous-api"
+tar -xf "$TMP/previous-api.tar" -C "$TMP/previous-api" --strip-components=1
 [[ -f "$TMP/previous-api/go.mod" && -f "$TMP/previous-api/main.go" ]] || {
   printf 'BLOCKED: previous release API tree cannot run migration machinery: %s\n' "$PREVIOUS_RELEASE_REF" >&2
   exit 2
