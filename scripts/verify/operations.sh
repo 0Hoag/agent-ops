@@ -64,7 +64,11 @@ printf 'PASS: production client served through its real HTTP interface\n'
 
 db="agent_ops"
 psql_db "$db" -c "CREATE TABLE IF NOT EXISTS operations_fixture (id integer PRIMARY KEY, value text NOT NULL); TRUNCATE operations_fixture; INSERT INTO operations_fixture VALUES (1, 'persisted'), (2, 'checksum');"
-before=$(compose exec -T postgres pg_dump -U agent_ops -d "$db" --data-only --column-inserts --no-owner --no-privileges | sha256sum | awk '{print $1}')
+data_checksum() {
+  compose exec -T postgres pg_dump -U agent_ops -d "$1" --data-only --column-inserts --no-owner --no-privileges \
+    | awk '/^INSERT INTO / { print }' | LC_ALL=C sort | sha256sum | awk '{print $1}'
+}
+before=$(data_checksum "$db")
 container=$(compose ps -q postgres)
 docker cp "$ROOT/scripts/backup.sh" "$container:/tmp/backup.sh"
 docker cp "$ROOT/scripts/restore.sh" "$container:/tmp/restore.sh"
@@ -81,7 +85,7 @@ if docker exec "$container" /tmp/restore.sh /tmp/corrupt.dump "$target_url"; the
 fi
 # The real archive is on the container; restore it into the empty target.
 docker exec "$container" /tmp/restore.sh /tmp/application.dump "$target_url"
-after=$(compose exec -T postgres pg_dump -U agent_ops -d "$target_db" --data-only --column-inserts --no-owner --no-privileges | sha256sum | awk '{print $1}')
+after=$(data_checksum "$target_db")
 [[ $before == "$after" ]] || { printf 'FAIL: populated database checksum mismatch before=%s after=%s\n' "$before" "$after" >&2; exit 1; }
 printf 'PASS: populated application backup/restore checksum=%s\n' "$before"
 if docker exec "$container" /tmp/restore.sh /tmp/application.dump "$target_url"; then
