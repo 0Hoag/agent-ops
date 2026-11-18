@@ -22,15 +22,15 @@ OPERATIONS_UPGRADE_TEST_ONLY=1 OPERATIONS_UPGRADE_TEST_CASE=exited OPERATIONS_UP
 status=$?
 set -e
 [[ $status -ne 0 ]] || { cat "$tmp/exited.log" >&2; exit 1; }
-grep -Fq 'exited before readiness' "$tmp/exited.log"
+grep -Fq 'exited before readiness' "$tmp/exited.log" || { cat "$tmp/exited.log" >&2; exit 1; }
 printf 'PASS: exited child fails at named readiness assertion\n'
 mutant="$tmp/mutant.sh"
-sed 's/"\$OPERATIONS_UPGRADE_TEST_PORT"/"$((OPERATIONS_UPGRADE_TEST_PORT + 1))"/' "$root/scripts/verify/operations.sh" >"$mutant"
+sed 's/"${OPERATIONS_UPGRADE_TEST_PORT:?}"/"$((OPERATIONS_UPGRADE_TEST_PORT + 1))"/' "$root/scripts/verify/operations.sh" >"$mutant"
 set +e
 OPERATIONS_UPGRADE_TEST_ONLY=1 OPERATIONS_UPGRADE_READY_ATTEMPTS=1 OPERATIONS_UPGRADE_TEST_PID="$server_pid" OPERATIONS_UPGRADE_TEST_PORT="$port" OPERATIONS_UPGRADE_TEST_LOG="$tmp/server.log" bash "$mutant" >"$tmp/mutant.log" 2>&1
 status=$?
 set -e
 [[ $status -ne 0 ]] || { cat "$tmp/mutant.log" >&2; exit 1; }
-grep -Fq 'readiness timed out' "$tmp/mutant.log"
+grep -Fq 'readiness timed out' "$tmp/mutant.log" || { cat "$tmp/mutant.log" >&2; exit 1; }
 printf 'PASS: identical-input wrong-port control fails at readiness assertion\n'
 kill "$server_pid"; wait "$server_pid" 2>/dev/null || true
