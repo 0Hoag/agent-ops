@@ -66,7 +66,7 @@ db="agent_ops"
 psql_db "$db" -c "CREATE TABLE IF NOT EXISTS operations_fixture (id integer PRIMARY KEY, value text NOT NULL); TRUNCATE operations_fixture; INSERT INTO operations_fixture VALUES (1, 'persisted'), (2, 'checksum');"
 data_checksum() {
   compose exec -T postgres pg_dump -U agent_ops -d "$1" --data-only --column-inserts --no-owner --no-privileges \
-    | awk '/^INSERT INTO / { print }' | LC_ALL=C sort | sha256sum | awk '{print $1}'
+    | "$ROOT/scripts/operations-checksum.py"
 }
 before=$(data_checksum "$db")
 container=$(compose ps -q postgres)
