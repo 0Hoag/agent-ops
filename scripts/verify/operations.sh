@@ -3,7 +3,12 @@ set -Eeuo pipefail
 
 # Real operational acceptance: production Compose, application backup/restore, and
 # an upgrade from a caller-supplied released API tree. Run via scripts/heavy.sh.
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+script_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)
+if [[ -f "$script_root/scripts/resolve-previous-release.sh" ]]; then
+  ROOT=$script_root
+else
+  ROOT=$(git rev-parse --show-toplevel)
+fi
 PROJECT="agent-ops-operations-${USER:-user}-$$"
 CLIENT_DIR=${CLIENT_DIR:-$ROOT/../agent-ops-client}
 PREVIOUS_RELEASE_REF=$(bash "$ROOT/scripts/resolve-previous-release.sh" "$ROOT")
