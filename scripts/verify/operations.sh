@@ -6,7 +6,7 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 PROJECT="agent-ops-operations-${USER:-user}-$$"
 CLIENT_DIR=${CLIENT_DIR:-$ROOT/../agent-ops-client}
-PREVIOUS_RELEASE_REF=$(bash "$ROOT/scripts/verify/resolve-previous-release.sh" "$ROOT")
+PREVIOUS_RELEASE_REF=$(bash "$ROOT/scripts/resolve-previous-release.sh" "$ROOT")
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/agent-ops-operations.XXXXXX")
 ARCHIVE="$TMP/application.dump"
 CORRUPT="$TMP/corrupt.dump"
