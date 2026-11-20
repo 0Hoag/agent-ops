@@ -145,6 +145,11 @@ func expectMigrationApplied(mock sqlmock.Sqlmock) {
 	mock.ExpectExec(regexp.QuoteMeta("ALTER TABLE agent_runs ADD COLUMN branch text NOT NULL DEFAULT '';\nCREATE INDEX agent_runs_branch_idx ON agent_runs(repository_id, branch);\n")).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`)).WithArgs(21, "agent_run_branch").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(22).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("ALTER TABLE alert_occurrences DROP CONSTRAINT alert_occurrences_organization_id_alert_key_key;\nCREATE TABLE alert_incident_states (\n    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,\n    alert_key TEXT NOT NULL,\n    active BOOLEAN NOT NULL,\n    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n    PRIMARY KEY (organization_id, alert_key)\n);\n")).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`)).WithArgs(22, "alert_incident_state").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 }
 
 func TestRunMigrationsAppliesEmbeddedSQLAndRecordsVersion(t *testing.T) {
@@ -186,6 +191,7 @@ func TestRunMigrationsSkipsAppliedVersion(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(19).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(20).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(21).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "schema_migrations" WHERE version = $1`)).WithArgs(22).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	require.NoError(t, RunMigrations(context.Background(), db))
 	require.NoError(t, mock.ExpectationsWereMet())

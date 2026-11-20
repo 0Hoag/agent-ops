@@ -26,8 +26,14 @@ func TestRecordUsesOrganizationAlertConflictKey(t *testing.T) {
 	db, mock := alertDB(t)
 	repo := NewRepository(db)
 	at := time.Now()
-	mock.ExpectExec(regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at).
+	expectAcquisition(mock, "org-a", sqlmock.AnyArg())
+	mock.ExpectExec(`INSERT INTO alert_occurrences`).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at, "org-a", "same").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 ORDER BY created_at DESC, id DESC LIMIT $3`)).
+		WithArgs("org-a", "same", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
+			AddRow("persisted-occurrence", "org-a", "same", "repo", "rule", "subject", "message", at))
+	mock.ExpectCommit()
 	_, inserted, err := repo.Record(context.Background(), Alert{Key: "same", OrganizationID: "org-a", Repository: "repo",
 		Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
 	require.NoError(t, err)
@@ -35,13 +41,42 @@ func TestRecordUsesOrganizationAlertConflictKey(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestRecordKeepsDistinctOccurrencesAndDeliveryUpsert(t *testing.T) {
+func TestRecordReturnsPersistedOccurrenceIDOnConflict(t *testing.T) {
 	db, mock := alertDB(t)
 	repo := NewRepository(db)
 	at := time.Now()
-	insert := regexp.QuoteMeta("ON CONFLICT (organization_id, alert_key) DO NOTHING")
-	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "first", "repo", "rule", "subject", "message", at).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "second", "repo", "rule", "subject", "message", at).WillReturnResult(sqlmock.NewResult(0, 1))
+	expectAcquisition(mock, "org-a", sqlmock.AnyArg())
+	persistedID := "persisted-occurrence"
+	mock.ExpectExec(`INSERT INTO alert_occurrences`).WithArgs(sqlmock.AnyArg(), "org-a", "same", "repo", "rule", "subject", "message", at, "org-a", "same").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "alert_occurrences" WHERE organization_id = $1 AND alert_key = $2 ORDER BY created_at DESC, id DESC LIMIT $3`)).
+		WithArgs("org-a", "same", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id", "alert_key", "repository", "rule", "subject", "message", "detected_at"}).
+			AddRow(persistedID, "org-a", "same", "repo", "rule", "subject", "message", at))
+
+	mock.ExpectCommit()
+	row, inserted, err := repo.Record(context.Background(), Alert{Key: "same", OrganizationID: "org-a", Repository: "repo",
+		Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
+	require.NoError(t, err)
+	require.False(t, inserted)
+	require.Equal(t, persistedID, row.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRecordKeepsDistinctOccurrencesAndDeliveryUpsert(t *testing.T) {
+	db, mock := alertDB(t)
+	mock.MatchExpectationsInOrder(false)
+	repo := NewRepository(db)
+	at := time.Now()
+	expectAcquisition(mock, "org-a", "first")
+	expectAcquisition(mock, "org-a", "second")
+	mock.ExpectCommit()
+	mock.ExpectCommit()
+	insert := `INSERT INTO alert_occurrences`
+	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "first", "repo", "rule", "subject", "message", at, "org-a", "first").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(insert).WithArgs(sqlmock.AnyArg(), "org-a", "second", "repo", "rule", "subject", "message", at, "org-a", "second").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", "first").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO alert_incident_states`).WithArgs("org-a", "second").WillReturnResult(sqlmock.NewResult(0, 1))
 	first, inserted, err := repo.Record(context.Background(), Alert{Key: "first", OrganizationID: "org-a", Repository: "repo", Rule: "rule", Subject: "subject", Message: "message", DetectedAt: at})
 	require.NoError(t, err)
 	require.True(t, inserted)
@@ -66,4 +101,9 @@ func TestListBindsOrganizationAndPagination(t *testing.T) {
 	require.Empty(t, rows)
 	require.EqualValues(t, 3, total)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func expectAcquisition(mock sqlmock.Sqlmock, org, key interface{}) {
+	mock.ExpectBegin()
+	mock.ExpectExec(`SELECT pg_advisory_xact_lock`).WithArgs(org, key).WillReturnResult(sqlmock.NewResult(0, 1))
 }

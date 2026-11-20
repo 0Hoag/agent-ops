@@ -17,19 +17,28 @@ PASSWORD=mcp-519-fixture-password
 mkdir -p "$EVIDENCE"; chmod 700 "$EVIDENCE"
 compose=(env POSTGRES_PUBLISH=127.0.0.1 POSTGRES_HOST_PORT="$PG_PORT" JWT_SECRET="$JWT_SECRET" REPOSITORY_ENCRYPTION_KEY="$KEY" SCM_REPOSITORIES_JSON='[]' docker compose -p "$PROJECT" -f "$ROOT/docker-compose.yml")
 sql() { "$HEAVY" "${compose[@]}" exec -T postgres psql -U agent_ops -d agent_ops -At -v ON_ERROR_STOP=1 -c "$1"; }
+cleanup_module_cache() {
+  local cleanup_rc=0
+  [[ -d "$RUN/modcache" ]] || return 0
+  chmod -R u+w "$RUN/modcache" || cleanup_rc=1
+  rm -rf -- "$RUN/modcache" || cleanup_rc=1
+  return "$cleanup_rc"
+}
 cleanup() {
-  local rc=$? left; trap - EXIT INT TERM
-  "$HEAVY" "${compose[@]}" down --volumes --remove-orphans >"$EVIDENCE/cleanup.log" 2>&1 || rc=1
+  local rc=$? left cleanup_rc=0; trap - EXIT INT TERM
+  "$HEAVY" "${compose[@]}" down --volumes --remove-orphans >"$EVIDENCE/cleanup.log" 2>&1 || cleanup_rc=1
   for kind in container volume network; do
     case "$kind" in
       container) left=$($HEAVY docker ps -aq --filter "label=com.docker.compose.project=$PROJECT");;
       volume) left=$($HEAVY docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT");;
       network) left=$($HEAVY docker network ls -q --filter "label=com.docker.compose.project=$PROJECT");;
     esac
-    [[ -z "$left" ]] || { echo "FAIL: owned $kind remains: $left" | tee -a "$EVIDENCE/cleanup.log"; rc=1; }
+    [[ -z "$left" ]] || { echo "FAIL: owned $kind remains: $left" | tee -a "$EVIDENCE/cleanup.log"; cleanup_rc=1; }
   done
   echo "cleanup verified: no owned containers, volumes, or networks ($PROJECT)" | tee -a "$EVIDENCE/cleanup.log"
-  rm -rf "$RUN"; exit "$rc"
+  cleanup_module_cache || cleanup_rc=1
+  if [[ "$rc" -eq 0 && "$cleanup_rc" -ne 0 ]]; then rc=$cleanup_rc; fi
+  exit "$rc"
 }
 trap cleanup EXIT INT TERM
 printf 'tested_sha=%s project=%s\n' "$(git -C "$ROOT" rev-parse HEAD)" "$PROJECT" >"$EVIDENCE/source.txt"

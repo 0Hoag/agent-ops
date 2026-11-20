@@ -27,19 +27,62 @@ type Repository struct{ db *gorm.DB }
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 func (r *Repository) Record(ctx context.Context, a Alert) (Occurrence, bool, error) {
+	var row Occurrence
+	var inserted bool
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// A transaction-scoped lock also covers keys with no incident state yet.
+		// JSON encoding keeps the organization/key pair unambiguous.
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(json_build_array(?::text, ?::text)::text, 0))`, a.OrganizationID, a.Key).Error; err != nil {
+			return fmt.Errorf("lock alert incident: %w", err)
+		}
+		var err error
+		row, inserted, err = NewRepository(tx).record(ctx, a)
+		return err
+	})
+	if err != nil {
+		return Occurrence{}, false, fmt.Errorf("acquire alert incident: %w", err)
+	}
+	return row, inserted, nil
+}
+
+func (r *Repository) record(ctx context.Context, a Alert) (Occurrence, bool, error) {
 	row := Occurrence{ID: uuid.NewString(), OrganizationID: a.OrganizationID, AlertKey: a.Key,
 		Repository: a.Repository, Rule: a.Rule, Subject: a.Subject, Message: a.Message, DetectedAt: a.DetectedAt}
 	query := `INSERT INTO alert_occurrences (id, organization_id, alert_key, repository, rule, subject, message, detected_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (organization_id, alert_key) DO NOTHING`
+		SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS
+		(SELECT 1 FROM alert_incident_states WHERE organization_id = ? AND alert_key = ? AND active)`
 	result := r.db.WithContext(ctx).Exec(query, row.ID, row.OrganizationID, row.AlertKey, row.Repository,
-		row.Rule, row.Subject, row.Message, row.DetectedAt)
+		row.Rule, row.Subject, row.Message, row.DetectedAt, row.OrganizationID, row.AlertKey)
 	if result.Error != nil {
 		return Occurrence{}, false, fmt.Errorf("record alert occurrence: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return row, false, nil
+		var persisted Occurrence
+		if err := r.db.WithContext(ctx).Table("alert_occurrences").
+			Where("organization_id = ? AND alert_key = ?", row.OrganizationID, row.AlertKey).Order("created_at DESC, id DESC").
+			Take(&persisted).Error; err != nil {
+			return Occurrence{}, false, fmt.Errorf("get recorded alert occurrence: %w", err)
+		}
+		return persisted, false, nil
+	}
+	if err := r.db.WithContext(ctx).Exec(`INSERT INTO alert_incident_states (organization_id, alert_key, active) VALUES (?, ?, TRUE)
+		ON CONFLICT (organization_id, alert_key) DO UPDATE SET active = TRUE, updated_at = NOW()`, row.OrganizationID, row.AlertKey).Error; err != nil {
+		return Occurrence{}, false, fmt.Errorf("activate alert incident: %w", err)
 	}
 	return row, true, nil
+}
+
+func (r *Repository) ReconcileStates(ctx context.Context, states []IncidentState, organizationID string) error {
+	for _, state := range states {
+		if state.Active {
+			continue
+		}
+		if err := r.db.WithContext(ctx).Exec(`INSERT INTO alert_incident_states (organization_id, alert_key, active) VALUES (?, ?, ?)
+			ON CONFLICT (organization_id, alert_key) DO UPDATE SET active = EXCLUDED.active, updated_at = NOW()`, organizationID, state.Key, state.Active).Error; err != nil {
+			return fmt.Errorf("reconcile alert incident: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *Repository) RecordDelivery(ctx context.Context, d Delivery) error {

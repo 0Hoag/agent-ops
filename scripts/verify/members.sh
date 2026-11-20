@@ -85,8 +85,8 @@ request() {
 check() {
   local name=$1 expected=$2 actual=$3
   printf '%s\t%s\t%s\t%s\n' "$name" "$expected" "$actual" "$(tr '\n' ' ' <"$TMP/last-body")" >>"$ARTIFACT_DIR/http-checks.tsv"
-  [[ "$actual" == "$expected" ]] || { log "FAIL: $name expected HTTP $expected, got $actual ($(tr '\n' ' ' <"$TMP/last-body"))"; exit 1; }
-  log "PASS: $name HTTP $actual"
+  [[ "$actual" == "$expected" ]] || { log "FAIL: $name expected HTTP $expected, got $actual ($(tr '\n' ' ' <"$TMP/last-body"))" >&2; exit 1; }
+  log "PASS: $name HTTP $actual" >&2
 }
 json() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1" <"$status_file"; }
 login() { request POST /api/v1/auth/login "{\"email\":\"$1\",\"password\":\"$PASSWORD\"}"; check "login $1" 200 "$CODE"; json token; }
@@ -103,7 +103,7 @@ SQL
 ADMIN_TOKEN=$(select_org "$(login "$ADMIN")" admin)
 MEMBER_TOKEN=$(select_org "$(login "$MEMBER")" member)
 VIEWER_TOKEN=$(select_org "$(login "$VIEWER")" viewer)
-TARGET_TOKEN=$(select_org "$(login "$TARGET")" target)
+TARGET_TOKEN=$(login "$TARGET")
 INVITEE_TOKEN=$(login "$INVITEE")
 EXPIRED_TOKEN=$(login "$EXPIRED")
 
@@ -117,7 +117,7 @@ request GET "/api/v1/organizations/$ORG/members" "$TARGET_TOKEN"; check 'nonmemb
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"member\"}" "$ADMIN_TOKEN"; check 'admin adds member' 204 "$CODE"
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"viewer\"}" "$MEMBER_TOKEN"; check 'member cannot add member' 403 "$CODE"
 request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"admin\"}" "$ADMIN_TOKEN"; check 'admin cannot add admin' 403 "$CODE"
-request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"owner\"}" "$OWNER_TOKEN"; check 'owner cannot assign owner' 400 "$CODE"
+request POST "/api/v1/organizations/$ORG/members" "{\"account_id\":\"$TARGET_ID\",\"role\":\"owner\"}" "$OWNER_TOKEN"; check 'owner cannot assign owner' 403 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$TARGET_ID" '{"role":"viewer"}' "$ADMIN_TOKEN"; check 'admin changes member to viewer' 204 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$ADMIN_ID" '{"role":"member"}' "$ADMIN_TOKEN"; check 'admin cannot change admin' 403 "$CODE"
 request PATCH "/api/v1/organizations/$ORG/members/$TARGET_ID" '{"role":"admin"}' "$ADMIN_TOKEN"; check 'admin cannot promote to admin' 403 "$CODE"
@@ -136,14 +136,25 @@ request POST "/api/v1/organizations/$ORG/invitations" '{"role":"owner","expires_
 request POST "/api/v1/organizations/$ORG/invitations" '{"role":"member","expires_in_seconds":1}' "$OWNER_TOKEN"; check 'owner creates expiring invitation' 201 "$CODE"; EXPIRED_INVITE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])' <"$status_file"); sleep 2
 request POST /api/v1/organization-invitations/accept "{\"token\":\"$EXPIRED_INVITE\"}" "$EXPIRED_TOKEN"; check 'expired invitation rejected' 409 "$CODE"
 
-# Last-owner protection is exercised after adding a second owner only through the
-# database fixture, because the public API must never grant owner role.
+# Last-owner protection starts with the persisted sole-owner invariant. The
+# public API must never grant owner role, so a database fixture adds a second
+# owner only for the separate allowed-demotion check.
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 1 ]] || { log "FAIL: expected one persisted owner before sole-owner checks, got $owner_count" >&2; exit 1; }
+log 'PASS: one persisted owner before sole-owner checks'
+request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'sole owner demotion rejected' 409 "$CODE"
+request DELETE "/api/v1/organizations/$ORG/members/$OWNER_ID" "$OWNER_TOKEN"; check 'sole owner removal rejected' 409 "$CODE"
+
 "${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -v ON_ERROR_STOP=1 >/dev/null <<SQL
 INSERT INTO organization_memberships (id,organization_id,account_id,role) VALUES (gen_random_uuid(),'$ORG','$ADMIN_ID','owner');
 SQL
-request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'owner demotion preserves final owner' 409 "$CODE"
-request DELETE "/api/v1/organizations/$ORG/members/$OWNER_ID" "$OWNER_TOKEN"; check 'owner removal preserves final owner' 409 "$CODE"
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 2 ]] || { log "FAIL: expected two persisted owners for allowed demotion, got $owner_count" >&2; exit 1; }
+log 'PASS: two persisted owners before allowed demotion'
 request PATCH "/api/v1/organizations/$ORG/members/$ADMIN_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'owner demotes second owner' 204 "$CODE"
+owner_count=$("${COMPOSE[@]}" exec -T postgres psql -U agent_ops -d agent_ops -Atc "SELECT count(*) FROM organization_memberships WHERE organization_id='$ORG' AND role='owner';" | tr -d '\r')
+[[ "$owner_count" == 1 ]] || { log "FAIL: expected one persisted owner after allowed demotion, got $owner_count" >&2; exit 1; }
+log 'PASS: one persisted owner after allowed demotion'
 request PATCH "/api/v1/organizations/$ORG/members/$OWNER_ID" '{"role":"member"}' "$OWNER_TOKEN"; check 'last owner demotion rejected' 409 "$CODE"
 
 cp "$ARTIFACT_DIR/http-checks.tsv" "$ARTIFACT_DIR/http-checks-$(git -C "$ROOT" rev-parse --short HEAD).tsv"

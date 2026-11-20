@@ -3,24 +3,87 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ARTIFACT_DIR=${PRICING_CONTROL_ARTIFACT_DIR:-$ROOT/.agent-runs/W19g-pricing-control-576}
+readonly_fixture=
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/pricing-control.XXXXXX")
-trap 'rm -rf "$TMP"' EXIT INT TERM
+cleanup() {
+  local rc=$?
+  trap - EXIT INT TERM
+  rm -rf "$TMP"
+  if [[ -n ${readonly_fixture:-} && -e $readonly_fixture ]]; then
+    chmod -R u+rwX "$readonly_fixture" 2>/dev/null || true
+    rm -rf "$readonly_fixture"
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT INT TERM
 mkdir -p "$ARTIFACT_DIR"
 
 run_verifier() {
   local source=$1 mode=$2 artifact="$ARTIFACT_DIR/$2"
+  local verifier=${PRICING_CONTROL_VERIFIER_SCRIPT:-$source/scripts/verify/pricing.sh}
   mkdir -p "$artifact"
   local control=0
   [[ $mode == mutant ]] && control=1
   PRICING_VERIFY_ARTIFACT_DIR="$artifact" PRICING_VERIFY_CONTROL="$control" \
-    bash "$source/scripts/verify/pricing.sh" >"$artifact/stdout.log" 2>"$artifact/stderr.log"
+    bash "$verifier" >"$artifact/stdout.log" 2>"$artifact/stderr.log"
+}
+
+prepare_source_tree() {
+  local source=$1 destination=$2
+  mkdir -p "$destination"
+  git -C "$source" archive --format=tar HEAD | tar -xf - -C "$destination"
+  rm -rf "$destination/.agent-runs"
+  git -C "$destination" init -q
+  git -C "$destination" config user.email pricing-verify@example.invalid
+  git -C "$destination" config user.name pricing-verify
+  git -C "$destination" add -A
+  git -C "$destination" commit -q -m 'fixture: pricing verifier source'
+}
+
+git_storage_identity() {
+  local source=$1 common_dir
+  common_dir=$(git -C "$source" rev-parse --git-common-dir)
+  if [[ $common_dir != /* ]]; then
+    common_dir="$source/$common_dir"
+  fi
+  (cd "$common_dir" && pwd -P)
 }
 
 SOURCE_SHA=$(git -C "$ROOT" rev-parse HEAD)
 printf 'source_sha=%s\n' "$SOURCE_SHA" | tee "$ARTIFACT_DIR/summary.txt"
 run_verifier "$ROOT" healthy
 
-cp -a "$ROOT" "$TMP/mutant"
+readonly_fixture_candidate=${PRICING_CONTROL_READONLY_FIXTURE:-$TMP/readonly-fixture}
+if [[ -e $readonly_fixture_candidate ]]; then
+  echo 'owner fixture path already exists; refusing to modify ignored evidence' >&2
+  exit 1
+fi
+readonly_fixture=$readonly_fixture_candidate
+mkdir -p "$readonly_fixture"
+printf 'must remain in the original checkout\n' >"$readonly_fixture/evidence.log"
+chmod 444 "$readonly_fixture/evidence.log"
+before_evidence=$(shasum -a 256 "$readonly_fixture/evidence.log" | awk '{print $1}')
+
+legacy_fixture="$TMP/legacy-source"
+mkdir -p "$legacy_fixture/scripts/verify" "$legacy_fixture/.agent-runs/synthetic-cache/deep"
+printf 'tracked source\n' >"$legacy_fixture/scripts/verify/pricing.sh"
+printf 'synthetic ignored cache\n' >"$legacy_fixture/.agent-runs/synthetic-cache/deep/cache.log"
+chmod 444 "$legacy_fixture/.agent-runs/synthetic-cache/deep/cache.log"
+cp -a "$legacy_fixture" "$TMP/legacy"
+if [[ -e "$TMP/legacy/.agent-runs/synthetic-cache/deep/cache.log" ]]; then
+  printf 'old_copy_control=fail (ignored evidence was copied)\n' >>"$ARTIFACT_DIR/summary.txt"
+else
+  echo 'old copy control did not reproduce the known defect' >&2
+  exit 1
+fi
+
+prepare_source_tree "$ROOT" "$TMP/mutant"
+original_git_marker=$(git_storage_identity "$ROOT")
+mutant_git_marker=$(git_storage_identity "$TMP/mutant")
+if [[ -e "$TMP/mutant/.agent-runs" || "$original_git_marker" == "$mutant_git_marker" ]]; then
+  echo 'bounded source tree copied ignored evidence or original Git internals' >&2
+  exit 1
+fi
 perl -0pi -e 's#/1e6#/1e5#g' "$TMP/mutant/api/modules/agentrun/repository.go"
 MUTANT_SHA=$(sha256sum "$TMP/mutant/api/modules/agentrun/repository.go" | awk '{print $1}')
 printf 'mutant_source_sha=%s\n' "$MUTANT_SHA" >>"$ARTIFACT_DIR/summary.txt"
@@ -29,5 +92,7 @@ grep -Eq 'negative control failed named numeric pricing assertion' "$ARTIFACT_DI
 printf 'mutant_rc=0(expected-control-pass)\n' >>"$ARTIFACT_DIR/summary.txt"
 
 run_verifier "$ROOT" restored
+after_evidence=$(shasum -a 256 "$readonly_fixture/evidence.log" | awk '{print $1}')
+[[ "$before_evidence" == "$after_evidence" ]] || { echo 'original ignored evidence changed' >&2; exit 1; }
 printf 'healthy=pass\nmutant=expected-fail\nrestored=pass\n' >>"$ARTIFACT_DIR/summary.txt"
 cat "$ARTIFACT_DIR/summary.txt"

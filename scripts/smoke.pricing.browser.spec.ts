@@ -119,6 +119,18 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (browser PATCH recovery)', status: recoveredResponse.status(), body: await recoveredResponse.json() });
   const recoveredPriceRow = page.locator('tr').filter({ hasText: model }).filter({ hasText: secondDate });
   await expect(recoveredPriceRow).toHaveCount(1);
+  const recoveredListed = await request('/api/v1/agent-run-prices');
+  const recoveredListedBody = await recoveredListed.json();
+  const recoveredSaved = recoveredListedBody.data.find((item: { id: string }) => item.id === newPrice.id);
+  expect(recoveredSaved?.effective_date).toContain(secondDate);
+  expect(recoveredSaved?.input_per_million).toBe(1);
+  expect(recoveredSaved?.cached_input_per_million).toBe(0.2);
+  expect(recoveredSaved?.cache_write_per_million).toBe(0.3);
+  expect(recoveredSaved?.output_per_million).toBe(2);
+  expect(recoveredSaved?.reasoning_per_million).toBe(0.4);
+  responseLog.push({ endpoint: '/api/v1/agent-run-prices (recovery persisted)', status: recoveredListed.status(), body: recoveredSaved });
+  await page.reload();
+  await expect(page.locator('tr').filter({ hasText: model }).filter({ hasText: secondDate })).toHaveCount(1);
   await recoveredPriceRow.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Model')).toHaveValue(model);
   await page.getByLabel('Effective date').fill(thirdDate);
@@ -132,7 +144,14 @@ test('pricing versions, permissions, tenant isolation and run costs use the real
   const listedBody = await listed.json();
   const saved = listedBody.data.find((item: { id: string }) => item.id === newPrice.id);
   expect(saved?.effective_date).toContain(thirdDate);
+  expect(saved?.input_per_million).toBe(1);
+  expect(saved?.cached_input_per_million).toBe(0.2);
+  expect(saved?.cache_write_per_million).toBe(0.3);
+  expect(saved?.output_per_million).toBe(3);
+  expect(saved?.reasoning_per_million).toBe(0.4);
   responseLog.push({ endpoint: '/api/v1/agent-run-prices (recovered persisted)', status: listed.status(), body: saved });
+  await page.reload();
+  await expect(page.locator('tr').filter({ hasText: model }).filter({ hasText: thirdDate })).toHaveCount(1);
   await page.screenshot({ path: `${process.env.SMOKE_ARTIFACT_DIR}/pricing-owner.png`, fullPage: true });
 
   const inviteeLogin = await page.request.post(`${api}/api/v1/auth/login`, { data: { email: 'invitee@example.invalid', password: 'smoke-password-not-a-secret' } });
