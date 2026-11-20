@@ -221,7 +221,16 @@ func (r *Repository) AggregateHistorical(ctx context.Context, f Filter, fallback
 			a.CacheWriteTokens += run.CacheWriteTokens
 			a.OutputTokens += run.OutputTokens
 			a.ReasoningTokens += run.ReasoningTokens
-			if p == nil {
+			if run.CostUSD != nil {
+				v := *run.CostUSD
+				a.CostUSD = addCost(a.CostUSD, v)
+				a.EquivalentCostUSD = addCost(a.EquivalentCostUSD, v)
+				if run.BillingType == "subscription" {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, 0)
+				} else {
+					a.BilledCostUSD = addCost(a.BilledCostUSD, v)
+				}
+			} else if p == nil {
 				unknown[key] = true
 				a.CostUSD = nil
 			} else if !unknown[key] {
