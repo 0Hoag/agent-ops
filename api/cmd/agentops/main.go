@@ -117,11 +117,14 @@ func run(args []string) error {
 	if args[0] == "hook" {
 		return runHook(args[1:], os.Stdin, http.DefaultClient)
 	}
+	if args[0] == "setup" {
+		return runSetup(args[1:])
+	}
 	if args[0] == "mcp" {
 		return runMCP(args[1:], os.Stdin, os.Stdout, http.DefaultClient)
 	}
 	if args[0] != "push" {
-		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file> | hook | mcp")
+		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file> | hook | setup claude | mcp")
 	}
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
