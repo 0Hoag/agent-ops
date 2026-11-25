@@ -34,3 +34,15 @@ repository, harness, and session ID. Use synthetic fixtures for tests; do not in
 `agentops hook` reads a Claude `Stop` hook event from stdin, validates its `session_id`, `transcript_path`, and
 `cwd`, and submits only that session. It uses the same `AGENT_RUN_*` variables as `push`; failures are written to
 stderr and return a non-zero status.
+
+## Claude Code setup
+
+From the intended Git checkout, set `AGENT_RUN_TOKEN` in the environment and install the repo-local hook:
+
+```bash
+agentops setup claude --repository-id <repository-id> --wave <wave> --worker <worker>
+```
+
+This writes `.claude/settings.local.json`, which Claude Code loads for this checkout. The Stop hook is asynchronous;
+the command inherits `AGENT_RUN_TOKEN` and never stores it. Existing settings and hooks are preserved. Repeat setup is
+safe. Remove only the Agent Ops hook with `agentops setup claude --uninstall`; the file is removed when it becomes empty.
