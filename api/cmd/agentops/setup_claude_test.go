@@ -62,6 +62,62 @@ func TestClaudeSetupPreservesIsIdempotentAndUninstalls(t *testing.T) {
 	}
 }
 
+func TestClaudeSetupBindsEndpoint(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		env      string
+		expected string
+	}{
+		{name: "explicit", args: []string{"--endpoint", "https://api.example.test/runs"}, expected: "https://api.example.test/runs"},
+		{name: "environment", env: "https://env.example.test/runs", expected: "https://env.example.test/runs"},
+		{name: "local default", expected: "http://127.0.0.1:8080/api/v1/agent-runs"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			gitInit(t, root)
+			old, _ := os.Getwd()
+			t.Cleanup(func() { _ = os.Chdir(old) })
+			if err := os.Chdir(root); err != nil {
+				t.Fatal(err)
+			}
+			if tc.env == "" {
+				t.Setenv("AGENT_RUN_API_URL", "")
+			} else {
+				t.Setenv("AGENT_RUN_API_URL", tc.env)
+			}
+			args := append([]string{"claude", "--repository-id", "repo"}, tc.args...)
+			if err := runSetup(args); err != nil {
+				t.Fatal(err)
+			}
+			contents := string(mustRead(t, filepath.Join(root, ".claude/settings.local.json")))
+			if !strings.Contains(contents, "--endpoint "+shellArg(tc.expected)) {
+				t.Fatalf("hook does not bind endpoint %q: %s", tc.expected, contents)
+			}
+		})
+	}
+}
+
+func TestClaudeSetupQuotesEndpoint(t *testing.T) {
+	root := t.TempDir()
+	gitInit(t, root)
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "https://example.test/runs path; touch /tmp/agentops-should-not-exist && echo 'quoted'"
+	if err := runSetup([]string{"claude", "--repository-id", "repo", "--endpoint", endpoint}); err != nil {
+		t.Fatal(err)
+	}
+	contents := string(mustRead(t, filepath.Join(root, ".claude/settings.local.json")))
+	encoded, err := json.Marshal("--endpoint " + shellArg(endpoint))
+	if err != nil || !strings.Contains(contents, strings.Trim(string(encoded), `"`)) {
+		t.Fatalf("hook endpoint is not safely quoted: %s", contents)
+	}
+}
+
 func TestClaudeSetupSeparatesCheckouts(t *testing.T) {
 	one, two := t.TempDir(), t.TempDir()
 	for _, root := range []string{one, two} {
