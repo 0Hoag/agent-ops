@@ -25,13 +25,14 @@ type claudeCommand struct {
 
 func runSetup(args []string) error {
 	if len(args) < 1 || args[0] != "claude" {
-		return errors.New("usage: agentops setup claude [--uninstall]")
+		return errors.New("usage: agentops setup claude [--endpoint <url>] [--uninstall]")
 	}
 	fs := flag.NewFlagSet("setup claude", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	repository := fs.String("repository-id", os.Getenv("AGENT_RUN_REPOSITORY_ID"), "repository UUID")
 	wave := fs.String("wave", "claude", "wave metadata")
 	worker := fs.String("worker", "claude-hook", "worker metadata")
+	endpoint := fs.String("endpoint", env("AGENT_RUN_API_URL", "http://127.0.0.1:8080/api/v1/agent-runs"), "agent-run API URL")
 	uninstall := fs.Bool("uninstall", false, "remove the Agent Ops Claude hook")
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("invalid setup flags")
@@ -47,7 +48,7 @@ func runSetup(args []string) error {
 	if strings.TrimSpace(*repository) == "" {
 		return errors.New("--repository-id or AGENT_RUN_REPOSITORY_ID is required")
 	}
-	command := fmt.Sprintf("agentops hook --repository-id %s --wave %s --worker %s", shellArg(*repository), shellArg(*wave), shellArg(*worker))
+	command := fmt.Sprintf("agentops hook --endpoint %s --repository-id %s --wave %s --worker %s", shellArg(*endpoint), shellArg(*repository), shellArg(*wave), shellArg(*worker))
 	if err := editClaudeSettings(path, &claudeHook{Matcher: "", Hooks: []claudeCommand{{Type: "command", Command: command, Async: true}}}); err != nil {
 		return err
 	}

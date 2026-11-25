@@ -40,9 +40,10 @@ stderr and return a non-zero status.
 From the intended Git checkout, set `AGENT_RUN_TOKEN` in the environment and install the repo-local hook:
 
 ```bash
-agentops setup claude --repository-id <repository-id> --wave <wave> --worker <worker>
+agentops setup claude --repository-id <repository-id> --wave <wave> --worker <worker> [--endpoint <url>]
 ```
 
 This writes `.claude/settings.local.json`, which Claude Code loads for this checkout. The Stop hook is asynchronous;
-the command inherits `AGENT_RUN_TOKEN` and never stores it. Existing settings and hooks are preserved. Repeat setup is
+the command inherits `AGENT_RUN_TOKEN` and never stores it. `--endpoint` defaults to `AGENT_RUN_API_URL`, then
+`http://127.0.0.1:8080/api/v1/agent-runs`. Existing settings and hooks are preserved. Repeat setup is
 safe. Remove only the Agent Ops hook with `agentops setup claude --uninstall`; the file is removed when it becomes empty.
