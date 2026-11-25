@@ -13,6 +13,16 @@ import (
 
 const claudeHookPrefix = "agentops hook"
 
+type claudeHook struct {
+	Matcher string          `json:"matcher"`
+	Hooks   []claudeCommand `json:"hooks"`
+}
+type claudeCommand struct {
+	Type    string `json:"type"`
+	Command string `json:"command"`
+	Async   bool   `json:"async,omitempty"`
+}
+
 func runSetup(args []string) error {
 	if len(args) < 1 || args[0] != "claude" {
 		return errors.New("usage: agentops setup claude [--uninstall]")
@@ -52,19 +62,6 @@ func gitRoot() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-type claudeSettings struct {
-	Hooks map[string][]claudeHook `json:"hooks,omitempty"`
-}
-type claudeHook struct {
-	Matcher string          `json:"matcher"`
-	Hooks   []claudeCommand `json:"hooks"`
-}
-type claudeCommand struct {
-	Type    string `json:"type"`
-	Command string `json:"command"`
-	Async   bool   `json:"async,omitempty"`
-}
-
 func editClaudeSettings(path string, install *claudeHook) error {
 	settings := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(path); err == nil {
@@ -74,28 +71,51 @@ func editClaudeSettings(path string, install *claudeHook) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("read Claude settings: %w", err)
 	}
-	hooks := map[string][]claudeHook{}
+	hooks := map[string][]map[string]json.RawMessage{}
 	if raw, ok := settings["hooks"]; ok {
 		if err := json.Unmarshal(raw, &hooks); err != nil {
 			return fmt.Errorf("read Claude hooks: %w", err)
 		}
 	}
 	stop := hooks["Stop"]
-	filtered := make([]claudeHook, 0, len(stop))
+	filtered := make([]map[string]json.RawMessage, 0, len(stop))
 	for _, group := range stop {
-		commands := make([]claudeCommand, 0, len(group.Hooks))
-		for _, hook := range group.Hooks {
-			if !strings.HasPrefix(hook.Command, claudeHookPrefix+" ") {
-				commands = append(commands, hook)
+		rawCommands, ok := group["hooks"]
+		if !ok {
+			filtered = append(filtered, group)
+			continue
+		}
+		var commands []map[string]json.RawMessage
+		if err := json.Unmarshal(rawCommands, &commands); err != nil {
+			return fmt.Errorf("read Claude Stop hooks: %w", err)
+		}
+		kept := make([]map[string]json.RawMessage, 0, len(commands))
+		for _, hook := range commands {
+			var command string
+			_ = json.Unmarshal(hook["command"], &command)
+			if !strings.HasPrefix(command, claudeHookPrefix+" ") {
+				kept = append(kept, hook)
 			}
 		}
-		if len(commands) > 0 {
-			group.Hooks = commands
+		if len(kept) > 0 {
+			encoded, err := json.Marshal(kept)
+			if err != nil {
+				return err
+			}
+			group["hooks"] = encoded
 			filtered = append(filtered, group)
 		}
 	}
 	if install != nil {
-		filtered = append(filtered, *install)
+		encoded, err := json.Marshal(install)
+		if err != nil {
+			return err
+		}
+		var group map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &group); err != nil {
+			return err
+		}
+		filtered = append(filtered, group)
 	}
 	if len(filtered) == 0 {
 		delete(hooks, "Stop")
@@ -133,7 +153,16 @@ func removeSettings(path string) error {
 }
 
 func ignoreLocalClaudeSettings(root string) error {
-	path := filepath.Join(root, ".git", "info", "exclude")
+	cmd := exec.Command("git", "rev-parse", "--git-path", "info/exclude")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return errors.New("resolve Git exclude path")
+	}
+	path := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read Git exclude: %w", err)
