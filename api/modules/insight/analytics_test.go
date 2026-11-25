@@ -15,6 +15,15 @@ func TestAnalyticsCostRecomputesTokenCategories(t *testing.T) {
 	require.InDelta(t, expected, cost(run, p), 1e-15)
 }
 
+func TestAnalyticsUsesRecordedCostWhenPresent(t *testing.T) {
+	recorded := 12.4
+	result := AnalyticsResponse{Buckets: []AnalyticsBucket{}}
+	r := &Repository{}
+	r.addAnalyticsBucket(&result, AnalyticsRun{Model: "m", InputTokens: 1_000_000, CostUSD: &recorded}, time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), "m", []priceRow{{Model: "m", InputPerMillion: 2}})
+	require.Len(t, result.Buckets, 1)
+	require.InDelta(t, recorded, *result.Buckets[0].EquivalentCostUSD, 1e-12)
+}
+
 func TestAnalyticsPriceSelectionUsesHistoricalEffectiveDate(t *testing.T) {
 	at := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	prices := []priceRow{{Model: "m", EffectiveDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), InputPerMillion: 1}, {Model: "m", EffectiveDate: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), InputPerMillion: 2}}

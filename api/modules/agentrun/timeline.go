@@ -34,11 +34,21 @@ func (r *Repository) Steps(ctx context.Context, id string) ([]RunStep, error) {
 	if err := r.db.WithContext(ctx).Table("agent_run_steps s").Where("s.run_id = ?", id).Order("s.sequence ASC").Find(&out).Error; err != nil {
 		return nil, err
 	}
-	price, err := r.priceAt(ctx, organizationFromContext(ctx), run.Model, run.StartedAt)
-	if err != nil {
-		return nil, fmt.Errorf("resolve historical timeline price: %w", err)
+	hasRecordedCost := false
+	for _, step := range out {
+		if step.CumulativeCostUSD != nil {
+			hasRecordedCost = true
+			break
+		}
 	}
-	if price != nil {
+	if !hasRecordedCost {
+		price, err := r.priceAt(ctx, organizationFromContext(ctx), run.Model, run.StartedAt)
+		if err != nil {
+			return nil, fmt.Errorf("resolve historical timeline price: %w", err)
+		}
+		if price == nil {
+			return out, nil
+		}
 		var cumulative float64
 		for i := range out {
 			cumulative += stepCost(out[i], *price)

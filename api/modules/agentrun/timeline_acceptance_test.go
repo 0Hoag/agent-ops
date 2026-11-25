@@ -178,6 +178,25 @@ func TestTimelineStepCostUsesEveryHistoricalCounter(t *testing.T) {
 	require.InDelta(t, 0.0001+0.00004+0.00003+0.00012+0.000025, stepCost(step, price), 1e-12)
 }
 
+func TestStepsPreservePersistedCumulativeCostIncludingZero(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
+	require.NoError(t, err)
+	repo := NewRepository(db)
+	started := mustDate(t, "2026-04-10")
+	columns := []string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "started_at", "ended_at"}
+	mock.ExpectQuery(`SELECT .* FROM agent_runs ar`).WithArgs("run-1", "org-a", 1).WillReturnRows(sqlmock.NewRows(columns).AddRow("run-1", "repo-1", "W", "worker", "model-a", []byte("[]"), started, started))
+	mock.ExpectQuery(`SELECT .* FROM agent_run_steps s`).WithArgs("run-1").WillReturnRows(sqlmock.NewRows([]string{"id", "run_id", "sequence", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "cumulative_cost_usd"}).AddRow("step-1", "run-1", 0, 100000, 0, 0, 0, 0, 0.5).AddRow("step-2", "run-1", 1, 100000, 0, 0, 0, 0, 2.0))
+	got, err := repo.Steps(WithOrganization(context.Background(), "org-a"), "run-1")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, 0.5, *got[0].CumulativeCostUSD)
+	require.Equal(t, 2.0, *got[1].CumulativeCostUSD)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepositoryReplaceStepsUsesPersistedStableIdentity(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)

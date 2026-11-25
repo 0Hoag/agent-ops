@@ -21,6 +21,7 @@ type AnalyticsRun struct {
 	Harness                                                                         *string
 	IssueNumbers                                                                    store.JSONB
 	InputTokens, CachedInputTokens, CacheWriteTokens, OutputTokens, ReasoningTokens int64
+	CostUSD                                                                         *float64
 	StartedAt                                                                       time.Time
 }
 type analyticsIssue struct {
@@ -31,11 +32,12 @@ type analyticsIssue struct {
 type usageStep struct {
 	StartedAt                                                                       *time.Time
 	InputTokens, CachedInputTokens, CacheWriteTokens, OutputTokens, ReasoningTokens int64
+	CumulativeCostUSD                                                               *float64
 }
 
 func (r *Repository) usageSteps(ctx context.Context, runID string) ([]usageStep, error) {
 	var steps []usageStep
-	err := r.db.WithContext(ctx).Table("agent_run_steps").Select("started_at, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens").Where("run_id = ?", runID).Order("sequence ASC").Find(&steps).Error
+	err := r.db.WithContext(ctx).Table("agent_run_steps").Select("started_at, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens, cumulative_cost_usd").Where("run_id = ?", runID).Order("sequence ASC").Find(&steps).Error
 	if err != nil {
 		return nil, fmt.Errorf("list timeline steps: %w", err)
 	}
@@ -118,7 +120,7 @@ func (r *Repository) Analytics(ctx context.Context, f AnalyticsFilter) (Analytic
 		q = q.Where("ar.repository_id = ?", f.RepositoryID)
 	}
 	var runs []AnalyticsRun
-	if err := q.Select("ar.id, ar.repository_id, ar.wave, ar.model, ar.billing_type, ar.harness, ar.issue_numbers, ar.input_tokens, ar.cached_input_tokens, ar.cache_write_tokens, ar.output_tokens, ar.reasoning_tokens, ar.started_at").Order("ar.started_at ASC, ar.id ASC").Find(&runs).Error; err != nil {
+	if err := q.Select("ar.id, ar.repository_id, ar.wave, ar.model, ar.billing_type, ar.harness, ar.issue_numbers, ar.input_tokens, ar.cached_input_tokens, ar.cache_write_tokens, ar.output_tokens, ar.reasoning_tokens, ar.cost_usd, ar.started_at").Order("ar.started_at ASC, ar.id ASC").Find(&runs).Error; err != nil {
 		return AnalyticsResponse{}, fmt.Errorf("list analytics runs: %w", err)
 	}
 	prices, err := r.loadPrices(ctx, organizationFromContext(ctx))
@@ -134,11 +136,21 @@ func (r *Repository) Analytics(ctx context.Context, f AnalyticsFilter) (Analytic
 		}
 		useTimeline := compatibleTimeline(run, steps)
 		if useTimeline {
+			var previousRecorded *float64
 			for _, step := range steps {
 				if step.StartedAt == nil || step.StartedAt.Before(*f.From) || !step.StartedAt.Before(f.To.Add(24*time.Hour)) {
 					continue
 				}
-				r.addAnalyticsBucket(&result, stepRun(run, step), *step.StartedAt, key, prices)
+				stepValue := stepRun(run, step)
+				if step.CumulativeCostUSD != nil {
+					delta := *step.CumulativeCostUSD
+					if previousRecorded != nil {
+						delta -= *previousRecorded
+					}
+					stepValue.CostUSD = &delta
+					previousRecorded = step.CumulativeCostUSD
+				}
+				r.addAnalyticsBucket(&result, stepValue, *step.StartedAt, key, prices)
 			}
 			continue
 		}
@@ -171,7 +183,12 @@ func (r *Repository) addAnalyticsBucket(result *AnalyticsResponse, run Analytics
 	b.CacheWriteTokens += run.CacheWriteTokens
 	b.OutputTokens += run.OutputTokens
 	b.ReasoningTokens += run.ReasoningTokens
-	if p, ok := priceAt(prices, run.Model, at); ok {
+	if run.CostUSD != nil {
+		b.EquivalentCostUSD = add(b.EquivalentCostUSD, *run.CostUSD)
+		if run.BillingType != "subscription" {
+			b.ActualCostUSD = add(b.ActualCostUSD, *run.CostUSD)
+		}
+	} else if p, ok := priceAt(prices, run.Model, at); ok {
 		cost := cost(run, p)
 		b.EquivalentCostUSD = add(b.EquivalentCostUSD, cost)
 		if run.BillingType != "subscription" {

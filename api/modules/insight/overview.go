@@ -73,7 +73,7 @@ func (r *Repository) overviewPeriod(ctx context.Context, repo string, from, to t
 		q = q.Where("ar.repository_id = ?", repo)
 	}
 	var runs []overviewRun
-	if err := q.Select("ar.id, ar.repository_id, ar.wave, ar.model, ar.billing_type, ar.harness, ar.issue_numbers, ar.input_tokens, ar.cached_input_tokens, ar.cache_write_tokens, ar.output_tokens, ar.reasoning_tokens, ar.started_at, ar.ended_at, ar.pr_number").Order("ar.started_at, ar.id").Find(&runs).Error; err != nil {
+	if err := q.Select("ar.id, ar.repository_id, ar.wave, ar.model, ar.billing_type, ar.harness, ar.issue_numbers, ar.input_tokens, ar.cached_input_tokens, ar.cache_write_tokens, ar.output_tokens, ar.reasoning_tokens, ar.cost_usd, ar.started_at, ar.ended_at, ar.pr_number").Order("ar.started_at, ar.id").Find(&runs).Error; err != nil {
 		return OverviewPeriod{}, fmt.Errorf("list overview runs: %w", err)
 	}
 	prices, err := r.loadPrices(ctx, organizationFromContext(ctx))
@@ -137,6 +137,10 @@ func (r *Repository) addOverviewUsage(out *OverviewPeriod, row overviewRun, run 
 	out.CacheReadTokens += run.CachedInputTokens
 	out.CacheWriteTokens += run.CacheWriteTokens
 	*denom += run.InputTokens + run.CachedInputTokens
+	if run.CostUSD != nil {
+		out.SpendUSD = add(out.SpendUSD, *run.CostUSD)
+		return
+	}
 	p, ok := priceAt(prices, run.Model, at)
 	if !ok {
 		if !(*seenMissing)[run.Model] {

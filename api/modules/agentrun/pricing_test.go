@@ -110,8 +110,8 @@ func TestAggregateHistoricalSeparatesSubscriptionBilledZeroFromEquivalentAPI(t *
 	harness := "codex"
 	sessionAPI, sessionSub := "api-session", "sub-session"
 	rows := sqlmock.NewRows([]string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "pr_number", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "cost_usd", "started_at", "ended_at", "created_at", "updated_at", "harness", "session_id", "billing_type"}).
-		AddRow("a1000000-0000-0000-0000-000000000001", "b1000000-0000-0000-0000-000000000001", "W10", "worker", "model-a", []byte("[63]"), nil, 100, 0, 0, 100, 0, nil, started, started, started, started, harness, sessionAPI, "api").
-		AddRow("a1000000-0000-0000-0000-000000000002", "b1000000-0000-0000-0000-000000000001", "W10", "worker", "model-a", []byte("[63]"), nil, 100, 0, 0, 100, 0, nil, started, started, started, started, harness, sessionSub, "subscription")
+		AddRow("a1000000-0000-0000-0000-000000000001", "b1000000-0000-0000-0000-000000000001", "W10", "worker", "model-a", []byte("[63]"), nil, 100, 0, 0, 100, 0, 2.0, started, started, started, started, harness, sessionAPI, "api").
+		AddRow("a1000000-0000-0000-0000-000000000002", "b1000000-0000-0000-0000-000000000001", "W10", "worker", "model-a", []byte("[63]"), nil, 100, 0, 0, 100, 0, 12.4, started, started, started, started, harness, sessionSub, "subscription")
 	mock.ExpectQuery(`SELECT .* FROM "agent_runs"`).WithArgs("org-a").WillReturnRows(rows)
 	priceQuery := regexp.QuoteMeta(`SELECT * FROM "agent_run_price_versions" WHERE organization_id = $1 AND model = $2 AND effective_date <= $3 ORDER BY effective_date DESC,"agent_run_price_versions"."id" LIMIT $4`)
 	priceRow := sqlmock.NewRows([]string{"id", "organization_id", "model", "effective_date", "input_per_million", "cached_input_per_million", "cache_write_per_million", "output_per_million", "reasoning_per_million", "created_at", "updated_at"}).AddRow("a1000000-0000-0000-0000-000000000010", "org-a", "model-a", mustDate(t, "2026-04-01"), 1, 0, 0, 2, 0, started, started)
@@ -121,9 +121,9 @@ func TestAggregateHistoricalSeparatesSubscriptionBilledZeroFromEquivalentAPI(t *
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].EquivalentCostUSD)
-	require.InDelta(t, 0.0006, *got[0].EquivalentCostUSD, 1e-12)
+	require.InDelta(t, 14.4, *got[0].EquivalentCostUSD, 1e-12)
 	require.NotNil(t, got[0].BilledCostUSD)
-	require.InDelta(t, 0.0003, *got[0].BilledCostUSD, 1e-12)
+	require.InDelta(t, 2.0, *got[0].BilledCostUSD, 1e-12)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
