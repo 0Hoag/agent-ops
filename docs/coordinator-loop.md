@@ -119,7 +119,7 @@ One pass:
    on; report `AUTOPILOT: STOP` only when nothing else is runnable.
    **Escalation run (owner 10/11: three stuck chains stopped the loop and asked for more budget):** a unit whose
    recovery ended without a green PR gets ONE escalation run instead of an owner question: wave `<wave>-esc`,
-   `AGENT_RUN_MODEL=openai/gpt-6.1-sol`, unguarded `scripts/spawn.sh <log> <worker script> ...` (the recovery
+    `AGENT_RUN_MODEL=openai/gpt-6-luna`, unguarded `scripts/spawn.sh <log> <worker script> ...` (the recovery
    reservation is not touched). The brief is self-contained: red PR, failing CI log excerpt, preserved branch, one goal.
    For a failing correctness check, first decide whether the product or the test is wrong; never weaken the test.
    One escalation per issue chain. If it fails, mark `status:blocked`, comment why, and continue with other work.
