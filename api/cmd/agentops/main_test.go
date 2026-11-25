@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -215,6 +217,78 @@ func TestRunPreservesSubscriptionBillingType(t *testing.T) {
 	}
 	if payload["billing_type"] != "subscription" {
 		t.Fatalf("billing_type=%v, want subscription", payload["billing_type"])
+	}
+}
+
+func TestRunHookSelectsOnlyReferencedSessionAndSendsMetadata(t *testing.T) {
+	root := t.TempDir()
+	transcriptPath := filepath.Join(root, "session.jsonl")
+	contents := `{"type":"assistant","uuid":"u1","sessionId":"target","timestamp":"2026-10-27T00:00:00Z","message":{"model":"claude-sonnet","content":"PRIVATE PROMPT","usage":{"input_tokens":11,"output_tokens":7,"cache_read_input_tokens":3}}}
+{"type":"assistant","uuid":"u2","sessionId":"other","message":{"model":"other","content":"PRIVATE OTHER","usage":{"input_tokens":999}}}
+`
+	if err := os.WriteFile(transcriptPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var payloads []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payloads = append(payloads, string(body))
+		if r.URL.Path != "/runs" {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"run-1"}}`))
+	}))
+	defer server.Close()
+	oldToken := os.Getenv("AGENT_RUN_TOKEN")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	event := fmt.Sprintf(`{"hook_event_name":"Stop","session_id":"target","transcript_path":%q,"cwd":%q}`, transcriptPath, root)
+	for i := 0; i < 2; i++ {
+		if err := runHook([]string{"--endpoint", server.URL + "/runs", "--repository-id", "repo-1", "--wave", "W21e", "--worker", "hook", "--model", "fallback", "--branch", "feature/hook"}, strings.NewReader(event), server.Client()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(payloads) != 4 {
+		t.Fatalf("requests=%d, want two run/timeline pairs", len(payloads))
+	}
+	for _, body := range payloads {
+		if strings.Contains(body, "PRIVATE") || strings.Contains(body, "other") {
+			t.Fatalf("transcript content leaked: %s", body)
+		}
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(payloads[0]), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["repository_id"] != "repo-1" || got["harness"] != "claude" || got["session_id"] != "target" || got["input_tokens"] != float64(11) || got["cached_input_tokens"] != float64(3) || got["output_tokens"] != float64(7) {
+		t.Fatalf("payload=%v", got)
+	}
+}
+
+func TestRunHookRejectsInvalidSelection(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "session.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"assistant","uuid":"u","sessionId":"actual","message":{"model":"m","usage":{"input_tokens":1}}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldToken := os.Getenv("AGENT_RUN_TOKEN")
+	t.Cleanup(func() { _ = os.Setenv("AGENT_RUN_TOKEN", oldToken) })
+	_ = os.Setenv("AGENT_RUN_TOKEN", "token")
+	valid := func(extra string) string {
+		return fmt.Sprintf(`{"session_id":"wanted","transcript_path":%q,"cwd":%q%s}`, path, root, extra)
+	}
+	for name, input := range map[string]string{"missing session": fmt.Sprintf(`{"transcript_path":%q,"cwd":%q}`, path, root), "mismatched session": valid(""), "malformed": "{"} {
+		t.Run(name, func(t *testing.T) {
+			err := runHook([]string{"--endpoint", "http://127.0.0.1:1", "--repository-id", "repo", "--wave", "W", "--worker", "w"}, strings.NewReader(input), http.DefaultClient)
+			if err == nil {
+				t.Fatal("expected hook validation error")
+			}
+		})
 	}
 }
 

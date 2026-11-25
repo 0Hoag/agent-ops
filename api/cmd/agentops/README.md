@@ -30,3 +30,7 @@ The checkpoint contains file size/mtime and SHA-256 digests of normalized sessio
 atomically after all changed files submit successfully, so an incomplete trailing JSONL record remains retryable
 and a restarted watcher resubmits no unchanged session. The API upsert preserves one cumulative row per
 repository, harness, and session ID. Use synthetic fixtures for tests; do not inspect private Claude transcripts.
+
+`agentops hook` reads a Claude `Stop` hook event from stdin, validates its `session_id`, `transcript_path`, and
+`cwd`, and submits only that session. It uses the same `AGENT_RUN_*` variables as `push`; failures are written to
+stderr and return a non-zero status.
