@@ -66,17 +66,14 @@ func (s *Service) SyncAll(ctx context.Context) error {
 	return first
 }
 func (s *Service) syncOne(ctx context.Context, r *store.Repository) error {
-	token, secret := r.BackfillTokenCiphertext, r.WebhookSecretCiphertext
+	token := r.BackfillTokenCiphertext
 	if s.sealer == nil {
 		return fmt.Errorf("repository encryption is not configured")
 	}
 	if token, _ = s.sealer.Open(token); token == "" {
 		return fmt.Errorf("repository token is not configured")
 	}
-	if secret, _ = s.sealer.Open(secret); secret == "" {
-		return fmt.Errorf("repository webhook secret is not configured")
-	}
-	p, err := s.providers.Build(r.Provider, scm.Config{Token: token, WebhookSecret: secret, APIBaseURL: r.GitLabBaseURL})
+	p, err := s.providers.Build(r.Provider, scm.Config{Token: token, APIBaseURL: r.GitLabBaseURL})
 	if err != nil {
 		return err
 	}

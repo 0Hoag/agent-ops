@@ -54,6 +54,7 @@ func TestSyncFailureStoresAndReturnsOnlySafeError(t *testing.T) {
 
 func TestSyncSuccessPersistsSuccessfulStatus(t *testing.T) {
 	service, mock, repository := syncFixture(t, nil)
+	repository.WebhookSecretCiphertext = ""
 	expectRepositoryGet(mock, repository)
 	mock.ExpectBegin()
 	mock.ExpectExec(`UPDATE "repositories"`).
@@ -61,6 +62,21 @@ func TestSyncSuccessPersistsSuccessfulStatus(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	require.NoError(t, service.Sync(context.Background(), repository.ID))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestSyncRequiresBackfillToken(t *testing.T) {
+	service, mock, repository := syncFixture(t, nil)
+	repository.BackfillTokenCiphertext = ""
+	expectRepositoryGet(mock, repository)
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "repositories"`).
+		WithArgs("provider sync failed", "error", nil, sqlmock.AnyArg(), repository.ID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err := service.Sync(context.Background(), repository.ID)
+	require.EqualError(t, err, "provider sync failed")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -94,13 +110,11 @@ func syncFixture(t *testing.T, providerError error) (*Service, sqlmock.Sqlmock, 
 	require.NoError(t, err)
 	token, err := sealer.Seal("bearer-test-secret")
 	require.NoError(t, err)
-	secret, err := sealer.Seal("webhook-test-secret")
-	require.NoError(t, err)
-	repository := &store.Repository{ID: "11111111-1111-1111-1111-111111111111", OrganizationID: "22222222-2222-2222-2222-222222222222", Provider: "test", FullName: "acme/app", BackfillTokenCiphertext: token, WebhookSecretCiphertext: secret, GitLabBaseURL: "https://url-user:url-password@example.test"}
+	repository := &store.Repository{ID: "11111111-1111-1111-1111-111111111111", OrganizationID: "22222222-2222-2222-2222-222222222222", Provider: "test", FullName: "acme/app", BackfillTokenCiphertext: token, GitLabBaseURL: "https://url-user:url-password@example.test"}
 	providers := builder.NewRegistry()
 	require.NoError(t, providers.Register("test", func(config scm.Config) scm.SCMProvider {
 		require.Equal(t, "bearer-test-secret", config.Token)
-		require.Equal(t, "webhook-test-secret", config.WebhookSecret)
+		require.Empty(t, config.WebhookSecret)
 		require.Equal(t, repository.GitLabBaseURL, config.APIBaseURL)
 		return backfillProvider{err: providerError}
 	}))
