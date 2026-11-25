@@ -89,14 +89,15 @@ jobs:
   vulncheck:
     name: Vulnerabilities (informational)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Run govulncheck (findings are informational)
+        continue-on-error: true
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
         working-directory: api
 
   pr-gate:
