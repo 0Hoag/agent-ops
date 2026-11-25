@@ -42,7 +42,7 @@ func TestPostgresDetailKeepsRequestedIdentityAndTenant(t *testing.T) {
 	otherRepoID := "00000000-0000-0000-0000-000000000012"
 	require.NoError(t, db.Exec("INSERT INTO organizations (id, name) VALUES (?, ?), (?, ?)", orgID, "owner", otherOrgID, "other").Error)
 	gitlabRepoID := "00000000-0000-0000-0000-000000000013"
-	require.NoError(t, db.Exec("INSERT INTO repositories (id, organization_id, provider, full_name, webhook_secret_env_ref, gitlab_base_url) VALUES (?, ?, 'github', 'fixture/owned', 'TEST_SECRET', ''), (?, ?, 'github', 'fixture/other', 'TEST_SECRET', ''), (?, ?, 'gitlab', 'w19/pages', 'TEST_SECRET', 'https://gitlab.example.invalid/')", repoID, orgID, otherRepoID, otherOrgID, gitlabRepoID, orgID).Error)
+	require.NoError(t, db.Exec("INSERT INTO repositories (id, organization_id, provider, full_name, webhook_secret_env_ref, git_lab_base_url) VALUES (?, ?, 'github', 'fixture/owned', 'TEST_SECRET', ''), (?, ?, 'github', 'fixture/other', 'TEST_SECRET', ''), (?, ?, 'gitlab', 'w19/pages', 'TEST_SECRET', 'https://gitlab.example.invalid/')", repoID, orgID, otherRepoID, otherOrgID, gitlabRepoID, orgID).Error)
 	require.NoError(t, db.Exec("INSERT INTO agent_run_price_versions (id, organization_id, model, effective_date, input_per_million, cached_input_per_million, cache_write_per_million, output_per_million, reasoning_per_million) VALUES (?, ?, 'model', ?, 100, 100, 100, 100, 100)", uuid.NewString(), orgID, "2026-01-01").Error)
 	created := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	for _, number := range []int{1, 320} {

@@ -47,7 +47,7 @@ UNION ALL SELECT 'issue', i.number, i.title, i.state, '', i.created_at, i.update
 SELECT x.kind, x.number, x.title,
  CASE repo.provider
   WHEN 'github' THEN 'https://github.com/' || repo.full_name || CASE WHEN x.kind='pr' THEN '/pull/' ELSE '/issues/' END || x.number::text
-  WHEN 'gitlab' THEN regexp_replace(COALESCE(NULLIF(repo.gitlab_base_url,''),'https://gitlab.com'), '/+$', '') || '/' || repo.full_name || '/-/' || CASE WHEN x.kind='pr' THEN 'merge_requests/' ELSE 'issues/' END || x.number::text
+  WHEN 'gitlab' THEN regexp_replace(COALESCE(NULLIF(repo.git_lab_base_url,''),'https://gitlab.com'), '/+$', '') || '/' || repo.full_name || '/-/' || CASE WHEN x.kind='pr' THEN 'merge_requests/' ELSE 'issues/' END || x.number::text
   ELSE '' END AS url,
  '' AS author, x.state, x.ci_status, x.created_at, x.updated_at,
  COALESCE(a.runs_count,0) runs_count, a.cost_usd, COALESCE(a.tokens,0) tokens,
