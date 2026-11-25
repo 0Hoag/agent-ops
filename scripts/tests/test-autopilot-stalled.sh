@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
     repo = tmp / 'repo'
     scripts = repo / 'scripts'
     scripts.mkdir(parents=True)
+    (repo / 'opencode.json').write_text(json.dumps({'model':'openai/gpt-6-luna'}))
     for name in ('autopilot.sh', 'autopilot-state.sh', 'spawn.sh', 'autopilot-snapshot.py', 'periodic-verification.sh'):
         shutil.copy2(source / 'scripts' / name, scripts / name)
     sp.run(['git', 'init', '-q', str(repo)], check=True)
@@ -37,6 +38,7 @@ with tempfile.TemporaryDirectory(prefix='autopilot-test-') as temp:
     executable(bin / 'opencode', '''#!/usr/bin/env python3
 import json, os, pathlib, sys
 p=pathlib.Path(os.environ['PASSES'])
+pathlib.Path(os.environ['MODEL_ARGS']).write_text(' '.join(sys.argv[1:]))
 n=int(p.read_text())+1 if p.exists() else 1
 p.write_text(str(n))
 c=os.environ['CASE']
@@ -90,7 +92,7 @@ print(json.dumps(data))
 ''')
     env = dict(os.environ, PATH=str(bin)+os.pathsep+os.environ['PATH'], REAL_JQ=shutil.which('jq'),
                REPOS='fixture/repo', RUN_DIRS=str(tmp/'none'), INTERVAL='1', POLL='1',
-               MIN_GAP='0', MERGE_EVERY='100', STALL_SLEEP='2', LIVE_PID=str(os.getpid()))
+               MIN_GAP='0', MERGE_EVERY='100', STALL_SLEEP='2', LIVE_PID=str(os.getpid()), MODEL_ARGS=str(tmp/'model-args'))
     env.pop('AUTOPILOT_REQUIRED_TOOLS', None)
     env.pop('AUTOPILOT_PREFLIGHT_PROBE', None)
     def run_case(case, expected, diagnostic):
@@ -105,6 +107,8 @@ print(json.dumps(data))
             raise AssertionError(case+': bounded STALLED guard failed: infinite idle wait')
         print('CASE',case,'exit',p.returncode,'\n'+p.stdout)
         check(p.returncode==expected and diagnostic in p.stdout, case+': intended behavior missing')
+        if case == 'blocked':
+            check('--model openai/gpt-6-luna' in (tmp/'model-args').read_text(), 'configured model must reach opencode run')
         if case=='quota': check((tmp/'sleeps').read_text().splitlines()==['900'], 'quota: exact 15-minute retry')
         if case=='blocked':
             check((tmp/'sleeps').read_text().splitlines()==['1','2'], 'blocked: one poll sleep and one stall sleep before fingerprint wake')

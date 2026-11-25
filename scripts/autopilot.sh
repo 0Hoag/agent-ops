@@ -18,6 +18,10 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 . scripts/autopilot-state.sh
 autopilot_preflight opencode || exit 2
+model=$(jq -er '.model | strings | select(test("^[^/[:space:]]+/[^/[:space:]]+$"))' opencode.json) || {
+  echo 'autopilot: opencode.json must define a valid model' >&2
+  exit 2
+}
 pass_cleanup() { scripts/docker-pass-cleanup.sh; }
 trap pass_cleanup EXIT
 interval=${INTERVAL:-600}
@@ -193,7 +197,7 @@ while true; do
   pre=$(results_stamp)
   python3 scripts/autopilot-snapshot.py "$dir" $REPOS || exit 2
   # opencode v2 dropped --command/--attach/--dir: the prompt carries the instruction, cwd is the repo root.
-  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run \
+  OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 opencode run --model "$model" \
     --format json \
     --title "autopilot $ts" \
     "You are the Coordinator + PM. Do exactly one pass of the loop in docs/coordinator-loop.md (read it fully once), then end your turn with the report format it describes. Do not load the orchestrator-workers skill or its references. Do not list .agent-runs/coordinator/. Read ROADMAP.md only when planning new issues. Fetch issue bodies/comments only for issues acted on in this pass. Batch several gh commands per shell call. Use the inline snapshot for sync inventory; read the status board body separately. Do not read whole JSONL transcripts. Do not sleep or wait for workers; the shell calls you again.
