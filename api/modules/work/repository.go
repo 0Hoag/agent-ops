@@ -44,10 +44,15 @@ UNION ALL SELECT 'issue', i.number, i.title, i.state, '', i.created_at, i.update
  WHERE ar.repository_id=? AND repo.organization_id=?
 	 GROUP BY ar.repository_id, ar.kind, ar.number
 )
-SELECT x.kind, x.number, x.title, '' AS url, '' AS author, x.state, x.ci_status, x.created_at, x.updated_at,
+SELECT x.kind, x.number, x.title,
+ CASE repo.provider
+  WHEN 'github' THEN 'https://github.com/' || repo.full_name || CASE WHEN x.kind='pr' THEN '/pull/' ELSE '/issues/' END || x.number::text
+  WHEN 'gitlab' THEN regexp_replace(COALESCE(NULLIF(repo.git_lab_base_url,''),'https://gitlab.com'), '/+$', '') || '/' || repo.full_name || '/-/' || CASE WHEN x.kind='pr' THEN 'merge_requests/' ELSE 'issues/' END || x.number::text
+  ELSE '' END AS url,
+ '' AS author, x.state, x.ci_status, x.created_at, x.updated_at,
  COALESCE(a.runs_count,0) runs_count, a.cost_usd, COALESCE(a.tokens,0) tokens,
  GREATEST(x.updated_at, COALESCE(a.last_activity,x.updated_at)) last_activity
-FROM work x LEFT JOIN run_costs a ON a.repository_id=x.repository_id AND a.kind=x.kind AND a.number=x.number
+FROM work x JOIN repositories repo ON repo.id=x.repository_id LEFT JOIN run_costs a ON a.repository_id=x.repository_id AND a.kind=x.kind AND a.number=x.number
 WHERE EXISTS (SELECT 1 FROM repositories WHERE id=x.repository_id AND organization_id=?)`
 	args := []any{id, id, id, org(ctx), org(ctx)}
 	if kind != "" {

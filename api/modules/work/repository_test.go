@@ -96,6 +96,9 @@ func TestWorkQueryAttributesSessionsByKindAndNumber(t *testing.T) {
 	require.Contains(t, listSQL, "a.kind=x.kind AND a.number=x.number")
 	require.NotContains(t, listSQL, "a.pr_number IS NULL")
 	require.Contains(t, listSQL, "CASE WHEN COUNT(ar.cost_usd) = COUNT(*) THEN SUM(ar.cost_usd) END cost_usd")
+	require.Contains(t, listSQL, "https://github.com/' || repo.full_name")
+	require.Contains(t, listSQL, "https://gitlab.com")
+	require.Contains(t, listSQL, "merge_requests/")
 
 	where, args := runAttribution("issue", "repo-a", 10)
 	require.Equal(t, "repository_id=? AND issue_numbers @> ?::jsonb", where)
