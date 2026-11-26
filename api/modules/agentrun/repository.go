@@ -12,14 +12,14 @@ import (
 type Repository struct{ db *gorm.DB }
 
 func (r *Repository) PRNumberByBranch(ctx context.Context, repositoryID, branch string) (*int64, error) {
-	var row struct{ Number int64 }
-	if err := r.db.WithContext(ctx).Table("pull_requests").Select("number").Where("repository_id = ? AND branch = ?", repositoryID, branch).Order("number DESC").First(&row).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		}
+	var matches []struct{ Number int64 }
+	if err := r.db.WithContext(ctx).Table("pull_requests").Select("number").Where("repository_id = ? AND branch = ? AND state = ?", repositoryID, branch, "open").Order("number DESC").Limit(2).Find(&matches).Error; err != nil {
 		return nil, fmt.Errorf("find pull request by branch: %w", err)
 	}
-	return &row.Number, nil
+	if len(matches) != 1 {
+		return nil, nil
+	}
+	return &matches[0].Number, nil
 }
 
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }

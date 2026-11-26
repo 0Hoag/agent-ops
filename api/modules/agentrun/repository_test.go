@@ -119,3 +119,52 @@ func TestAggregateUnknownCostIsOrderIndependent(t *testing.T) {
 		})
 	}
 }
+
+func TestPRNumberByBranchOnlyLinksOneOpenRequestInRepository(t *testing.T) {
+	repositoryID := "repo-a"
+	branch := "reviews/development"
+	for _, tc := range []struct {
+		name string
+		rows *sqlmock.Rows
+		want *int64
+	}{
+		{
+			name: "closed-only candidate is ignored",
+			// The repository has an exact-branch MR, but its stored state is merged.
+			// The resolver must query only open MRs, so that candidate cannot link.
+			rows: sqlmock.NewRows([]string{"number"}),
+		},
+		{
+			name: "one open match is linked",
+			rows: sqlmock.NewRows([]string{"number"}).AddRow(int64(109)),
+			want: ptr(int64(109)),
+		},
+		{
+			name: "ambiguous open matches are not linked",
+			rows: sqlmock.NewRows([]string{"number"}).AddRow(int64(112)).AddRow(int64(111)),
+		},
+		{
+			name: "matching branch in another repository is not linked",
+			rows: sqlmock.NewRows([]string{"number"}),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
+			require.NoError(t, err)
+
+			mock.ExpectQuery(`SELECT .* FROM "pull_requests" WHERE repository_id = \$1 AND branch = \$2 AND state = \$3 ORDER BY number DESC LIMIT \$4`).
+				WithArgs(repositoryID, branch, "open", 2).
+				WillReturnRows(tc.rows)
+
+			got, err := NewRepository(db).PRNumberByBranch(context.Background(), repositoryID, branch)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func ptr(value int64) *int64 { return &value }
