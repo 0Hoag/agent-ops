@@ -28,6 +28,8 @@ definitions:
         type: array
       model:
         type: string
+      organization_id:
+        type: string
       output_tokens:
         type: integer
       pr_number:
@@ -128,7 +130,6 @@ definitions:
     required:
     - ended_at
     - model
-    - repository_id
     - started_at
     - wave
     - worker

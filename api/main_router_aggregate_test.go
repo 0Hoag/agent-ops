@@ -42,9 +42,9 @@ func TestProductionRouterAuthenticatedHistoricalAggregateIsOrganizationScoped(t 
 
 	expectAggregate := func(org, account, repo, model string, input, output int64, inputRate, outputRate float64, issue int64, expectedCost string) {
 		mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2`)).WithArgs(org, account).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
-		list := `SELECT .* FROM "agent_runs" JOIN repositories ON repositories.id = agent_runs.repository_id WHERE repositories.organization_id = \$1 AND repository_id = \$2 ORDER BY`
+		list := `SELECT .* FROM "agent_runs" WHERE agent_runs.organization_id = \$1 AND repository_id = \$2 ORDER BY`
 		if repo == "" {
-			list = `SELECT .* FROM "agent_runs" JOIN repositories ON repositories.id = agent_runs.repository_id WHERE repositories.organization_id = \$1 ORDER BY`
+			list = `SELECT .* FROM "agent_runs" WHERE agent_runs.organization_id = \$1 ORDER BY`
 		}
 		rows := sqlmock.NewRows(runColumns)
 		if issue != 0 {
@@ -73,7 +73,7 @@ func TestProductionRouterAuthenticatedHistoricalAggregateIsOrganizationScoped(t 
 	expectAggregate(orgB, accountB, "", "model-b", 2, 2, 100, 100, 2, "0.0004")
 	// The repository predicate remains present alongside the organization predicate.
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT count(*) FROM "organization_memberships" WHERE organization_id = $1 AND account_id = $2`)).WithArgs(orgA, accountA).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
-	mock.ExpectQuery(`SELECT .* FROM "agent_runs" JOIN repositories ON repositories.id = agent_runs.repository_id WHERE repositories.organization_id = \$1 AND repository_id = \$2 ORDER BY`).WithArgs(orgA, repoB).WillReturnRows(sqlmock.NewRows(runColumns))
+	mock.ExpectQuery(`SELECT .* FROM "agent_runs" WHERE agent_runs.organization_id = \$1 AND repository_id = \$2 ORDER BY`).WithArgs(orgA, repoB).WillReturnRows(sqlmock.NewRows(runColumns))
 	assertJSON(t, router.URL+"/api/v1/agent-runs/aggregate?repository_id="+repoB, tenantRouterToken(t, secret, accountA, orgA), http.StatusOK, `"data":[]`)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

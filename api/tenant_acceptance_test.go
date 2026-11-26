@@ -144,9 +144,9 @@ INSERT INTO pipeline_runs (id,repository_id,external_id,pr_number,sha,status,con
 INSERT INTO agent_run_price_versions (id,organization_id,model,effective_date,input_per_million,cached_input_per_million,cache_write_per_million,output_per_million,reasoning_per_million) VALUES
 ('d7000000-0000-4000-8000-000000000081','d7000000-0000-4000-8000-000000000001','known','2026-01-01',1,0,0,1,0),
 ('d7000000-0000-4000-8000-000000000082','d7000000-0000-4000-8000-000000000002','known','2026-01-01',100,0,0,100,0);
-INSERT INTO agent_runs (id,repository_id,wave,worker,model,issue_numbers,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at) VALUES
-('d7000000-0000-4000-8000-000000000071','d7000000-0000-4000-8000-000000000011','W7','a','known','[7001]',1,0,0,1,0,now(),now()),
-('d7000000-0000-4000-8000-000000000072','d7000000-0000-4000-8000-000000000012','W7','b','known','[7002]',2,0,0,2,0,now(),now());`
+INSERT INTO agent_runs (id,repository_id,organization_id,wave,worker,model,issue_numbers,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at) VALUES
+('d7000000-0000-4000-8000-000000000071','d7000000-0000-4000-8000-000000000011','d7000000-0000-4000-8000-000000000001','W7','a','known','[7001]',1,0,0,1,0,now(),now()),
+('d7000000-0000-4000-8000-000000000072','d7000000-0000-4000-8000-000000000012','d7000000-0000-4000-8000-000000000002','W7','b','known','[7002]',2,0,0,2,0,now(),now());`
 	require.NoError(t, db.Exec(q).Error)
 }
 

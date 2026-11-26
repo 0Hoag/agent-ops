@@ -29,11 +29,18 @@ type createdRun struct {
 }
 
 func (s submitter) submit(ctx context.Context, session transcript.Session) error {
-	branch, err := s.branchFor(session)
-	if err != nil {
-		return err
+	branch := ""
+	if s.repository != "" {
+		var err error
+		branch, err = s.branchFor(session)
+		if err != nil {
+			return err
+		}
 	}
-	p := map[string]any{"repository_id": s.repository, "wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch, "billing_type": s.billingType}
+	p := map[string]any{"wave": s.wave, "worker": s.worker, "model": session.Model, "issue_numbers": s.issues, "input_tokens": session.Usage.Input, "cached_input_tokens": session.Usage.CachedInput, "cache_write_tokens": session.Usage.CacheWrite, "output_tokens": session.Usage.Output, "reasoning_tokens": session.Usage.Reasoning, "started_at": session.Started, "ended_at": session.Ended, "harness": s.harness, "session_id": session.ID, "branch": branch, "billing_type": s.billingType}
+	if s.repository != "" {
+		p["repository_id"] = s.repository
+	}
 	b, err := json.Marshal(p)
 	if err != nil {
 		return err

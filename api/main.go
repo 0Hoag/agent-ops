@@ -214,6 +214,7 @@ func registerRoutesWithRuntime(router *gin.Engine, db database.Pinger, gormDB *g
 	}
 	// Agent ingestion uses its dedicated machine token; it must not require an interactive user session.
 	runController := agentrun.NewControllerWithConfiguredRepositories(agentrun.NewRepository(gormDB), cfg.AgentRunToken, prices, configuredRepositories)
+	runController.SetOrganizationID(cfg.AgentRunOrganizationID)
 	runController.SetExchangeRateVND(cfg.ExchangeRateVNDPerUSD)
 	runRoutes := agentrun.NewRoutes(runController)
 	runRoutes.Register(router.Group("/api/v1"))

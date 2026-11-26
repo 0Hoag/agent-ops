@@ -18,7 +18,7 @@ func (r *Runtime) budgetObservations(ctx context.Context, repo struct{ ID, Organ
 		if now.Before(limit.StartsAt) || !now.Before(limit.EndsAt) || (limit.RepositoryID != nil && string(*limit.RepositoryID) != repo.ID) {
 			continue
 		}
-		query := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND ar.started_at >= ? AND ar.started_at < ?", repo.OrganizationID, limit.StartsAt, limit.EndsAt)
+		query := r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.organization_id = ? AND ar.started_at >= ? AND ar.started_at < ?", repo.OrganizationID, limit.StartsAt, limit.EndsAt)
 		if limit.RepositoryID != nil {
 			query = query.Where("ar.repository_id = ?", repo.ID)
 		}

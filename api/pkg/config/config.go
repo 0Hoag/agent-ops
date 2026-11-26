@@ -11,23 +11,24 @@ import (
 )
 
 type Config struct {
-	HTTPAddr              string
-	DatabaseURL           string
-	LogLevel              string
-	CORSOrigins           []string
-	Repositories          []RepositoryConfig
-	AgentRunToken         string
-	AgentRunModelPrices   map[string]json.RawMessage
-	ExchangeRateVNDPerUSD float64
-	JWTSecret             string
-	JWTExpiration         time.Duration
-	EncryptionKey         []byte
-	WorkerQueueSize       int
-	WorkerConcurrency     int
-	WorkerScriptRoots     []string
-	WorkerWorktreeRoots   []string
-	WorkerScripts         map[string]string
-	SyncInterval          time.Duration
+	HTTPAddr               string
+	DatabaseURL            string
+	LogLevel               string
+	CORSOrigins            []string
+	Repositories           []RepositoryConfig
+	AgentRunToken          string
+	AgentRunOrganizationID string
+	AgentRunModelPrices    map[string]json.RawMessage
+	ExchangeRateVNDPerUSD  float64
+	JWTSecret              string
+	JWTExpiration          time.Duration
+	EncryptionKey          []byte
+	WorkerQueueSize        int
+	WorkerConcurrency      int
+	WorkerScriptRoots      []string
+	WorkerWorktreeRoots    []string
+	WorkerScripts          map[string]string
+	SyncInterval           time.Duration
 }
 
 type RepositoryConfig struct {
@@ -42,15 +43,16 @@ type RepositoryConfig struct {
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	cfg := Config{
-		HTTPAddr:        envOr("HTTP_ADDR", ":8080"),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		LogLevel:        envOr("LOG_LEVEL", "info"),
-		CORSOrigins:     splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
-		AgentRunToken:   os.Getenv("AGENT_RUN_TOKEN"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTExpiration:   24 * time.Hour,
-		EncryptionKey:   []byte(os.Getenv("REPOSITORY_ENCRYPTION_KEY")),
-		WorkerQueueSize: 16, WorkerConcurrency: 1,
+		HTTPAddr:               envOr("HTTP_ADDR", ":8080"),
+		DatabaseURL:            os.Getenv("DATABASE_URL"),
+		LogLevel:               envOr("LOG_LEVEL", "info"),
+		CORSOrigins:            splitCSV(envOr("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")),
+		AgentRunToken:          os.Getenv("AGENT_RUN_TOKEN"),
+		AgentRunOrganizationID: os.Getenv("AGENT_RUN_ORGANIZATION_ID"),
+		JWTSecret:              os.Getenv("JWT_SECRET"),
+		JWTExpiration:          24 * time.Hour,
+		EncryptionKey:          []byte(os.Getenv("REPOSITORY_ENCRYPTION_KEY")),
+		WorkerQueueSize:        16, WorkerConcurrency: 1,
 		WorkerScriptRoots:   splitCSV(envOr("WORKER_SCRIPT_ROOTS", ".")),
 		WorkerWorktreeRoots: splitCSV(envOr("WORKER_WORKTREE_ROOTS", ".")),
 		WorkerScripts:       map[string]string{"codex": "scripts/run-worker.sh", "opencode": "scripts/run-worker-opencode.sh"},

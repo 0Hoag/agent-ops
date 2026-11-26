@@ -42,7 +42,7 @@ func (r *Repository) Delivery(ctx context.Context, f DeliveryFilter) (DeliveryRe
 	org := organizationFromContext(ctx)
 	prq := r.db.WithContext(ctx).Table("pull_requests pr").Joins("JOIN repositories repo ON repo.id = pr.repository_id").Where("repo.organization_id = ? AND pr.created_at >= ? AND pr.created_at < ?", org, *f.From, f.To.Add(24*time.Hour))
 	iq := r.db.WithContext(ctx).Table("issues i").Joins("JOIN repositories repo ON repo.id = i.repository_id").Where("repo.organization_id = ? AND i.created_at >= ? AND i.created_at < ?", org, *f.From, f.To.Add(24*time.Hour))
-	rq := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND ar.started_at >= ? AND ar.started_at < ?", org, *f.From, f.To.Add(24*time.Hour))
+	rq := r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.organization_id = ? AND ar.started_at >= ? AND ar.started_at < ?", org, *f.From, f.To.Add(24*time.Hour))
 	if f.RepositoryID != "" {
 		prq = prq.Where("pr.repository_id = ?", f.RepositoryID)
 		iq = iq.Where("i.repository_id = ?", f.RepositoryID)

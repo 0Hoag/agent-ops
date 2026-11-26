@@ -37,13 +37,24 @@ stderr and return a non-zero status.
 
 ## Claude Code setup
 
-From the intended Git checkout, set `AGENT_RUN_TOKEN` in the environment and install the repo-local hook:
+For sessions started anywhere, including `~` outside a Git checkout, install a user-level hook:
+
+```bash
+agentops setup claude --global [--endpoint <url>]
+```
+
+This writes `~/.claude/settings.json`. The hook reads the active session and transcript path supplied by Claude Code,
+then records local usage under the server's configured organization. It does not require a repository or infer an MR.
+The API uses `AGENT_RUN_ORGANIZATION_ID` when set; if unset, it safely selects the only organization in the database.
+With zero or multiple organizations, configure that server variable. The client never submits an organization ID.
+Set `AGENT_RUN_TOKEN` in the environment inherited by Claude Code. The token is not stored in settings.
+
+For repository-bound ingestion, run setup from that checkout and pass its repository UUID:
 
 ```bash
 agentops setup claude --repository-id <repository-id> --wave <wave> --worker <worker> [--endpoint <url>]
 ```
 
-This writes `.claude/settings.local.json`, which Claude Code loads for this checkout. The Stop hook is asynchronous;
-the command inherits `AGENT_RUN_TOKEN` and never stores it. `--endpoint` defaults to `AGENT_RUN_API_URL`, then
-`http://127.0.0.1:8080/api/v1/agent-runs`. Existing settings and hooks are preserved. Repeat setup is
-safe. Remove only the Agent Ops hook with `agentops setup claude --uninstall`; the file is removed when it becomes empty.
+This writes `.claude/settings.local.json`. Existing settings and hooks are preserved; repeat setup is safe. Remove
+only the Agent Ops hook using `agentops setup claude --global --uninstall` or run the same command from a checkout
+without `--global` to remove the repo-local hook.

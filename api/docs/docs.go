@@ -2739,6 +2739,9 @@ const docTemplate = `{
                 "model": {
                     "type": "string"
                 },
+                "organization_id": {
+                    "type": "string"
+                },
                 "output_tokens": {
                     "type": "integer"
                 },
@@ -2834,7 +2837,6 @@ const docTemplate = `{
             "required": [
                 "ended_at",
                 "model",
-                "repository_id",
                 "started_at",
                 "wave",
                 "worker"

@@ -27,7 +27,7 @@ type TimelineInput struct {
 func (r *Repository) Steps(ctx context.Context, id string) ([]RunStep, error) {
 	var out []RunStep
 	var run AgentRun
-	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id=ar.repository_id").Where("ar.id = ? AND repo.organization_id = ?", id, organizationFromContext(ctx))
+	q := r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.id = ? AND ar.organization_id = ?", id, organizationFromContext(ctx))
 	if err := q.First(&run).Error; err != nil {
 		return nil, err
 	}
@@ -61,9 +61,9 @@ func (r *Repository) Steps(ctx context.Context, id string) ([]RunStep, error) {
 func (r *Repository) ReplaceSteps(ctx context.Context, id string, steps []RunStep) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var run AgentRun
-		query := tx.Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("ar.id = ?", id)
+		query := tx.Table("agent_runs ar").Where("ar.id = ?", id)
 		if org := organizationFromContext(ctx); org != "" {
-			query = query.Where("repo.organization_id = ?", org)
+			query = query.Where("ar.organization_id = ?", org)
 		}
 		if err := query.First(&run).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

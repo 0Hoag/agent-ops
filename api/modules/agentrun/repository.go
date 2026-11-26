@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/0Hoag/agent-ops/api/modules/store"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -25,15 +27,59 @@ func (r *Repository) PRNumberByBranch(ctx context.Context, repositoryID, branch 
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 func (r *Repository) Create(ctx context.Context, run *AgentRun) error {
 	q := r.db.WithContext(ctx)
+	if run.RepositoryID != nil {
+		var repositoryOrganization string
+		if err := q.Table("repositories").Select("organization_id").Where("id = ?", *run.RepositoryID).Scan(&repositoryOrganization).Error; err != nil {
+			return fmt.Errorf("resolve run organization: %w", err)
+		}
+		if repositoryOrganization == "" {
+			return fmt.Errorf("repository organization not found")
+		}
+		if run.OrganizationID != "" && string(run.OrganizationID) != repositoryOrganization {
+			return fmt.Errorf("repository organization does not match configured organization")
+		}
+		run.OrganizationID = store.UUID(repositoryOrganization)
+	} else {
+		if run.OrganizationID == "" {
+			var organizations []store.UUID
+			if err := q.Table("organizations").Select("id").Order("id").Limit(2).Scan(&organizations).Error; err != nil {
+				return fmt.Errorf("discover local run organization: %w", err)
+			}
+			if len(organizations) != 1 {
+				return fmt.Errorf("configure AGENT_RUN_ORGANIZATION_ID when there is not exactly one organization")
+			}
+			run.OrganizationID = organizations[0]
+		} else {
+			var count int64
+			if err := q.Table("organizations").Where("id = ?", run.OrganizationID).Count(&count).Error; err != nil {
+				return fmt.Errorf("validate run organization: %w", err)
+			}
+			if count != 1 {
+				return fmt.Errorf("local run organization is not configured")
+			}
+		}
+	}
 	if run.Harness != nil && run.SessionID != nil && *run.Harness != "" && *run.SessionID != "" {
-		q = q.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "repository_id"}, {Name: "harness"}, {Name: "session_id"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "harness <> '' AND session_id <> ''"}}}, DoUpdates: clause.AssignmentColumns([]string{"wave", "worker", "model", "issue_numbers", "pr_number", "branch", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "updated_at"})})
+		conflictColumns := []clause.Column{{Name: "repository_id"}, {Name: "harness"}, {Name: "session_id"}}
+		target := "repository_id IS NOT NULL AND harness <> '' AND session_id <> ''"
+		if run.RepositoryID == nil {
+			conflictColumns = []clause.Column{{Name: "organization_id"}, {Name: "harness"}, {Name: "session_id"}}
+			target = "repository_id IS NULL AND harness <> '' AND session_id <> ''"
+		}
+		q = q.Clauses(clause.OnConflict{Columns: conflictColumns, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: target}}}, DoUpdates: clause.AssignmentColumns([]string{"wave", "worker", "model", "issue_numbers", "pr_number", "branch", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "started_at", "ended_at", "updated_at"})})
 	}
 	if err := q.Create(run).Error; err != nil {
 		return fmt.Errorf("create agent run: %w", err)
 	}
 	if run.Harness != nil && run.SessionID != nil && *run.Harness != "" && *run.SessionID != "" {
 		var persisted AgentRun
-		if err := r.db.WithContext(ctx).Where("repository_id = ? AND harness = ? AND session_id = ?", run.RepositoryID, *run.Harness, *run.SessionID).First(&persisted).Error; err != nil {
+		identity := q.Where("harness = ? AND session_id = ?", *run.Harness, *run.SessionID)
+		if run.RepositoryID == nil {
+			identity = identity.Where("repository_id IS NULL AND organization_id = ?", run.OrganizationID)
+		} else {
+			identity = identity.Where("repository_id = ?", *run.RepositoryID)
+		}
+		if err := identity.First(&persisted).Error; err != nil {
 			return fmt.Errorf("reload persisted agent run: %w", err)
 		}
 		run.ID = persisted.ID
@@ -60,7 +106,7 @@ func (r *Repository) List(ctx context.Context, f Filter) ([]AgentRun, error) {
 func (r *Repository) listQuery(ctx context.Context, f Filter) *gorm.DB {
 	q := r.db.WithContext(ctx).Model(&AgentRun{})
 	if organization := organizationFromContext(ctx); organization != "" {
-		q = q.Joins("JOIN repositories ON repositories.id = agent_runs.repository_id").Where("repositories.organization_id = ?", organization)
+		q = q.Where("agent_runs.organization_id = ?", organization)
 	}
 	if f.RepositoryID != "" {
 		q = q.Where("repository_id = ?", f.RepositoryID)
@@ -109,14 +155,14 @@ func (r *Repository) attachRelations(ctx context.Context, runs []AgentRun) error
 		var nums []int64
 		_ = json.Unmarshal(runs[i].IssueNumbers, &nums)
 		rel := &RunRelations{Issues: []RunIssue{}, PullRequests: []RunPullRequest{}, CI: []RunCI{}}
-		if len(nums) > 0 {
+		if runs[i].RepositoryID != nil && len(nums) > 0 {
 			q := r.db.WithContext(ctx).Table("issues").Select("repository_id,number,title,state,status").Where("repository_id = ?", runs[i].RepositoryID)
 			q = q.Where("number IN ?", nums)
 			if err := q.Order("number ASC").Find(&rel.Issues).Error; err != nil {
 				return err
 			}
 		}
-		if runs[i].PRNumber != nil {
+		if runs[i].RepositoryID != nil && runs[i].PRNumber != nil {
 			if err := r.db.WithContext(ctx).Table("pull_requests").Select("repository_id,number,title,state,head_sha").Where("repository_id = ? AND number = ?", runs[i].RepositoryID, *runs[i].PRNumber).Find(&rel.PullRequests).Error; err != nil {
 				return err
 			}

@@ -115,7 +115,7 @@ func (r *Repository) Analytics(ctx context.Context, f AnalyticsFilter) (Analytic
 	if f.From == nil || f.To == nil || f.To.Before(*f.From) || f.To.Sub(*f.From) > 366*24*time.Hour {
 		return AnalyticsResponse{}, fmt.Errorf("invalid analytics date range")
 	}
-	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND (ar.started_at >= ? AND ar.started_at < ? OR EXISTS (SELECT 1 FROM agent_run_steps ts WHERE ts.run_id = ar.id AND ts.started_at >= ? AND ts.started_at < ?))", organizationFromContext(ctx), *f.From, f.To.Add(24*time.Hour), *f.From, f.To.Add(24*time.Hour))
+	q := r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.organization_id = ? AND (ar.started_at >= ? AND ar.started_at < ? OR EXISTS (SELECT 1 FROM agent_run_steps ts WHERE ts.run_id = ar.id AND ts.started_at >= ? AND ts.started_at < ?))", organizationFromContext(ctx), *f.From, f.To.Add(24*time.Hour), *f.From, f.To.Add(24*time.Hour))
 	if f.RepositoryID != "" {
 		q = q.Where("ar.repository_id = ?", f.RepositoryID)
 	}

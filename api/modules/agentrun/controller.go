@@ -34,6 +34,7 @@ type Controller struct {
 	token           string
 	prices          map[string]Price
 	configured      []string
+	organizationID  string
 	exchangeRateVND float64
 }
 
@@ -50,6 +51,8 @@ func NewController(repository RunRepository, token string, prices map[string]Pri
 func NewControllerWithConfiguredRepositories(repository RunRepository, token string, prices map[string]Price, configured []string) *Controller {
 	return &Controller{repository: repository, token: token, prices: prices, configured: configured}
 }
+
+func (c *Controller) SetOrganizationID(id string) { c.organizationID = id }
 
 // Create persists a validated normalized usage record.
 // @Summary Create an agent run
@@ -72,11 +75,13 @@ func (c *Controller) Create(ctx *gin.Context) {
 		response.BadRequest(ctx, "invalid agent run")
 		return
 	}
-	if _, err := uuid.Parse(in.RepositoryID); err != nil {
-		response.BadRequest(ctx, "invalid repository_id")
-		return
+	if in.RepositoryID != "" {
+		if _, err := uuid.Parse(in.RepositoryID); err != nil {
+			response.BadRequest(ctx, "invalid repository_id")
+			return
+		}
 	}
-	if c.configured != nil {
+	if in.RepositoryID != "" && c.configured != nil {
 		configured, err := c.repository.IsConfiguredRepository(ctx.Request.Context(), in.RepositoryID, c.configured)
 		if err != nil {
 			response.Error(ctx, http.StatusInternalServerError, "failed to validate repository")
@@ -98,7 +103,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 	if in.IssueNumbers == nil {
 		in.IssueNumbers = []int64{}
 	}
-	if in.PRNumber == nil && in.Branch != "" {
+	if in.RepositoryID != "" && in.PRNumber == nil && in.Branch != "" {
 		if resolver, ok := c.repository.(branchPRResolver); ok {
 			var err error
 			in.PRNumber, err = resolver.PRNumberByBranch(ctx.Request.Context(), in.RepositoryID, in.Branch)
@@ -113,9 +118,22 @@ func (c *Controller) Create(ctx *gin.Context) {
 		response.BadRequest(ctx, "invalid issue_numbers")
 		return
 	}
-	run := AgentRun{ID: store.NewUUID(), RepositoryID: store.UUID(in.RepositoryID), Wave: in.Wave, Worker: in.Worker, Model: in.Model, IssueNumbers: b, PRNumber: in.PRNumber, Branch: in.Branch, InputTokens: in.InputTokens, CachedInputTokens: in.CachedInputTokens, CacheWriteTokens: in.CacheWriteTokens, OutputTokens: in.OutputTokens, ReasoningTokens: in.ReasoningTokens, StartedAt: in.StartedAt, EndedAt: in.EndedAt}
+	run := AgentRun{ID: store.NewUUID(), Wave: in.Wave, Worker: in.Worker, Model: in.Model, IssueNumbers: b, PRNumber: in.PRNumber, Branch: in.Branch, InputTokens: in.InputTokens, CachedInputTokens: in.CachedInputTokens, CacheWriteTokens: in.CacheWriteTokens, OutputTokens: in.OutputTokens, ReasoningTokens: in.ReasoningTokens, StartedAt: in.StartedAt, EndedAt: in.EndedAt}
+	if in.RepositoryID != "" {
+		repoID := store.UUID(in.RepositoryID)
+		run.RepositoryID = &repoID
+	} else {
+		run.OrganizationID = store.UUID(c.organizationID)
+	}
 	if in.Harness != "" || in.SessionID != "" {
 		run.Harness, run.SessionID = &in.Harness, &in.SessionID
+	}
+	if in.RepositoryID == "" {
+		run.PRNumber = nil
+		run.Branch = ""
+		in.IssueNumbers = []int64{}
+		b, _ = json.Marshal(in.IssueNumbers)
+		run.IssueNumbers = b
 	}
 	run.BillingType = in.BillingType
 	if run.BillingType == "" {

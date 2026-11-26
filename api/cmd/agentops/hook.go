@@ -40,8 +40,11 @@ func runHook(args []string, input io.Reader, client *http.Client) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("hook reads exactly one event from stdin")
 	}
-	if *repository == "" || *wave == "" || *worker == "" {
-		return fmt.Errorf("--repository-id, --wave, and --worker are required")
+	if *repository != "" && (*wave == "" || *worker == "") {
+		return fmt.Errorf("--wave and --worker are required with --repository-id")
+	}
+	if *repository == "" {
+		*wave, *worker = "local", "claude"
 	}
 	if *billingType != "api" && *billingType != "subscription" {
 		return fmt.Errorf("--billing-type must be api or subscription")
