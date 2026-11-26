@@ -34,6 +34,7 @@ func (a jsonArrayArgument) Match(value driver.Value) bool {
 
 type fakeRepository struct {
 	creates         int
+	created         *AgentRun
 	list            []AgentRun
 	listFilter      Filter
 	aggregates      []Aggregate
@@ -50,7 +51,12 @@ type fakeRepository struct {
 	pageFilter      Filter
 }
 
-func (f *fakeRepository) Create(_ context.Context, _ *AgentRun) error { f.creates++; return f.err }
+func (f *fakeRepository) Create(_ context.Context, run *AgentRun) error {
+	f.creates++
+	copy := *run
+	f.created = &copy
+	return f.err
+}
 func (f *fakeRepository) IsConfiguredRepository(_ context.Context, _ string, _ []string) (bool, error) {
 	if !f.configured {
 		return true, nil
@@ -264,9 +270,10 @@ func TestCreatePersistsIssueNumbersAsJSONArrays(t *testing.T) {
 			db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableAutomaticPing: true})
 			require.NoError(t, err)
 
+			mock.ExpectQuery(`SELECT .*organization_id.*FROM "repositories" WHERE id = \$1`).WithArgs("7e57d004-2b97-0e7a-b45f-5387367791cd").WillReturnRows(sqlmock.NewRows([]string{"organization_id"}).AddRow("00000000-0000-0000-0000-000000000001"))
 			mock.ExpectBegin()
 			mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "agent_runs"`)).
-				WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), jsonArrayArgument(tc.issueNumbers), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+				WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), jsonArrayArgument(tc.issueNumbers), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 				WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectCommit()
 
@@ -283,10 +290,30 @@ func TestCreatePersistsIssueNumbersAsJSONArrays(t *testing.T) {
 			request.Header.Set("X-Agent-Run-Token", "secret")
 			response := httptest.NewRecorder()
 			r.ServeHTTP(response, request)
-			require.Equal(t, http.StatusCreated, response.Code)
+			require.Equal(t, http.StatusCreated, response.Code, response.Body.String())
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func TestCreateLocalRunUsesConfiguredOrganizationAndDropsRepositoryClaims(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &fakeRepository{}
+	controller := NewController(repo, "secret", nil)
+	controller.SetOrganizationID("00000000-0000-0000-0000-000000000001")
+	r := gin.New()
+	r.POST("/", controller.Create)
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"organization_id":"00000000-0000-0000-0000-000000000002","wave":"local","worker":"claude","model":"sonnet","issue_numbers":[42],"pr_number":9,"branch":"main","harness":"claude","session_id":"s1","started_at":"2026-01-01T00:00:00Z","ended_at":"2026-01-01T00:00:01Z"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Agent-Run-Token", "secret")
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	require.Equal(t, http.StatusCreated, response.Code)
+	require.Nil(t, repo.created.RepositoryID)
+	require.Equal(t, "00000000-0000-0000-0000-000000000001", string(repo.created.OrganizationID))
+	require.Nil(t, repo.created.PRNumber)
+	require.Empty(t, repo.created.Branch)
+	require.JSONEq(t, `[]`, string(repo.created.IssueNumbers))
 }
 
 func TestCreateRejectsEmptyConfiguredToken(t *testing.T) {

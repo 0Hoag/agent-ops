@@ -3,7 +3,7 @@ package agentrun
 import "time"
 
 type CreateInput struct {
-	RepositoryID      string    `json:"repository_id" binding:"required"`
+	RepositoryID      string    `json:"repository_id,omitempty"`
 	Wave              string    `json:"wave" binding:"required"`
 	Worker            string    `json:"worker" binding:"required"`
 	Model             string    `json:"model" binding:"required"`

@@ -25,7 +25,7 @@ type claudeCommand struct {
 
 func runSetup(args []string) error {
 	if len(args) < 1 || args[0] != "claude" {
-		return errors.New("usage: agentops setup claude [--endpoint <url>] [--uninstall]")
+		return errors.New("usage: agentops setup claude [--global] [--repository-id <uuid>] [--endpoint <url>] [--uninstall]")
 	}
 	fs := flag.NewFlagSet("setup claude", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -34,23 +34,38 @@ func runSetup(args []string) error {
 	worker := fs.String("worker", "claude-hook", "worker metadata")
 	endpoint := fs.String("endpoint", env("AGENT_RUN_API_URL", "http://127.0.0.1:8080/api/v1/agent-runs"), "agent-run API URL")
 	uninstall := fs.Bool("uninstall", false, "remove the Agent Ops Claude hook")
+	global := fs.Bool("global", false, "install in ~/.claude/settings.json for sessions in any directory")
 	if err := fs.Parse(args[1:]); err != nil {
 		return fmt.Errorf("invalid setup flags")
 	}
-	root, err := gitRoot()
-	if err != nil {
-		return err
+	var root, path string
+	if *global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve home directory: %w", err)
+		}
+		root = home
+		path = filepath.Join(home, ".claude", "settings.json")
+	} else {
+		var err error
+		root, err = gitRoot()
+		if err != nil {
+			return err
+		}
+		path = filepath.Join(root, ".claude", "settings.local.json")
 	}
-	path := filepath.Join(root, ".claude", "settings.local.json")
 	if *uninstall {
 		return editClaudeSettings(path, nil)
 	}
-	if strings.TrimSpace(*repository) == "" {
-		return errors.New("--repository-id or AGENT_RUN_REPOSITORY_ID is required")
+	command := fmt.Sprintf("agentops hook --endpoint %s", shellArg(*endpoint))
+	if strings.TrimSpace(*repository) != "" {
+		command += fmt.Sprintf(" --repository-id %s --wave %s --worker %s", shellArg(*repository), shellArg(*wave), shellArg(*worker))
 	}
-	command := fmt.Sprintf("agentops hook --endpoint %s --repository-id %s --wave %s --worker %s", shellArg(*endpoint), shellArg(*repository), shellArg(*wave), shellArg(*worker))
 	if err := editClaudeSettings(path, &claudeHook{Matcher: "", Hooks: []claudeCommand{{Type: "command", Command: command, Async: true}}}); err != nil {
 		return err
+	}
+	if *global {
+		return nil
 	}
 	return ignoreLocalClaudeSettings(root)
 }

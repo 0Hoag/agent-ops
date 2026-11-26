@@ -8,7 +8,8 @@ import (
 
 type AgentRun struct {
 	ID                store.UUID    `gorm:"type:uuid;primaryKey" json:"id"`
-	RepositoryID      store.UUID    `gorm:"type:uuid;not null;index" json:"repository_id"`
+	RepositoryID      *store.UUID   `gorm:"type:uuid;index" json:"repository_id,omitempty"`
+	OrganizationID    store.UUID    `gorm:"type:uuid;not null;index" json:"organization_id"`
 	Wave              string        `gorm:"not null;index" json:"wave"`
 	Worker            string        `gorm:"not null;index" json:"worker"`
 	Model             string        `gorm:"not null" json:"model"`

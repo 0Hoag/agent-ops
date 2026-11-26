@@ -195,3 +195,28 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return b
 }
+
+func TestClaudeGlobalSetupWorksOutsideGitCheckoutWithoutRepository(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	working := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(working); err != nil {
+		t.Fatal(err)
+	}
+	if err := runSetup([]string{"claude", "--global"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".claude", "settings.json")
+	contents := string(mustRead(t, path))
+	if strings.Contains(contents, "repository-id") {
+		t.Fatalf("global local hook unexpectedly binds repository: %s", contents)
+	}
+	if !strings.Contains(contents, "agentops hook") {
+		t.Fatalf("global hook missing: %s", contents)
+	}
+	if err := runSetup([]string{"claude", "--global", "--uninstall"}); err != nil {
+		t.Fatal(err)
+	}
+}

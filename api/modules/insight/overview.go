@@ -68,7 +68,7 @@ func (r *Repository) Overview(ctx context.Context, f OverviewFilter) (OverviewRe
 }
 
 func (r *Repository) overviewPeriod(ctx context.Context, repo string, from, to time.Time) (OverviewPeriod, error) {
-	q := r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND (ar.started_at >= ? AND ar.started_at < ? OR EXISTS (SELECT 1 FROM agent_run_steps ts WHERE ts.run_id = ar.id AND ts.started_at >= ? AND ts.started_at < ?))", organizationFromContext(ctx), from, to, from, to)
+	q := r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.organization_id = ? AND (ar.started_at >= ? AND ar.started_at < ? OR EXISTS (SELECT 1 FROM agent_run_steps ts WHERE ts.run_id = ar.id AND ts.started_at >= ? AND ts.started_at < ?))", organizationFromContext(ctx), from, to, from, to)
 	if repo != "" {
 		q = q.Where("ar.repository_id = ?", repo)
 	}
@@ -175,7 +175,7 @@ func (r *Repository) overviewAttention(ctx context.Context, repo string, now tim
 		n := p.Number
 		out = append(out, OverviewAttention{Kind: "stale_pr", RepositoryID: p.RepositoryID, PRNumber: &n, Message: "open pull request has had no activity for at least 3 days"})
 	}
-	q = r.db.WithContext(ctx).Table("agent_runs ar").Joins("JOIN repositories repo ON repo.id = ar.repository_id").Where("repo.organization_id = ? AND ar.pr_number IS NULL AND ar.started_at <= ?", org, now.Add(-24*time.Hour))
+	q = r.db.WithContext(ctx).Table("agent_runs ar").Where("ar.organization_id = ? AND ar.pr_number IS NULL AND ar.started_at <= ?", org, now.Add(-24*time.Hour))
 	if repo != "" {
 		q = q.Where("ar.repository_id = ?", repo)
 	}

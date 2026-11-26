@@ -270,6 +270,47 @@ func TestRunHookSelectsOnlyReferencedSessionAndSendsMetadata(t *testing.T) {
 	}
 }
 
+func TestRunHookWithoutRepositoryFromNonGitDirectory(t *testing.T) {
+	root := t.TempDir()
+	transcriptPath := filepath.Join(root, "session.jsonl")
+	contents := `{"type":"assistant","uuid":"u1","sessionId":"local","timestamp":"2026-10-27T00:00:00Z","message":{"model":"claude-sonnet","content":"PRIVATE","usage":{"input_tokens":11,"output_tokens":7}}}`
+	if err := os.WriteFile(transcriptPath, []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/runs" {
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"run-local"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("AGENT_RUN_TOKEN", "token")
+	event := fmt.Sprintf(`{"hook_event_name":"Stop","session_id":"local","transcript_path":%q,"cwd":%q}`, transcriptPath, root)
+	err := runHook([]string{"--endpoint", server.URL + "/runs"}, strings.NewReader(event), server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := payload["repository_id"]; ok {
+		t.Fatalf("unexpected repository_id: %v", payload)
+	}
+	if _, ok := payload["pr_number"]; ok {
+		t.Fatalf("unexpected pr_number: %v", payload)
+	}
+	if payload["harness"] != "claude" {
+		t.Fatalf("payload=%v", payload)
+	}
+	if payload["session_id"] != "local" {
+		t.Fatalf("payload=%v", payload)
+	}
+	if payload["input_tokens"] != float64(11) {
+		t.Fatalf("payload=%v", payload)
+	}
+}
+
 func TestRunHookRejectsInvalidSelection(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "session.jsonl")

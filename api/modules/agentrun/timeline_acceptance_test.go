@@ -207,7 +207,7 @@ func TestRepositoryReplaceStepsUsesPersistedStableIdentity(t *testing.T) {
 	runID := "a1000000-0000-0000-0000-000000000001"
 	orgID := "b1000000-0000-0000-0000-000000000001"
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT .* FROM agent_runs ar JOIN repositories repo ON repo\.id = ar\.repository_id WHERE ar\.id = \$1 AND repo\.organization_id = \$2 ORDER BY .* LIMIT \$3`).WithArgs(runID, orgID, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "started_at", "ended_at", "billing_type"}).AddRow(runID, orgID, "W", "worker", "model", []byte("[]"), time.Now(), time.Now(), "api"))
+	mock.ExpectQuery(`SELECT .* FROM agent_runs ar WHERE ar\.id = \$1 AND ar\.organization_id = \$2 ORDER BY .* LIMIT \$3`).WithArgs(runID, orgID, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "repository_id", "wave", "worker", "model", "issue_numbers", "started_at", "ended_at", "billing_type"}).AddRow(runID, orgID, "W", "worker", "model", []byte("[]"), time.Now(), time.Now(), "api"))
 	mock.ExpectExec(`DELETE FROM agent_run_steps WHERE run_id = \$1`).WithArgs(runID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO "agent_run_steps"`).WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
