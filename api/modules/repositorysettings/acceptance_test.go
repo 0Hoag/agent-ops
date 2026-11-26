@@ -103,7 +103,7 @@ func TestRepositorySettingsHTTPAcceptance(t *testing.T) {
 	}
 	runID := uuid.NewString()
 	now := time.Now().UTC()
-	require.NoError(t, db.Exec(`INSERT INTO agent_runs (id,repository_id,wave,worker,model,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, runID, created.Data.ID, "W18", "worker", "model", 1, 0, 0, 1, 0, now, now).Error)
+	require.NoError(t, db.Exec(`INSERT INTO agent_runs (id,repository_id,organization_id,wave,worker,model,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,started_at,ended_at) VALUES (?,?,(SELECT organization_id FROM repositories WHERE id=?),?,?,?,?,?,?,?,?,?,?)`, runID, created.Data.ID, created.Data.ID, "W18", "worker", "model", 1, 0, 0, 1, 0, now, now).Error)
 	blocked := request(t, h, fixture.adminA, fixture.orgA, http.MethodDelete, "/api/v1/repositories/"+created.Data.ID, "")
 	require.Equal(t, http.StatusConflict, blocked.Code, blocked.Body.String())
 	require.Contains(t, blocked.Body.String(), "dependent agent runs")

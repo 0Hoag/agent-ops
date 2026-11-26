@@ -47,7 +47,7 @@ func TestPostgresDetailKeepsRequestedIdentityAndTenant(t *testing.T) {
 	created := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	for _, number := range []int{1, 320} {
 		require.NoError(t, db.Exec("INSERT INTO pull_requests (id, repository_id, number, title, state, head_sha, branch, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', 'sha', 'main', ?, ?)", uuid.NewString(), repoID, number, "Improve hosting deployment "+strconv.Itoa(number), created, created).Error)
-		require.NoError(t, db.Exec("INSERT INTO agent_runs (id, repository_id, wave, worker, model, issue_numbers, pr_number, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens, cost_usd, started_at, ended_at) VALUES (?, ?, 'W18', 'fixture', 'model', '[]', ?, 1, 0, 0, 1, 0, 12.4, ?, ?)", uuid.NewString(), repoID, number, created, created).Error)
+		require.NoError(t, db.Exec("INSERT INTO agent_runs (id, repository_id, organization_id, wave, worker, model, issue_numbers, pr_number, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens, cost_usd, started_at, ended_at) VALUES (?, ?, (SELECT organization_id FROM repositories WHERE id = ?), 'W18', 'fixture', 'model', '[]', ?, 1, 0, 0, 1, 0, 12.4, ?, ?)", uuid.NewString(), repoID, repoID, number, created, created).Error)
 	}
 	require.NoError(t, db.Exec("INSERT INTO pull_requests (id, repository_id, number, title, state, head_sha, branch, created_at, updated_at) VALUES (?, ?, 1, 'GitLab MR', 'open', 'sha', 'main', ?, ?)", uuid.NewString(), gitlabRepoID, created, created).Error)
 
@@ -101,7 +101,7 @@ func TestPostgresWorkIncludesSessionsLinkedToIssueAndPullRequest(t *testing.T) {
 	require.NoError(t, db.Exec("INSERT INTO issues (id, repository_id, number, title, state, created_at, updated_at) VALUES (?, ?, 10, 'Issue 10', 'open', ?, ?)", uuid.NewString(), repoID, created, created).Error)
 	require.NoError(t, db.Exec("INSERT INTO pull_requests (id, repository_id, number, title, state, head_sha, branch, created_at, updated_at) VALUES (?, ?, 10, 'PR 10', 'open', 'sha', 'main', ?, ?)", uuid.NewString(), repoID, created, created).Error)
 	for _, cost := range []any{12.4, 0.0} {
-		require.NoError(t, db.Exec("INSERT INTO agent_runs (id, repository_id, wave, worker, model, issue_numbers, pr_number, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens, cost_usd, started_at, ended_at) VALUES (?, ?, 'W18', 'fixture', 'model', '[10]', 10, 1, 0, 0, 1, 0, ?, ?, ?)", uuid.NewString(), repoID, cost, created, created).Error)
+		require.NoError(t, db.Exec("INSERT INTO agent_runs (id, repository_id, organization_id, wave, worker, model, issue_numbers, pr_number, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, reasoning_tokens, cost_usd, started_at, ended_at) VALUES (?, ?, (SELECT organization_id FROM repositories WHERE id = ?), 'W18', 'fixture', 'model', '[10]', 10, 1, 0, 0, 1, 0, ?, ?, ?)", uuid.NewString(), repoID, repoID, cost, created, created).Error)
 	}
 	repo := NewRepository(db)
 	ctx := WithOrganization(context.Background(), orgID)
