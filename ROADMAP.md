@@ -1,5 +1,22 @@
 # Roadmap
 
+## Close-out status (2026-11-28)
+
+The shipped baseline includes the W18 insight-first product and the W19-W21 verification work merged into
+`reviews/development`, including local Claude session ingestion (#666 / #667 and client #243 / #244). The
+development branch is not the same as a fully accepted release: several acceptance checks were intentionally
+not executable or remain follow-ups.
+
+Known gaps and follow-ups:
+
+- W21 human-timed walkthrough #239 is waived by the owner, but remains open as a documented acceptance gap.
+- W18 retention/isolation reconciliation #236 remains open and follows the tenant-isolation clearing rule.
+- W18 numeric oracle follow-up #235 remains open and is non-blocking.
+- W18-W21 browser, populated-data, and other runtime acceptance claims are limited to the evidence recorded by
+  the corresponding issues/PRs; unexecuted acceptance is not being upgraded to “done”.
+- The roadmap is therefore not declared complete, and W18-W21 are not represented as fully accepted solely
+  because their implementation PRs merged.
+
 ## Mục tiêu
 
 1. Một dashboard dùng thật cho quy trình orchestrator-workers: board, chi phí token, chất lượng.
