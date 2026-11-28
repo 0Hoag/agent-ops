@@ -36,8 +36,14 @@ isolated Compose project, ports, and volume. Do not use this local setup as a pr
 - `docs/install.md` — local startup, first account, GitLab project, transcript, Overview, and data-safety guidance.
 - `docs/` — architecture and operational notes.
 
-The client is a separate repository. The current documentation describes only capabilities present in this tree; pending
-W18 UI/API work is not presented as available.
+The client is a separate repository. The current documentation describes capabilities present in the shipped
+development baseline, including the W18 insight-first pages, W19 verification work, and local Claude session
+ingestion. This is not a claim that every acceptance check passed: browser walkthrough, populated-data, retention/
+isolation, and numeric-oracle follow-ups remain tracked in the issue systems.
+
+Close-out notes (2026-11-28): client #239's human-timed walkthrough is waived but retained as a known gap; #236
+follows tenant-isolation clearing; and #235 is a non-blocking numeric follow-up. The roadmap is not declared
+complete until those documented gaps are reconciled according to their issue contracts.
 
 ## Development
 
