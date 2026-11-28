@@ -116,7 +116,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: agentops push ... | watch ...")
+		return fmt.Errorf("usage: agentops push ... | watch ... | collect ...")
 	}
 	if args[0] == "watch" {
 		return runWatch(args[1:])
@@ -130,8 +130,11 @@ func run(args []string) error {
 	if args[0] == "mcp" {
 		return runMCP(args[1:], os.Stdin, os.Stdout, http.DefaultClient)
 	}
+	if args[0] == "collect" {
+		return runCollect(args[1:])
+	}
 	if args[0] != "push" {
-		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file> | hook | setup claude | mcp")
+		return fmt.Errorf("usage: agentops push --harness codex|opencode|claude <file> | watch | collect | hook | setup claude | mcp")
 	}
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)

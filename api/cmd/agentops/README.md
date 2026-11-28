@@ -1,5 +1,15 @@
 # agentops watch
 
+For a zero-config metadata-only backfill of local Claude sessions and OpenCode SQLite usage, set only the API
+token and run once (the checkpoint makes a second run idempotent):
+
+```bash
+AGENT_RUN_TOKEN=secret agentops collect --once --checkpoint /tmp/agentops-local.json
+```
+
+OpenCode is opened read-only from `$OPENCODE_DB` (defaulting to `~/.local/share/opencode/opencode.db`); the
+collector submits no repository, issue, branch, prompt, reply, tool content, or secret.
+
 For a real local OpenCode proof using all four tools, see [MCP integration](../../../docs/mcp.md).
 
 ## agentops mcp
